@@ -1,9 +1,10 @@
+
 use crate::display_object::{DisplayObject, DisplayObjectBase};
 use crate::player::{RenderContext, UpdateContext};
 use crate::prelude::*;
 use crate::transform::Transform;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Text<'gc> {
     base: DisplayObjectBase<'gc>,
     text_transform: Matrix,

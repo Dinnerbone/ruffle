@@ -1,3 +1,4 @@
+
 use crate::backend::render::{RenderBackend, ShapeHandle};
 use crate::display_object::{DisplayObject, DisplayObjectBase};
 use crate::player::{RenderContext, UpdateContext};
@@ -5,7 +6,7 @@ use crate::prelude::*;
 use std::collections::HashMap;
 use swf::Twips;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MorphShape<'gc> {
     base: DisplayObjectBase<'gc>,
 
