@@ -10,6 +10,7 @@ pub type NativeFunction<'gc> =
 
 #[derive(Clone, Default)]
 pub struct Object<'gc> {
+    prototype: Option<GcCell<'gc, Object<'gc>>>,
     display_node: Option<DisplayNode<'gc>>,
     values: HashMap<String, Value<'gc>>,
     function: Option<NativeFunction<'gc>>,
@@ -17,6 +18,7 @@ pub struct Object<'gc> {
 
 unsafe impl<'gc> gc_arena::Collect for Object<'gc> {
     fn trace(&self, cc: gc_arena::CollectionContext) {
+        self.prototype.trace(cc);
         self.display_node.trace(cc);
         self.values.trace(cc);
     }
@@ -25,6 +27,7 @@ unsafe impl<'gc> gc_arena::Collect for Object<'gc> {
 impl fmt::Debug for Object<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Object")
+            .field("prototype", &self.prototype)
             .field("display_node", &self.display_node)
             .field("values", &self.values)
             .field("function", &self.function.is_some())
@@ -52,22 +55,45 @@ impl<'gc> Object<'gc> {
         self.display_node
     }
 
+    pub fn set_prototype(&mut self, prototype: GcCell<'gc, Object<'gc>>) {
+        self.prototype = Some(prototype);
+    }
+
+    pub fn prototype(&self) -> Option<&GcCell<'gc, Object<'gc>>> {
+        self.prototype.as_ref()
+    }
+
     pub fn set(&mut self, name: &str, value: Value<'gc>) {
+        if name == "__proto__" {
+            self.prototype = value.as_object().ok().map(ToOwned::to_owned);
+        }
         self.values.insert(name.to_owned(), value);
     }
 
     pub fn get(&self, name: &str) -> Value<'gc> {
+        if name == "__proto__" {
+            return self.prototype.map_or(Value::Undefined, |o| Value::Object(o));
+        }
         if let Some(value) = self.values.get(name) {
             return value.to_owned();
         }
-        Value::Undefined
+        self.prototype
+            .as_ref()
+            .map_or(Value::Undefined, |p| p.read().get(name))
     }
 
     pub fn has_property(&self, name: &str) -> bool {
-        self.values.contains_key(name)
+        self.has_own_property(name)
+            || self
+                .prototype
+                .as_ref()
+                .map_or(false, |p| p.read().has_property(name))
     }
 
     pub fn has_own_property(&self, name: &str) -> bool {
+        if name == "__proto__" {
+            return true;
+        }
         self.values.contains_key(name)
     }
 
