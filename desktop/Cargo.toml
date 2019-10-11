@@ -20,3 +20,7 @@ structopt = "0.2.15"
 winit = "0.19.1"
 webbrowser = "0.5.2"
 url = "2.1.0"
+csv = "1.1.1"
+path-slash = "0.1.1"
+serde = { version = "1.0.101", features = ["derive"] }
+
