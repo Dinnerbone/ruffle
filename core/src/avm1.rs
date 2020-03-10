@@ -675,8 +675,47 @@ impl<'gc> Avm1<'gc> {
         // `"undefined"`, for example.
         let path = target.coerce_to_string(self, context)?;
         Ok(self
-            .resolve_target_path(context, start, &path)?
+            .resolve_target_path(
+                context,
+                start.root(),
+                start.object().as_object().unwrap(),
+                &path,
+            )?
             .and_then(|o| o.as_display_object()))
+    }
+
+    /// Resolves a target path string to an object, by searching through
+    /// the scope chain.
+    /// This only returns `Object`; other values will bail out with `None`.
+    ///
+    /// See `resolve_target_path` for further documentation.
+    pub fn resolve_target_path_in_scope(
+        &mut self,
+        context: &mut UpdateContext<'_, 'gc, '_>,
+        start: DisplayObject<'gc>,
+        path: &str,
+    ) -> Result<Option<Object<'gc>>, Error> {
+        // It's possible that start isn't in the scope chain, so start there before we go further
+        if let Some(clip) = self.resolve_target_path(
+            context,
+            start.root(),
+            start.object().as_object().unwrap(),
+            path,
+        )? {
+            return Ok(Some(clip));
+        }
+
+        let mut current_scope = Some(self.current_stack_frame().unwrap().read().scope_cell());
+        while let Some(scope) = current_scope {
+            if let Some(clip) =
+                self.resolve_target_path(context, start.root(), *scope.read().locals(), path)?
+            {
+                return Ok(Some(clip));
+            }
+            current_scope = scope.read().parent_cell();
+        }
+
+        Ok(None)
     }
 
     /// Resolves a target path string to an object.
@@ -691,26 +730,24 @@ impl<'gc> Avm1<'gc> {
     pub fn resolve_target_path(
         &mut self,
         context: &mut UpdateContext<'_, 'gc, '_>,
-        start: DisplayObject<'gc>,
+        root: DisplayObject<'gc>,
+        start: Object<'gc>,
         path: &str,
     ) -> Result<Option<Object<'gc>>, Error> {
-        let root = start.root();
-
         // Empty path resolves immediately to start clip.
         if path.is_empty() {
-            return Ok(Some(start.object().as_object().unwrap()));
+            return Ok(Some(start));
         }
 
         // Starting / means an absolute path starting from root.
         // (`/bar` means `_root.bar`)
         let mut path = path.as_bytes();
-        let (clip, mut is_slash_path) = if path[0] == b'/' {
+        let (mut object, mut is_slash_path) = if path[0] == b'/' {
             path = &path[1..];
-            (root, true)
+            (root.object().as_object().unwrap(), true)
         } else {
             (start, false)
         };
-        let mut object = clip.object().as_object().unwrap();
 
         // Iterate through each token in the path.
         while !path.is_empty() {
@@ -830,7 +867,7 @@ impl<'gc> Avm1<'gc> {
             // We resolve it directly on the targeted object.
             let path = unsafe { std::str::from_utf8_unchecked(path) };
             let var_name = unsafe { std::str::from_utf8_unchecked(var_name) };
-            if let Some(object) = self.resolve_target_path(context, start, path)? {
+            if let Some(object) = self.resolve_target_path_in_scope(context, start, path)? {
                 return object.get(var_name, self, context);
             } else {
                 return Ok(Value::Undefined.into());
@@ -840,7 +877,7 @@ impl<'gc> Avm1<'gc> {
         // If it doesn't have a trailing variable, it can still be a slash path.
         // We can skip this step if we didn't find a slash above.
         if has_slash {
-            if let Some(node) = self.resolve_target_path(context, start, path)? {
+            if let Some(node) = self.resolve_target_path_in_scope(context, start, path)? {
                 return Ok(node.into());
             }
         }
@@ -894,7 +931,12 @@ impl<'gc> Avm1<'gc> {
             // We resolve it directly on the targeted object.
             let path = unsafe { std::str::from_utf8_unchecked(path) };
             let var_name = unsafe { std::str::from_utf8_unchecked(var_name) };
-            if let Some(object) = self.resolve_target_path(context, start, path)? {
+            if let Some(object) = self.resolve_target_path(
+                context,
+                start.root(),
+                start.object().as_object().unwrap(),
+                path,
+            )? {
                 object.set(var_name, value, self, context)?;
             }
             return Ok(());
@@ -2302,7 +2344,12 @@ impl<'gc> Avm1<'gc> {
         if target.is_empty() {
             new_target_clip = Some(base_clip);
         } else if let Some(clip) = self
-            .resolve_target_path(context, base_clip, target)?
+            .resolve_target_path(
+                context,
+                base_clip.root(),
+                base_clip.object().as_object().unwrap(),
+                target,
+            )?
             .and_then(|o| o.as_display_object())
         {
             new_target_clip = Some(clip);
