@@ -1,0 +1,23 @@
+Init A
+// this
+_level0
+
+// this.isCustom
+undefined
+
+Init B
+// this
+_level0
+
+// this.isCustom
+undefined
+
+Custom constructor
+
+Root
+// b
+_level0.b
+
+// b.isCustom
+true
+
