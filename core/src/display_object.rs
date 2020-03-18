@@ -825,7 +825,6 @@ pub trait TDisplayObject<'gc>: 'gc + Collect + Debug + Into<DisplayObject<'gc>> 
         &mut self,
         _avm: &mut Avm1<'gc>,
         _context: &mut UpdateContext<'_, 'gc, '_>,
-        _display_object: DisplayObject<'gc>,
     ) {
     }
 

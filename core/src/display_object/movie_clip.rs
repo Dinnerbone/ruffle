@@ -123,12 +123,164 @@ impl<'gc> MovieClip<'gc> {
 
     pub fn preload(
         self,
+        avm: &mut Avm1<'gc>,
         context: &mut UpdateContext<'_, 'gc, '_>,
         morph_shapes: &mut fnv::FnvHashMap<CharacterId, MorphShapeStatic>,
     ) {
-        self.0
-            .write(context.gc_context)
-            .preload(context, morph_shapes, self.into())
+        use swf::TagCode;
+        // TODO: Re-creating static data because preload step occurs after construction.
+        // Should be able to hoist this up somewhere, or use MaybeUninit.
+        let mut static_data = (&*self.0.read().static_data).clone();
+        let data = static_data.swf.clone();
+        let mut reader = data.read_from(self.0.read().tag_stream_pos);
+        let mut cur_frame = 1;
+        let mut ids = fnv::FnvHashMap::default();
+        let tag_callback = |reader: &mut _, tag_code, tag_len| match tag_code {
+            TagCode::DefineBits => self.0.write(context.gc_context).define_bits(context, reader, tag_len),
+            TagCode::DefineBitsJpeg2 => self.0.write(context.gc_context).define_bits_jpeg_2(context, reader, tag_len),
+            TagCode::DefineBitsJpeg3 => self.0.write(context.gc_context).define_bits_jpeg_3(context, reader, tag_len),
+            TagCode::DefineBitsJpeg4 => self.0.write(context.gc_context).define_bits_jpeg_4(context, reader, tag_len),
+            TagCode::DefineBitsLossless => self.0.write(context.gc_context).define_bits_lossless(context, reader, 1),
+            TagCode::DefineBitsLossless2 => self.0.write(context.gc_context).define_bits_lossless(context, reader, 2),
+            TagCode::DefineButton => self.0.write(context.gc_context).define_button_1(context, reader),
+            TagCode::DefineButton2 => self.0.write(context.gc_context).define_button_2(context, reader),
+            TagCode::DefineButtonCxform => self.0.write(context.gc_context).define_button_cxform(context, reader, tag_len),
+            TagCode::DefineButtonSound => self.0.write(context.gc_context).define_button_sound(context, reader),
+            TagCode::DefineEditText => self.0.write(context.gc_context).define_edit_text(context, reader),
+            TagCode::DefineFont => self.0.write(context.gc_context).define_font_1(context, reader),
+            TagCode::DefineFont2 => self.0.write(context.gc_context).define_font_2(context, reader),
+            TagCode::DefineFont3 => self.0.write(context.gc_context).define_font_3(context, reader),
+            TagCode::DefineFont4 => unimplemented!(),
+            TagCode::DefineMorphShape => self.0.write(context.gc_context).define_morph_shape(context, reader, morph_shapes, 1),
+            TagCode::DefineMorphShape2 => self.0.write(context.gc_context).define_morph_shape(context, reader, morph_shapes, 2),
+            TagCode::DefineShape => self.0.write(context.gc_context).define_shape(context, reader, 1),
+            TagCode::DefineShape2 => self.0.write(context.gc_context).define_shape(context, reader, 2),
+            TagCode::DefineShape3 => self.0.write(context.gc_context).define_shape(context, reader, 3),
+            TagCode::DefineShape4 => self.0.write(context.gc_context).define_shape(context, reader, 4),
+            TagCode::DefineSound => self.0.write(context.gc_context).define_sound(context, reader, tag_len),
+            TagCode::DefineSprite => self.define_sprite(avm, context, reader, tag_len, morph_shapes),
+            TagCode::DefineText => self.0.write(context.gc_context).define_text(context, reader, 1),
+            TagCode::DefineText2 => self.0.write(context.gc_context).define_text(context, reader, 2),
+            TagCode::DoInitAction => {
+                self.do_init_action(avm, context, reader, tag_len)
+            }
+            TagCode::ExportAssets => self.0.write(context.gc_context).export_assets(context, reader),
+            TagCode::FrameLabel => {
+                self.0.write(context.gc_context).frame_label(context, reader, tag_len, cur_frame, &mut static_data)
+            }
+            TagCode::JpegTables => self.0.write(context.gc_context).jpeg_tables(context, reader, tag_len),
+            TagCode::PlaceObject => {
+                self.0.write(context.gc_context).preload_place_object(context, reader, tag_len, &mut ids, morph_shapes, 1)
+            }
+            TagCode::PlaceObject2 => {
+                self.0.write(context.gc_context).preload_place_object(context, reader, tag_len, &mut ids, morph_shapes, 2)
+            }
+            TagCode::PlaceObject3 => {
+                self.0.write(context.gc_context).preload_place_object(context, reader, tag_len, &mut ids, morph_shapes, 3)
+            }
+            TagCode::PlaceObject4 => {
+                self.0.write(context.gc_context).preload_place_object(context, reader, tag_len, &mut ids, morph_shapes, 4)
+            }
+            TagCode::RemoveObject => self.0.write(context.gc_context).preload_remove_object(context, reader, &mut ids, 1),
+            TagCode::RemoveObject2 => self.0.write(context.gc_context).preload_remove_object(context, reader, &mut ids, 2),
+            TagCode::ShowFrame => self.0.write(context.gc_context).preload_show_frame(context, reader, &mut cur_frame),
+            TagCode::SoundStreamHead => {
+                self.0.write(context.gc_context).preload_sound_stream_head(context, reader, cur_frame, &mut static_data, 1)
+            }
+            TagCode::SoundStreamHead2 => {
+                self.0.write(context.gc_context).preload_sound_stream_head(context, reader, cur_frame, &mut static_data, 2)
+            }
+            TagCode::SoundStreamBlock => self.0.write(context.gc_context).preload_sound_stream_block(
+                context,
+                reader,
+                cur_frame,
+                &mut static_data,
+                tag_len,
+            ),
+            _ => Ok(()),
+        };
+        let _ = tag_utils::decode_tags(&mut reader, tag_callback, TagCode::End);
+        self.0.write(context.gc_context).static_data = Gc::allocate(context.gc_context, static_data);
+
+        // Finalize audio stream.
+        if self.0.read().static_data.audio_stream_info.is_some() {
+            context.audio.preload_sound_stream_end(self.id());
+        }
+    }
+
+    #[inline]
+    fn do_init_action(
+        &self,
+        avm: &mut Avm1<'gc>,
+        context: &mut UpdateContext<'_, 'gc, '_>,
+        reader: &mut SwfStream<&[u8]>,
+        tag_len: usize,
+    ) -> DecodeResult {
+        // Queue the init actions.
+
+        // TODO: Init actions are supposed to be executed once, and it gives a
+        // sprite ID... how does that work?
+        let sprite_id = reader.read_u16()?;
+        log::info!("Init Action sprite ID {}", sprite_id);
+
+        let slice = self.0.read()
+            .static_data
+            .swf
+            .resize_to_reader(reader, tag_len)
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Invalid source or tag length when running init action",
+                )
+            })?;
+
+
+
+        avm.insert_stack_frame_for_init_action(
+            *context.levels.get(&0).unwrap(),
+            context.swf.header().version,
+            slice,
+            context,
+        );
+        let frame = avm.current_stack_frame().unwrap();
+        let _ = avm.run_current_frame(context, frame);
+
+        Ok(())
+    }
+
+    fn define_sprite(
+        &self,
+        avm: &mut Avm1<'gc>,
+        context: &mut UpdateContext<'_, 'gc, '_>,
+        reader: &mut SwfStream<&[u8]>,
+        tag_len: usize,
+        morph_shapes: &mut fnv::FnvHashMap<CharacterId, MorphShapeStatic>,
+    ) -> DecodeResult {
+        let id = reader.read_character_id()?;
+        let num_frames = reader.read_u16()?;
+        let movie_clip = MovieClip::new_with_data(
+            context.gc_context,
+            id,
+            self.0.read().static_data
+                .swf
+                .resize_to_reader(reader, tag_len - 4)
+                .ok_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Cannot define sprite with invalid offset and length!",
+                    )
+                })?,
+            num_frames,
+        );
+
+        movie_clip.preload(avm, context, morph_shapes);
+
+        context
+            .library
+            .library_for_movie_mut(self.0.read().movie())
+            .register_character(id, Character::MovieClip(movie_clip));
+
+        Ok(())
     }
 
     #[allow(dead_code)]
@@ -159,15 +311,27 @@ impl<'gc> MovieClip<'gc> {
     /// Queues up a goto to the specified frame.
     /// `frame` should be 1-based.
     pub fn goto_frame(
-        self,
+        &self,
         avm: &mut Avm1<'gc>,
         context: &mut UpdateContext<'_, 'gc, '_>,
-        frame: FrameNumber,
+        mut frame: FrameNumber,
         stop: bool,
     ) {
-        self.0
-            .write(context.gc_context)
-            .goto_frame(self.into(), avm, context, frame, stop)
+        // Stop first, in case we need to kill and restart the stream sound.
+        if stop {
+            self.stop(context);
+        } else {
+            self.play(context);
+        }
+
+        // Clamp frame number in bounds.
+        if frame < 1 {
+            frame = 1;
+        }
+
+        if frame != self.current_frame() {
+            self.run_goto(avm, context, frame);
+        }
     }
 
     pub fn current_frame(self) -> FrameNumber {
@@ -313,6 +477,330 @@ impl<'gc> MovieClip<'gc> {
 
         actions.into_iter()
     }
+
+    fn run_frame_internal(
+        &self,
+        avm: &mut Avm1<'gc>,
+        context: &mut UpdateContext<'_, 'gc, '_>,
+        run_display_actions: bool,
+    ) {
+        // Advance frame number.
+        if self.current_frame() < self.total_frames() {
+            self.0.write(context.gc_context).current_frame += 1;
+        } else if self.total_frames() > 1 {
+            // Looping acts exactly like a gotoAndPlay(1).
+            // Specifically, object that existed on frame 1 should not be destroyed
+            // and recreated.
+            self.run_goto(avm, context, 1);
+            return;
+        } else {
+            // Single frame clips do not play.
+            self.stop(context);
+        }
+
+        let data = self.0.read().static_data.swf.clone();
+        let mut reader = data.read_from(self.0.read().tag_stream_pos);
+        let mut has_stream_block = false;
+        use swf::TagCode;
+
+        let tag_callback = |reader: &mut _, tag_code, tag_len| match tag_code {
+            TagCode::DoAction => self.0.write(context.gc_context).do_action((*self).into(), context, reader, tag_len),
+            TagCode::PlaceObject if run_display_actions => {
+                self.place_object(avm, context, reader, tag_len, 1)
+            }
+            TagCode::PlaceObject2 if run_display_actions => {
+                self.place_object(avm, context, reader, tag_len, 2)
+            }
+            TagCode::PlaceObject3 if run_display_actions => {
+                self.place_object(avm, context, reader, tag_len, 3)
+            }
+            TagCode::PlaceObject4 if run_display_actions => {
+                self.place_object(avm, context, reader, tag_len, 4)
+            }
+            TagCode::RemoveObject if run_display_actions => self.0.write(context.gc_context).remove_object(context, reader, 1),
+            TagCode::RemoveObject2 if run_display_actions => self.0.write(context.gc_context).remove_object(context, reader, 2),
+            TagCode::SetBackgroundColor => self.0.write(context.gc_context).set_background_color(context, reader),
+            TagCode::StartSound => self.0.write(context.gc_context).start_sound_1(context, reader),
+            TagCode::SoundStreamBlock => {
+                has_stream_block = true;
+                self.0.write(context.gc_context).sound_stream_block(context, reader)
+            }
+            _ => Ok(()),
+        };
+        let _ = tag_utils::decode_tags(&mut reader, tag_callback, TagCode::ShowFrame);
+
+        self.0.write(context.gc_context).tag_stream_pos = reader.get_ref().position();
+
+        // If we are playing a streaming sound, there should(?) be a `SoundStreamBlock` on each frame.
+        if !has_stream_block {
+            self.0.write(context.gc_context).stop_audio_stream(context);
+        }
+    }
+
+    fn place_object(
+        &self,
+        avm: &mut Avm1<'gc>,
+        context: &mut UpdateContext<'_, 'gc, '_>,
+        reader: &mut SwfStream<&[u8]>,
+        tag_len: usize,
+        version: u8,
+    ) -> DecodeResult {
+        let place_object = if version == 1 {
+            reader.read_place_object(tag_len)
+        } else {
+            reader.read_place_object_2_or_3(version)
+        }?;
+        use swf::PlaceObjectAction;
+        match place_object.action {
+            PlaceObjectAction::Place(id) | PlaceObjectAction::Replace(id) => {
+                if let Some(child) = self.instantiate_child(
+                    avm,
+                    context,
+                    id,
+                    place_object.depth.into(),
+                    &place_object,
+                    if let PlaceObjectAction::Replace(_) = place_object.action {
+                        true
+                    } else {
+                        false
+                    },
+                ) {
+                    child
+                } else {
+                    return Ok(());
+                }
+            }
+            PlaceObjectAction::Modify => {
+                if let Some(mut child) = self.0.write(context.gc_context).children.get_mut(&place_object.depth.into()).copied()
+                {
+                    child.apply_place_object(context.gc_context, &place_object);
+                    child
+                } else {
+                    return Ok(());
+                }
+            }
+        };
+
+        Ok(())
+    }
+    pub fn run_goto(
+        &self,
+        avm: &mut Avm1<'gc>,
+        context: &mut UpdateContext<'_, 'gc, '_>,
+        frame: FrameNumber,
+    ) {
+        // Flash gotos are tricky:
+        // 1) Conceptually, a goto should act like the playhead is advancing forward or
+        //    backward to a frame.
+        // 2) However, MovieClip timelines are stored as deltas from frame to frame,
+        //    so for rewinds, we must restart to frame 1 and play forward.
+        // 3) Objects that would persist over the goto conceptually should not be
+        //    destroyed and recreated; they should keep their properties.
+        //    Particularly for rewinds, the object should persist if it was created
+        //      *before* the frame we are going to. (DisplayObject::place_frame).
+        // 4) We want to avoid creating objects just to destroy them if they aren't on
+        //    the goto frame, so we should instead aggregate the deltas into a final list
+        //    of commands, and THEN modify the children as necessary.
+
+        // This map will maintain a map of depth -> placement commands.
+        // TODO: Move this to UpdateContext to avoid allocations.
+        let mut goto_commands = vec![];
+
+        self.0.write(context.gc_context).stop_audio_stream(context);
+
+        let is_rewind = if frame < self.0.write(context.gc_context).current_frame() {
+            // Because we can only step forward, we have to start at frame 1
+            // when rewinding.
+            self.0.write(context.gc_context).tag_stream_pos = 0;
+            self.0.write(context.gc_context).current_frame = 0;
+
+            // Remove all display objects that were created after the desination frame.
+            // TODO: We want to do something like self.0.write(context.gc_context).children.retain here,
+            // but BTreeMap::retain does not exist.
+            let children: SmallVec<[_; 16]> = self.0.write(context.gc_context)
+                .children
+                .iter()
+                .filter_map(|(depth, clip)| {
+                    if clip.place_frame() > frame {
+                        Some((*depth, *clip))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            for (depth, child) in children {
+                self.0.write(context.gc_context).children.remove(&depth);
+                self.0.write(context.gc_context).remove_child_from_exec_list(context, child);
+            }
+            true
+        } else {
+            false
+        };
+
+        // Step through the intermediate frames, and aggregate the deltas of each frame.
+        let mut frame_pos = self.0.write(context.gc_context).tag_stream_pos;
+        let data = self.0.write(context.gc_context).static_data.swf.clone();
+        let mut reader = data.read_from(self.0.write(context.gc_context).tag_stream_pos);
+        let mut index = 0;
+
+        let len = self.0.write(context.gc_context).tag_stream_len() as u64;
+        // Sanity; let's make sure we don't seek way too far.
+        // TODO: This should be self.0.write(context.gc_context).frames_loaded() when we implement that.
+        let clamped_frame = if frame <= self.0.write(context.gc_context).total_frames() {
+            frame
+        } else {
+            self.0.write(context.gc_context).total_frames()
+        };
+
+        while self.0.write(context.gc_context).current_frame() < clamped_frame && frame_pos < len {
+            self.0.write(context.gc_context).current_frame += 1;
+            frame_pos = reader.get_inner().position();
+
+            use swf::TagCode;
+            let tag_callback = |reader: &mut _, tag_code, tag_len| match tag_code {
+                TagCode::PlaceObject => {
+                    index += 1;
+                    self.0.write(context.gc_context).goto_place_object(reader, tag_len, 1, &mut goto_commands, is_rewind, index)
+                }
+                TagCode::PlaceObject2 => {
+                    index += 1;
+                    self.0.write(context.gc_context).goto_place_object(reader, tag_len, 2, &mut goto_commands, is_rewind, index)
+                }
+                TagCode::PlaceObject3 => {
+                    index += 1;
+                    self.0.write(context.gc_context).goto_place_object(reader, tag_len, 3, &mut goto_commands, is_rewind, index)
+                }
+                TagCode::PlaceObject4 => {
+                    index += 1;
+                    self.0.write(context.gc_context).goto_place_object(reader, tag_len, 4, &mut goto_commands, is_rewind, index)
+                }
+                TagCode::RemoveObject => {
+                    self.0.write(context.gc_context).goto_remove_object(reader, 1, context, &mut goto_commands, is_rewind)
+                }
+                TagCode::RemoveObject2 => {
+                    self.0.write(context.gc_context).goto_remove_object(reader, 2, context, &mut goto_commands, is_rewind)
+                }
+                _ => Ok(()),
+            };
+            let _ = tag_utils::decode_tags(&mut reader, tag_callback, TagCode::ShowFrame);
+        }
+        let hit_target_frame = self.0.write(context.gc_context).current_frame == frame;
+
+        // Run the list of goto commands to actually create and update the display objects.
+        let run_goto_command = |clip: &MovieClip<'gc>,
+                                avm: &mut Avm1<'gc>,
+                                context: &mut UpdateContext<'_, 'gc, '_>,
+                                params: &GotoPlaceObject| {
+            let child_entry = clip.0.write(context.gc_context).children.get_mut(&params.depth()).copied();
+            match child_entry {
+                // Apply final delta to display pamareters.
+                // For rewinds, if an object was created before the final frame,
+                // it will exist on the final frame as well. Re-use this object
+                // instead of recreating.
+                // If the ID is 0, we are modifying a previous child. Otherwise, we're replacing it.
+                // If it's a rewind, we removed any dead children above, so we always
+                // modify the previous child.
+                Some(mut prev_child) if params.id() == 0 || is_rewind => {
+                    prev_child.apply_place_object(context.gc_context, &params.place_object);
+                }
+                _ => {
+                    if let Some(mut child) = clip.instantiate_child(
+                        avm,
+                        context,
+                        params.id(),
+                        params.depth(),
+                        &params.place_object,
+                        params.modifies_original_item(),
+                    ) {
+                        // Set the place frame to the frame where the object *would* have been placed.
+                        child.set_place_frame(context.gc_context, params.frame);
+                    }
+                }
+            }
+        };
+
+        // We have to be sure that queued actions are generated in the same order
+        // as if the playhead had reached this frame normally.
+
+        // First, sort the goto commands in the order of execution.
+        // (Maybe it'd be better to keeps this list sorted as we create it?
+        // Currently `swap_remove` calls futz with the order; but we could use `remove`).
+        goto_commands.sort_by_key(|params| params.index);
+
+        // Then, run frames for children that were created before this frame.
+        goto_commands
+            .iter()
+            .filter(|params| params.frame < frame)
+            .for_each(|goto| run_goto_command(self, avm, context, goto));
+
+        // Next, run the final frame for the parent clip.
+        // Re-run the final frame without display tags (DoAction, StartSound, etc.)
+        // Note that this only happens if the frame exists and is loaded;
+        // e.g. gotoAndStop(9999) displays the final frame, but actions don't run!
+        if hit_target_frame {
+            self.0.write(context.gc_context).current_frame -= 1;
+            self.0.write(context.gc_context).tag_stream_pos = frame_pos;
+            self.run_frame_internal(avm, context, false);
+        } else {
+            self.0.write(context.gc_context).current_frame = clamped_frame;
+        }
+
+        // Finally, run frames for children that are placed on this frame.
+        goto_commands
+            .iter()
+            .filter(|params| params.frame >= frame)
+            .for_each(|goto| run_goto_command(self, avm, context, goto));
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn instantiate_child(
+        &self,
+        avm: &mut Avm1<'gc>,
+        context: &mut UpdateContext<'_, 'gc, '_>,
+        id: CharacterId,
+        depth: Depth,
+        place_object: &swf::PlaceObject,
+        copy_previous_properties: bool,
+    ) -> Option<DisplayObject<'gc>> {
+        let _ = self.0.write(context.gc_context).base;
+        let child = if let Ok(mut child) = context
+            .library
+            .library_for_movie_mut(self.0.read().movie())
+            .instantiate_by_id(id, context.gc_context)
+        {
+            child.post_instantiation(avm, context);
+            Some(child)
+        } else { None };
+        if let Some(mut child) = child {
+            let _ = self.0.write(context.gc_context).base;
+
+            // Remove previous child from children list,
+            // and add new childonto front of the list.
+            let prev_child = self.0.write(context.gc_context).children.insert(depth, child);
+            if let Some(prev_child) = prev_child {
+                self.0.write(context.gc_context).remove_child_from_exec_list(context, prev_child);
+            }
+            self.0.write(context.gc_context).add_child_to_exec_list(context.gc_context, child);
+            {
+                // Set initial properties for child.
+                child.set_depth(context.gc_context, depth);
+                child.set_parent(context.gc_context, Some((*self).into()));
+                child.set_place_frame(context.gc_context, self.0.write(context.gc_context).current_frame());
+                if copy_previous_properties {
+                    if let Some(prev_child) = prev_child {
+                        child.copy_display_properties_from(context.gc_context, prev_child);
+                    }
+                }
+                // Run first frame.
+                child.apply_place_object(context.gc_context, place_object);
+                child.run_frame(avm, context);
+            }
+            Some(child)
+        } else {
+            log::error!("Unable to instantiate display node id {}", id);
+            None
+        }
+    }
 }
 
 impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
@@ -333,22 +821,21 @@ impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
         }
 
         // Run my load/enterFrame clip event.
-        let mut mc = self.0.write(context.gc_context);
-        let is_load_frame = !mc.initialized();
+        let is_load_frame = !self.0.write(context.gc_context).initialized();
         if is_load_frame {
-            mc.run_clip_action((*self).into(), context, ClipEvent::Load);
-            mc.set_initialized(true);
+            self.0.write(context.gc_context).run_clip_action((*self).into(), context, ClipEvent::Load);
+            self.0.write(context.gc_context).set_initialized(true);
         } else {
-            mc.run_clip_action((*self).into(), context, ClipEvent::EnterFrame);
+            self.0.write(context.gc_context).run_clip_action((*self).into(), context, ClipEvent::EnterFrame);
         }
 
         // Run my SWF tags.
-        if mc.playing() {
-            mc.run_frame_internal((*self).into(), avm, context, true);
+        if self.0.write(context.gc_context).playing() {
+            self.run_frame_internal(avm, context, true);
         }
 
         if is_load_frame {
-            mc.run_clip_postaction((*self).into(), context, ClipEvent::Load);
+            self.0.write(context.gc_context).run_clip_postaction((*self).into(), context, ClipEvent::Load);
         }
     }
 
@@ -399,36 +886,40 @@ impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
         &mut self,
         avm: &mut Avm1<'gc>,
         context: &mut UpdateContext<'_, 'gc, '_>,
-        display_object: DisplayObject<'gc>,
     ) {
-        let mut mc = self.0.write(context.gc_context);
-        if mc.object.is_none() {
-            if let Some(constructor) = mc.avm1_constructor {
+        if self.0.write(context.gc_context).object.is_none() {
+            let _ = self.0.write(context.gc_context);
+            if self.0.read().avm1_constructor.is_some() {
+                let constructor = self.0.read().avm1_constructor.unwrap();
+
+                let _ = self.0.write(context.gc_context);
                 if let Ok(prototype) = constructor
                     .get("prototype", avm, context)
                     .and_then(|v| v.resolve(avm, context))
                     .and_then(|v| v.as_object())
                 {
+                    let _ = self.0.write(context.gc_context);
                     let object: Object<'gc> = StageObject::for_display_object(
                         context.gc_context,
-                        display_object,
+                        (*self).into(),
                         Some(prototype),
                     )
-                    .into();
-                    mc.object = Some(object);
+                        .into();
                     if let Ok(result) = constructor.call(avm, context, object, &[]) {
+                        let _ = self.0.write(context.gc_context);
                         let _ = result.resolve(avm, context);
                     }
+                    self.0.write(context.gc_context).object = Some(object);
                     return;
                 }
-            };
+            }
 
             let object = StageObject::for_display_object(
                 context.gc_context,
-                display_object,
+                (*self).into(),
                 Some(context.system_prototypes.movie_clip),
             );
-            mc.object = Some(object.into());
+            self.0.write(context.gc_context).object = Some(object.into());
         }
     }
 
@@ -553,140 +1044,6 @@ impl<'gc> MovieClipData<'gc> {
         self.static_data.swf.end - self.static_data.swf.start
     }
 
-    /// Queues up a goto to the specified frame.
-    /// `frame` should be 1-based.
-    pub fn goto_frame(
-        &mut self,
-        self_display_object: DisplayObject<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        mut frame: FrameNumber,
-        stop: bool,
-    ) {
-        // Stop first, in case we need to kill and restart the stream sound.
-        if stop {
-            self.stop(context);
-        } else {
-            self.play();
-        }
-
-        // Clamp frame number in bounds.
-        if frame < 1 {
-            frame = 1;
-        }
-
-        if frame != self.current_frame() {
-            self.run_goto(self_display_object, avm, context, frame);
-        }
-    }
-
-    fn run_frame_internal(
-        &mut self,
-        self_display_object: DisplayObject<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        run_display_actions: bool,
-    ) {
-        // Advance frame number.
-        if self.current_frame < self.total_frames() {
-            self.current_frame += 1;
-        } else if self.total_frames() > 1 {
-            // Looping acts exactly like a gotoAndPlay(1).
-            // Specifically, object that existed on frame 1 should not be destroyed
-            // and recreated.
-            self.run_goto(self_display_object, avm, context, 1);
-            return;
-        } else {
-            // Single frame clips do not play.
-            self.stop(context);
-        }
-
-        let _tag_pos = self.tag_stream_pos;
-        let data = self.static_data.swf.clone();
-        let mut reader = data.read_from(self.tag_stream_pos);
-        let mut has_stream_block = false;
-        use swf::TagCode;
-
-        let tag_callback = |reader: &mut _, tag_code, tag_len| match tag_code {
-            TagCode::DoAction => self.do_action(self_display_object, context, reader, tag_len),
-            TagCode::PlaceObject if run_display_actions => {
-                self.place_object(self_display_object, avm, context, reader, tag_len, 1)
-            }
-            TagCode::PlaceObject2 if run_display_actions => {
-                self.place_object(self_display_object, avm, context, reader, tag_len, 2)
-            }
-            TagCode::PlaceObject3 if run_display_actions => {
-                self.place_object(self_display_object, avm, context, reader, tag_len, 3)
-            }
-            TagCode::PlaceObject4 if run_display_actions => {
-                self.place_object(self_display_object, avm, context, reader, tag_len, 4)
-            }
-            TagCode::RemoveObject if run_display_actions => self.remove_object(context, reader, 1),
-            TagCode::RemoveObject2 if run_display_actions => self.remove_object(context, reader, 2),
-            TagCode::SetBackgroundColor => self.set_background_color(context, reader),
-            TagCode::StartSound => self.start_sound_1(context, reader),
-            TagCode::SoundStreamBlock => {
-                has_stream_block = true;
-                self.sound_stream_block(context, reader)
-            }
-            _ => Ok(()),
-        };
-        let _ = tag_utils::decode_tags(&mut reader, tag_callback, TagCode::ShowFrame);
-
-        self.tag_stream_pos = reader.get_ref().position();
-
-        // If we are playing a streaming sound, there should(?) be a `SoundStreamBlock` on each frame.
-        if !has_stream_block {
-            self.stop_audio_stream(context);
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn instantiate_child(
-        &mut self,
-        self_display_object: DisplayObject<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        id: CharacterId,
-        depth: Depth,
-        place_object: &swf::PlaceObject,
-        copy_previous_properties: bool,
-    ) -> Option<DisplayObject<'gc>> {
-        if let Ok(mut child) = context
-            .library
-            .library_for_movie_mut(self.movie())
-            .instantiate_by_id(id, context.gc_context)
-        {
-            child.post_instantiation(avm, context, child);
-
-            // Remove previous child from children list,
-            // and add new childonto front of the list.
-            let prev_child = self.children.insert(depth, child);
-            if let Some(prev_child) = prev_child {
-                self.remove_child_from_exec_list(context, prev_child);
-            }
-            self.add_child_to_exec_list(context.gc_context, child);
-            {
-                // Set initial properties for child.
-                child.set_depth(context.gc_context, depth);
-                child.set_parent(context.gc_context, Some(self_display_object));
-                child.set_place_frame(context.gc_context, self.current_frame());
-                if copy_previous_properties {
-                    if let Some(prev_child) = prev_child {
-                        child.copy_display_properties_from(context.gc_context, prev_child);
-                    }
-                }
-                // Run first frame.
-                child.apply_place_object(context.gc_context, place_object);
-                child.run_frame(avm, context);
-            }
-            Some(child)
-        } else {
-            log::error!("Unable to instantiate display node id {}", id);
-            None
-        }
-    }
-
     /// Adds a child to the front of the execution list.
     /// This does not affect the render list.
     fn add_child_to_exec_list(
@@ -723,176 +1080,6 @@ impl<'gc> MovieClipData<'gc> {
         }
         // Flag child as removed.
         child.unload(context);
-    }
-    pub fn run_goto(
-        &mut self,
-        self_display_object: DisplayObject<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        frame: FrameNumber,
-    ) {
-        // Flash gotos are tricky:
-        // 1) Conceptually, a goto should act like the playhead is advancing forward or
-        //    backward to a frame.
-        // 2) However, MovieClip timelines are stored as deltas from frame to frame,
-        //    so for rewinds, we must restart to frame 1 and play forward.
-        // 3) Objects that would persist over the goto conceptually should not be
-        //    destroyed and recreated; they should keep their properties.
-        //    Particularly for rewinds, the object should persist if it was created
-        //      *before* the frame we are going to. (DisplayObject::place_frame).
-        // 4) We want to avoid creating objects just to destroy them if they aren't on
-        //    the goto frame, so we should instead aggregate the deltas into a final list
-        //    of commands, and THEN modify the children as necessary.
-
-        // This map will maintain a map of depth -> placement commands.
-        // TODO: Move this to UpdateContext to avoid allocations.
-        let mut goto_commands = vec![];
-
-        self.stop_audio_stream(context);
-
-        let is_rewind = if frame < self.current_frame() {
-            // Because we can only step forward, we have to start at frame 1
-            // when rewinding.
-            self.tag_stream_pos = 0;
-            self.current_frame = 0;
-
-            // Remove all display objects that were created after the desination frame.
-            // TODO: We want to do something like self.children.retain here,
-            // but BTreeMap::retain does not exist.
-            let children: SmallVec<[_; 16]> = self
-                .children
-                .iter()
-                .filter_map(|(depth, clip)| {
-                    if clip.place_frame() > frame {
-                        Some((*depth, *clip))
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            for (depth, child) in children {
-                self.children.remove(&depth);
-                self.remove_child_from_exec_list(context, child);
-            }
-            true
-        } else {
-            false
-        };
-
-        // Step through the intermediate frames, and aggregate the deltas of each frame.
-        let mut frame_pos = self.tag_stream_pos;
-        let data = self.static_data.swf.clone();
-        let mut reader = data.read_from(self.tag_stream_pos);
-        let mut index = 0;
-
-        let len = self.tag_stream_len() as u64;
-        // Sanity; let's make sure we don't seek way too far.
-        // TODO: This should be self.frames_loaded() when we implement that.
-        let clamped_frame = if frame <= self.total_frames() {
-            frame
-        } else {
-            self.total_frames()
-        };
-
-        while self.current_frame() < clamped_frame && frame_pos < len {
-            self.current_frame += 1;
-            frame_pos = reader.get_inner().position();
-
-            use swf::TagCode;
-            let tag_callback = |reader: &mut _, tag_code, tag_len| match tag_code {
-                TagCode::PlaceObject => {
-                    index += 1;
-                    self.goto_place_object(reader, tag_len, 1, &mut goto_commands, is_rewind, index)
-                }
-                TagCode::PlaceObject2 => {
-                    index += 1;
-                    self.goto_place_object(reader, tag_len, 2, &mut goto_commands, is_rewind, index)
-                }
-                TagCode::PlaceObject3 => {
-                    index += 1;
-                    self.goto_place_object(reader, tag_len, 3, &mut goto_commands, is_rewind, index)
-                }
-                TagCode::PlaceObject4 => {
-                    index += 1;
-                    self.goto_place_object(reader, tag_len, 4, &mut goto_commands, is_rewind, index)
-                }
-                TagCode::RemoveObject => {
-                    self.goto_remove_object(reader, 1, context, &mut goto_commands, is_rewind)
-                }
-                TagCode::RemoveObject2 => {
-                    self.goto_remove_object(reader, 2, context, &mut goto_commands, is_rewind)
-                }
-                _ => Ok(()),
-            };
-            let _ = tag_utils::decode_tags(&mut reader, tag_callback, TagCode::ShowFrame);
-        }
-        let hit_target_frame = self.current_frame == frame;
-
-        // Run the list of goto commands to actually create and update the display objects.
-        let run_goto_command = |clip: &mut MovieClipData<'gc>,
-                                avm: &mut Avm1<'gc>,
-                                context: &mut UpdateContext<'_, 'gc, '_>,
-                                params: &GotoPlaceObject| {
-            let child_entry = clip.children.get_mut(&params.depth()).copied();
-            match child_entry {
-                // Apply final delta to display pamareters.
-                // For rewinds, if an object was created before the final frame,
-                // it will exist on the final frame as well. Re-use this object
-                // instead of recreating.
-                // If the ID is 0, we are modifying a previous child. Otherwise, we're replacing it.
-                // If it's a rewind, we removed any dead children above, so we always
-                // modify the previous child.
-                Some(mut prev_child) if params.id() == 0 || is_rewind => {
-                    prev_child.apply_place_object(context.gc_context, &params.place_object);
-                }
-                _ => {
-                    if let Some(mut child) = clip.instantiate_child(
-                        self_display_object,
-                        avm,
-                        context,
-                        params.id(),
-                        params.depth(),
-                        &params.place_object,
-                        params.modifies_original_item(),
-                    ) {
-                        // Set the place frame to the frame where the object *would* have been placed.
-                        child.set_place_frame(context.gc_context, params.frame);
-                    }
-                }
-            }
-        };
-
-        // We have to be sure that queued actions are generated in the same order
-        // as if the playhead had reached this frame normally.
-
-        // First, sort the goto commands in the order of execution.
-        // (Maybe it'd be better to keeps this list sorted as we create it?
-        // Currently `swap_remove` calls futz with the order; but we could use `remove`).
-        goto_commands.sort_by_key(|params| params.index);
-
-        // Then, run frames for children that were created before this frame.
-        goto_commands
-            .iter()
-            .filter(|params| params.frame < frame)
-            .for_each(|goto| run_goto_command(self, avm, context, goto));
-
-        // Next, run the final frame for the parent clip.
-        // Re-run the final frame without display tags (DoAction, StartSound, etc.)
-        // Note that this only happens if the frame exists and is loaded;
-        // e.g. gotoAndStop(9999) displays the final frame, but actions don't run!
-        if hit_target_frame {
-            self.current_frame -= 1;
-            self.tag_stream_pos = frame_pos;
-            self.run_frame_internal(self_display_object, avm, context, false);
-        } else {
-            self.current_frame = clamped_frame;
-        }
-
-        // Finally, run frames for children that are placed on this frame.
-        goto_commands
-            .iter()
-            .filter(|params| params.frame >= frame)
-            .for_each(|goto| run_goto_command(self, avm, context, goto));
     }
 
     /// Handles a PlaceObject tag when running a goto action.
@@ -1079,93 +1266,6 @@ impl<'gc> MovieClipData<'gc> {
 
 // Preloading of definition tags
 impl<'gc, 'a> MovieClipData<'gc> {
-    fn preload(
-        &mut self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        morph_shapes: &mut fnv::FnvHashMap<CharacterId, MorphShapeStatic>,
-        self_display_object: DisplayObject<'gc>,
-    ) {
-        use swf::TagCode;
-        // TODO: Re-creating static data because preload step occurs after construction.
-        // Should be able to hoist this up somewhere, or use MaybeUninit.
-        let mut static_data = (&*self.static_data).clone();
-        let data = self.static_data.swf.clone();
-        let mut reader = data.read_from(self.tag_stream_pos);
-        let mut cur_frame = 1;
-        let mut ids = fnv::FnvHashMap::default();
-        let tag_callback = |reader: &mut _, tag_code, tag_len| match tag_code {
-            TagCode::DefineBits => self.define_bits(context, reader, tag_len),
-            TagCode::DefineBitsJpeg2 => self.define_bits_jpeg_2(context, reader, tag_len),
-            TagCode::DefineBitsJpeg3 => self.define_bits_jpeg_3(context, reader, tag_len),
-            TagCode::DefineBitsJpeg4 => self.define_bits_jpeg_4(context, reader, tag_len),
-            TagCode::DefineBitsLossless => self.define_bits_lossless(context, reader, 1),
-            TagCode::DefineBitsLossless2 => self.define_bits_lossless(context, reader, 2),
-            TagCode::DefineButton => self.define_button_1(context, reader),
-            TagCode::DefineButton2 => self.define_button_2(context, reader),
-            TagCode::DefineButtonCxform => self.define_button_cxform(context, reader, tag_len),
-            TagCode::DefineButtonSound => self.define_button_sound(context, reader),
-            TagCode::DefineEditText => self.define_edit_text(context, reader),
-            TagCode::DefineFont => self.define_font_1(context, reader),
-            TagCode::DefineFont2 => self.define_font_2(context, reader),
-            TagCode::DefineFont3 => self.define_font_3(context, reader),
-            TagCode::DefineFont4 => unimplemented!(),
-            TagCode::DefineMorphShape => self.define_morph_shape(context, reader, morph_shapes, 1),
-            TagCode::DefineMorphShape2 => self.define_morph_shape(context, reader, morph_shapes, 2),
-            TagCode::DefineShape => self.define_shape(context, reader, 1),
-            TagCode::DefineShape2 => self.define_shape(context, reader, 2),
-            TagCode::DefineShape3 => self.define_shape(context, reader, 3),
-            TagCode::DefineShape4 => self.define_shape(context, reader, 4),
-            TagCode::DefineSound => self.define_sound(context, reader, tag_len),
-            TagCode::DefineSprite => self.define_sprite(context, reader, tag_len, morph_shapes),
-            TagCode::DefineText => self.define_text(context, reader, 1),
-            TagCode::DefineText2 => self.define_text(context, reader, 2),
-            TagCode::DoInitAction => {
-                self.do_init_action(self_display_object, context, reader, tag_len)
-            }
-            TagCode::ExportAssets => self.export_assets(context, reader),
-            TagCode::FrameLabel => {
-                self.frame_label(context, reader, tag_len, cur_frame, &mut static_data)
-            }
-            TagCode::JpegTables => self.jpeg_tables(context, reader, tag_len),
-            TagCode::PlaceObject => {
-                self.preload_place_object(context, reader, tag_len, &mut ids, morph_shapes, 1)
-            }
-            TagCode::PlaceObject2 => {
-                self.preload_place_object(context, reader, tag_len, &mut ids, morph_shapes, 2)
-            }
-            TagCode::PlaceObject3 => {
-                self.preload_place_object(context, reader, tag_len, &mut ids, morph_shapes, 3)
-            }
-            TagCode::PlaceObject4 => {
-                self.preload_place_object(context, reader, tag_len, &mut ids, morph_shapes, 4)
-            }
-            TagCode::RemoveObject => self.preload_remove_object(context, reader, &mut ids, 1),
-            TagCode::RemoveObject2 => self.preload_remove_object(context, reader, &mut ids, 2),
-            TagCode::ShowFrame => self.preload_show_frame(context, reader, &mut cur_frame),
-            TagCode::SoundStreamHead => {
-                self.preload_sound_stream_head(context, reader, cur_frame, &mut static_data, 1)
-            }
-            TagCode::SoundStreamHead2 => {
-                self.preload_sound_stream_head(context, reader, cur_frame, &mut static_data, 2)
-            }
-            TagCode::SoundStreamBlock => self.preload_sound_stream_block(
-                context,
-                reader,
-                cur_frame,
-                &mut static_data,
-                tag_len,
-            ),
-            _ => Ok(()),
-        };
-        let _ = tag_utils::decode_tags(&mut reader, tag_callback, TagCode::End);
-        self.static_data = Gc::allocate(context.gc_context, static_data);
-
-        // Finalize audio stream.
-        if self.static_data.audio_stream_info.is_some() {
-            context.audio.preload_sound_stream_end(self.id());
-        }
-    }
-
     #[inline]
     fn define_bits_lossless(
         &mut self,
@@ -1659,40 +1759,6 @@ impl<'gc, 'a> MovieClipData<'gc> {
         Ok(())
     }
 
-    fn define_sprite(
-        &mut self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        reader: &mut SwfStream<&'a [u8]>,
-        tag_len: usize,
-        morph_shapes: &mut fnv::FnvHashMap<CharacterId, MorphShapeStatic>,
-    ) -> DecodeResult {
-        let id = reader.read_character_id()?;
-        let num_frames = reader.read_u16()?;
-        let movie_clip = MovieClip::new_with_data(
-            context.gc_context,
-            id,
-            self.static_data
-                .swf
-                .resize_to_reader(reader, tag_len - 4)
-                .ok_or_else(|| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Cannot define sprite with invalid offset and length!",
-                    )
-                })?,
-            num_frames,
-        );
-
-        movie_clip.preload(context, morph_shapes);
-
-        context
-            .library
-            .library_for_movie_mut(self.movie())
-            .register_character(id, Character::MovieClip(movie_clip));
-
-        Ok(())
-    }
-
     #[inline]
     fn define_text(
         &mut self,
@@ -1823,88 +1889,6 @@ impl<'gc, 'a> MovieClipData<'gc> {
             ActionType::Normal { bytecode: slice },
             false,
         );
-        Ok(())
-    }
-
-    #[inline]
-    fn do_init_action(
-        &mut self,
-        self_display_object: DisplayObject<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        reader: &mut SwfStream<&'a [u8]>,
-        tag_len: usize,
-    ) -> DecodeResult {
-        // Queue the init actions.
-
-        // TODO: Init actions are supposed to be executed once, and it gives a
-        // sprite ID... how does that work?
-        let sprite_id = reader.read_u16()?;
-        log::info!("Init Action sprite ID {}", sprite_id);
-
-        let slice = self
-            .static_data
-            .swf
-            .resize_to_reader(reader, tag_len)
-            .ok_or_else(|| {
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Invalid source or tag length when running init action",
-                )
-            })?;
-        context.action_queue.queue_actions(
-            self_display_object,
-            ActionType::Init { bytecode: slice },
-            true,
-        );
-        Ok(())
-    }
-
-    fn place_object(
-        &mut self,
-        self_display_object: DisplayObject<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        reader: &mut SwfStream<&'a [u8]>,
-        tag_len: usize,
-        version: u8,
-    ) -> DecodeResult {
-        let place_object = if version == 1 {
-            reader.read_place_object(tag_len)
-        } else {
-            reader.read_place_object_2_or_3(version)
-        }?;
-        use swf::PlaceObjectAction;
-        match place_object.action {
-            PlaceObjectAction::Place(id) | PlaceObjectAction::Replace(id) => {
-                if let Some(child) = self.instantiate_child(
-                    self_display_object,
-                    avm,
-                    context,
-                    id,
-                    place_object.depth.into(),
-                    &place_object,
-                    if let PlaceObjectAction::Replace(_) = place_object.action {
-                        true
-                    } else {
-                        false
-                    },
-                ) {
-                    child
-                } else {
-                    return Ok(());
-                }
-            }
-            PlaceObjectAction::Modify => {
-                if let Some(mut child) = self.children.get_mut(&place_object.depth.into()).copied()
-                {
-                    child.apply_place_object(context.gc_context, &place_object);
-                    child
-                } else {
-                    return Ok(());
-                }
-            }
-        };
-
         Ok(())
     }
 

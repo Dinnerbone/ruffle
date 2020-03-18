@@ -131,13 +131,12 @@ impl<'gc> TDisplayObject<'gc> for Button<'gc> {
         &mut self,
         _avm: &mut Avm1<'gc>,
         context: &mut UpdateContext<'_, 'gc, '_>,
-        display_object: DisplayObject<'gc>,
     ) {
         let mut mc = self.0.write(context.gc_context);
         if mc.object.is_none() {
             let object = StageObject::for_display_object(
                 context.gc_context,
-                display_object,
+                (*self).into(),
                 Some(context.system_prototypes.object),
             );
             mc.object = Some(object.into());
@@ -245,7 +244,7 @@ impl<'gc> ButtonData<'gc> {
                     .library_for_movie_mut(self.movie())
                     .instantiate_by_id(record.id, context.gc_context)
                 {
-                    child.post_instantiation(avm, context, child);
+                    child.post_instantiation(avm, context);
                     child.set_parent(context.gc_context, Some(self_display_object));
                     child.set_matrix(context.gc_context, &record.matrix.clone().into());
                     child.set_color_transform(
@@ -279,7 +278,7 @@ impl<'gc> ButtonData<'gc> {
                     {
                         Ok(mut child) => {
                             {
-                                child.post_instantiation(avm, context, child);
+                                child.post_instantiation(avm, context);
                                 child.set_matrix(context.gc_context, &record.matrix.clone().into());
                                 child.set_parent(context.gc_context, Some(self_display_object));
                                 child.set_depth(context.gc_context, record.depth.into());

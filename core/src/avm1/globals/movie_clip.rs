@@ -231,7 +231,7 @@ fn attach_movie<'gc>(
         .ok_or_else(|| "Movie is missing!".into())
         .and_then(|l| l.instantiate_by_export_name(&export_name, context.gc_context))
     {
-        new_clip.post_instantiation(avm, context, new_clip);
+        new_clip.post_instantiation(avm, context);
         // Set name and attach to parent.
         new_clip.set_name(context.gc_context, &new_instance_name);
         movie_clip.add_child_from_avm(context, new_clip, depth);
@@ -271,7 +271,7 @@ fn create_empty_movie_clip<'gc>(
 
     // Create empty movie clip.
     let mut new_clip = MovieClip::new(avm.current_swf_version(), context.gc_context);
-    new_clip.post_instantiation(avm, context, new_clip.into());
+    new_clip.post_instantiation(avm, context);
 
     // Set name and attach to parent.
     new_clip.set_name(context.gc_context, &new_instance_name);
@@ -321,7 +321,7 @@ fn create_text_field<'gc>(
 
     let mut text_field: DisplayObject<'gc> =
         EditText::new(context, movie, x, y, width, height).into();
-    text_field.post_instantiation(avm, context, text_field);
+    text_field.post_instantiation(avm, context);
     text_field.set_name(context.gc_context, &instance_name);
     movie_clip.add_child_from_avm(context, text_field, depth as Depth);
 
@@ -381,7 +381,7 @@ pub fn duplicate_movie_clip_with_bias<'gc>(
         .ok_or_else(|| "Movie is missing!".into())
         .and_then(|l| l.instantiate_by_id(movie_clip.id(), context.gc_context))
     {
-        new_clip.post_instantiation(avm, context, new_clip);
+        new_clip.post_instantiation(avm, context);
 
         // Set name and attach to parent.
         new_clip.set_name(context.gc_context, &new_instance_name);

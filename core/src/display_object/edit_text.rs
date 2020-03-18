@@ -431,13 +431,12 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
         &mut self,
         _avm: &mut Avm1<'gc>,
         context: &mut UpdateContext<'_, 'gc, '_>,
-        display_object: DisplayObject<'gc>,
     ) {
         let mut text = self.0.write(context.gc_context);
         if text.object.is_none() {
             let object = StageObject::for_display_object(
                 context.gc_context,
-                display_object,
+                (*self).into(),
                 Some(context.system_prototypes.text_field),
             )
             .into();

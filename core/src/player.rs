@@ -236,7 +236,7 @@ impl Player {
         player.mutate_with_update_context(|avm, context| {
             let mut root: DisplayObject =
                 MovieClip::from_movie(context.gc_context, movie.clone()).into();
-            root.post_instantiation(avm, context, root);
+            root.post_instantiation(avm, context);
             root.set_depth(context.gc_context, 0);
             context.levels.insert(0, root);
         });
@@ -539,12 +539,12 @@ impl Player {
     /// This should only be called once. Further movie loads should preload the
     /// specific `MovieClip` referenced.
     fn preload(&mut self) {
-        self.mutate_with_update_context(|_avm, context| {
+        self.mutate_with_update_context(|avm, context| {
             let mut morph_shapes = fnv::FnvHashMap::default();
             let root = *context.levels.get(&0).expect("root level");
             root.as_movie_clip()
                 .unwrap()
-                .preload(context, &mut morph_shapes);
+                .preload(avm, context, &mut morph_shapes);
 
             // Finalize morph shapes.
             for (id, static_data) in morph_shapes {

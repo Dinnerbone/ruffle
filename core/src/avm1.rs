@@ -989,7 +989,7 @@ impl<'gc> Avm1<'gc> {
             let mut level: DisplayObject<'_> =
                 MovieClip::new(NEWEST_PLAYER_VERSION, context.gc_context).into();
 
-            level.post_instantiation(self, context, level);
+            level.post_instantiation(self, context);
             level.set_depth(context.gc_context, level_id as i32);
             context.levels.insert(level_id, level);
 
@@ -1551,12 +1551,16 @@ impl<'gc> Avm1<'gc> {
         &mut self,
         _context: &mut UpdateContext<'_, 'gc, '_>,
     ) -> Result<(), Error> {
-        let object = self.pop().as_object()?;
+        let object = self.pop();
 
         self.push(Value::Null); // Sentinel that indicates end of enumeration
-        for k in object.get_keys() {
-            self.push(k);
+
+        if let Value::Object(object) = object {
+            for k in object.get_keys() {
+                self.push(k);
+            }
         }
+
 
         Ok(())
     }
