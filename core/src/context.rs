@@ -2,7 +2,7 @@
 use crate::avm1;
 
 use crate::avm1::listeners::SystemListener;
-use crate::avm1::{Object, Value};
+use crate::avm1::{Object, Value, StageObject};
 use crate::backend::input::InputBackend;
 use crate::backend::{audio::AudioBackend, navigator::NavigatorBackend, render::RenderBackend};
 use crate::library::Library;
@@ -16,6 +16,7 @@ use gc_arena::{Collect, MutationContext};
 use rand::rngs::SmallRng;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, Weak};
+use crate::display_object::DisplayObjectPtr;
 
 /// `UpdateContext` holds shared data that is used by the various subsystems of Ruffle.
 /// `Player` crates this when it begins a tick and passes it through the call stack to
@@ -24,6 +25,10 @@ pub struct UpdateContext<'a, 'gc, 'gc_context> {
     /// The queue of actions that will be run after the display list updates.
     /// Display objects and actions can push actions onto the queue.
     pub action_queue: &'a mut ActionQueue<'gc>,
+
+    /// The queue of actions that will be run after the display list updates.
+    /// Display objects and actions can push actions onto the queue.
+    pub action_queue_high: &'a mut ActionQueue<'gc>,
 
     /// The background color of the Stage. Changed by the `SetBackgroundColor` SWF tag.
     /// TODO: Move this into a `Stage` display object.
@@ -194,6 +199,11 @@ pub enum ActionType<'gc> {
     /// A `DoInitAction` action.
     Init { bytecode: SwfSlice },
 
+    ChangePrototype {
+        object: StageObject<'gc>,
+        constructor: Object<'gc>,
+    },
+
     /// An event handler method, e.g. `onEnterFrame`.
     Method {
         object: Object<'gc>,
@@ -225,6 +235,11 @@ impl fmt::Debug for ActionType<'_> {
                 .field("object", object)
                 .field("name", name)
                 .field("args", args)
+                .finish(),
+            ActionType::ChangePrototype { object, constructor } => f
+                .debug_struct("ActionType::ChangePrototype")
+                .field("object", object)
+                .field("constructor", constructor)
                 .finish(),
             ActionType::NotifyListeners {
                 listener,

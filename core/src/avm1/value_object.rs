@@ -210,6 +210,10 @@ impl<'gc> TObject<'gc> for ValueObject<'gc> {
         self.0.read().base.proto()
     }
 
+    fn set_proto(&self, gc_context: MutationContext<'gc, '_>, prototype: Option<Object<'gc>>) {
+        self.0.write(gc_context).base.set_proto(gc_context, prototype)
+    }
+
     fn has_property(&self, context: &mut UpdateContext<'_, 'gc, '_>, name: &str) -> bool {
         self.0.read().base.has_property(context, name)
     }

@@ -1,5 +1,5 @@
 use crate::avm1::listeners::SystemListener;
-use crate::avm1::Avm1;
+use crate::avm1::{Avm1, TObject, Activation};
 use crate::backend::input::{InputBackend, MouseCursor};
 use crate::backend::{
     audio::AudioBackend, navigator::NavigatorBackend, render::Letterbox, render::RenderBackend,
@@ -49,6 +49,7 @@ struct GcRootData<'gc> {
 
     avm: Avm1<'gc>,
     action_queue: ActionQueue<'gc>,
+    action_queue_high: ActionQueue<'gc>,
 
     /// Object which manages asynchronous processes that need to interact with
     /// data in the GC arena.
@@ -64,6 +65,7 @@ impl<'gc> GcRootData<'gc> {
         &mut BTreeMap<u32, DisplayObject<'gc>>,
         &mut Library<'gc>,
         &mut ActionQueue<'gc>,
+        &mut ActionQueue<'gc>,
         &mut Avm1<'gc>,
         &mut Option<DragObject<'gc>>,
         &mut LoadManager<'gc>,
@@ -72,6 +74,7 @@ impl<'gc> GcRootData<'gc> {
             &mut self.levels,
             &mut self.library,
             &mut self.action_queue,
+            &mut self.action_queue_high,
             &mut self.avm,
             &mut self.drag_object,
             &mut self.load_manager,
@@ -207,6 +210,7 @@ impl Player {
                         drag_object: None,
                         avm: Avm1::new(gc_context, NEWEST_PLAYER_VERSION),
                         action_queue: ActionQueue::new(),
+                        action_queue_high: ActionQueue::new(),
                         load_manager: LoadManager::new(),
                     },
                 ))
@@ -644,6 +648,78 @@ impl Player {
     }
 
     fn run_actions<'gc>(avm: &mut Avm1<'gc>, context: &mut UpdateContext<'_, 'gc, '_>) {
+        while let Some(actions) = context.action_queue_high.pop() {
+            // We don't run frame actions if the clip was removed after it queued the action.
+            if !actions.is_unload && actions.clip.removed() {
+                continue;
+            }
+
+            match actions.action_type {
+                // DoAction/clip event code
+                ActionType::Normal { bytecode } => {
+                    avm.insert_stack_frame_for_action(
+                        actions.clip,
+                        context.swf.header().version,
+                        bytecode,
+                        context,
+                    );
+                }
+                // DoInitAction code
+                ActionType::Init { bytecode } => {
+                    avm.insert_stack_frame_for_init_action(
+                        actions.clip,
+                        context.swf.header().version,
+                        bytecode,
+                        context,
+                    );
+                }
+                ActionType::ChangePrototype { object, constructor } => {
+                    avm.insert_stack_frame(GcCell::allocate(context.gc_context,
+                                                            Activation::from_nothing(context.swf.header().version, avm.global_object_cell(), context.gc_context, actions.clip)));
+                    if let Ok(prototype) = constructor
+                        .get("prototype", avm, context)
+                        .and_then(|v| v.resolve(avm, context))
+                        .and_then(|v| v.as_object())
+                    {
+                        object.set_proto(context.gc_context, Some(prototype));
+                        if let Ok(result) = constructor.call(avm, context, object.into(), &[]) {
+                            let _ = result.resolve(avm, context);
+                        }
+                    }
+                }
+                // Event handler method call (e.g. onEnterFrame)
+                ActionType::Method { object, name, args } => {
+                    avm.insert_stack_frame_for_method(
+                        actions.clip,
+                        object,
+                        context.swf.header().version,
+                        context,
+                        name,
+                        &args,
+                    );
+                }
+
+                // Event handler method call (e.g. onEnterFrame)
+                ActionType::NotifyListeners {
+                    listener,
+                    method,
+                    args,
+                } => {
+                    // A native function ends up resolving immediately,
+                    // so this doesn't require any further execution.
+                    avm.notify_system_listeners(
+                        actions.clip,
+                        context.swf.version(),
+                        context,
+                        listener,
+                        method,
+                        &args,
+                    );
+                }
+            }
+            // Execute the stack frame (if any).
+            let _ = avm.run_stack_till_empty(context);
+        }
         while let Some(actions) = context.action_queue.pop() {
             // We don't run frame actions if the clip was removed after it queued the action.
             if !actions.is_unload && actions.clip.removed() {
@@ -668,6 +744,20 @@ impl Player {
                         bytecode,
                         context,
                     );
+                }
+                ActionType::ChangePrototype { object, constructor } => {
+                    avm.insert_stack_frame(GcCell::allocate(context.gc_context,
+                                                            Activation::from_nothing(context.swf.header().version, avm.global_object_cell(), context.gc_context, actions.clip)));
+                    if let Ok(prototype) = constructor
+                        .get("prototype", avm, context)
+                        .and_then(|v| v.resolve(avm, context))
+                        .and_then(|v| v.as_object())
+                    {
+                        object.set_proto(context.gc_context, Some(prototype));
+                        if let Ok(result) = constructor.call(avm, context, object.into(), &[]) {
+                            let _ = result.resolve(avm, context);
+                        }
+                    }
                 }
                 // Event handler method call (e.g. onEnterFrame)
                 ActionType::Method { object, name, args } => {
@@ -782,7 +872,7 @@ impl Player {
         self.gc_arena.mutate(|gc_context, gc_root| {
             let mut root_data = gc_root.0.write(gc_context);
             let mouse_hovered_object = root_data.mouse_hovered_object;
-            let (levels, library, action_queue, avm, drag_object, load_manager) =
+            let (levels, library, action_queue, action_queue_high, avm, drag_object, load_manager) =
                 root_data.update_context_params();
 
             let mut update_context = UpdateContext {
@@ -797,6 +887,7 @@ impl Player {
                 navigator,
                 input,
                 action_queue,
+                action_queue_high,
                 gc_context,
                 levels,
                 mouse_hovered_object,

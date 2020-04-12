@@ -378,6 +378,10 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
         self.0.read().prototype
     }
 
+    fn set_proto(&self, gc_context: MutationContext<'gc, '_>, prototype: Option<Object<'gc>>) {
+        self.0.write(gc_context).prototype = prototype;
+    }
+
     /// Checks if the object has a given named property.
     fn has_property(&self, context: &mut UpdateContext<'_, 'gc, '_>, name: &str) -> bool {
         self.has_own_property(context, name)
@@ -599,6 +603,7 @@ mod tests {
                 levels: &mut levels,
                 rng: &mut SmallRng::from_seed([0u8; 16]),
                 action_queue: &mut crate::context::ActionQueue::new(),
+                action_queue_high: &mut crate::context::ActionQueue::new(),
                 audio: &mut NullAudioBackend::new(),
                 input: &mut NullInputBackend::new(),
                 background_color: &mut Color {
@@ -619,7 +624,7 @@ mod tests {
                 load_manager: &mut LoadManager::new(),
             };
 
-            root.post_instantiation(&mut avm, &mut context, root);
+            root.post_instantiation(&mut avm, &mut context);
 
             let object = ScriptObject::object(gc_context, Some(avm.prototypes().object)).into();
 

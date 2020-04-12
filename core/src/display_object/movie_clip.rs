@@ -763,12 +763,12 @@ impl<'gc> MovieClip<'gc> {
         copy_previous_properties: bool,
     ) -> Option<DisplayObject<'gc>> {
         let _ = self.0.write(context.gc_context).base;
+        dbg!(id);
         let child = if let Ok(mut child) = context
             .library
             .library_for_movie_mut(self.0.read().movie())
             .instantiate_by_id(id, context.gc_context)
         {
-            child.post_instantiation(avm, context);
             Some(child)
         } else { None };
         if let Some(mut child) = child {
@@ -793,7 +793,15 @@ impl<'gc> MovieClip<'gc> {
                 }
                 // Run first frame.
                 child.apply_place_object(context.gc_context, place_object);
+                dbg!(child.children().count());
+                println!("post_init");
+                child.post_instantiation(avm, context);
+                dbg!(child.children().count());
+                println!("run_frame");
                 child.run_frame(avm, context);
+                dbg!(child.children().count());
+                println!("done");
+
             }
             Some(child)
         } else {
@@ -888,38 +896,22 @@ impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
         context: &mut UpdateContext<'_, 'gc, '_>,
     ) {
         if self.0.write(context.gc_context).object.is_none() {
-            let _ = self.0.write(context.gc_context);
-            if self.0.read().avm1_constructor.is_some() {
-                let constructor = self.0.read().avm1_constructor.unwrap();
-
-                let _ = self.0.write(context.gc_context);
-                if let Ok(prototype) = constructor
-                    .get("prototype", avm, context)
-                    .and_then(|v| v.resolve(avm, context))
-                    .and_then(|v| v.as_object())
-                {
-                    let _ = self.0.write(context.gc_context);
-                    let object: Object<'gc> = StageObject::for_display_object(
-                        context.gc_context,
-                        (*self).into(),
-                        Some(prototype),
-                    )
-                        .into();
-                    if let Ok(result) = constructor.call(avm, context, object, &[]) {
-                        let _ = self.0.write(context.gc_context);
-                        let _ = result.resolve(avm, context);
-                    }
-                    self.0.write(context.gc_context).object = Some(object);
-                    return;
-                }
-            }
-
             let object = StageObject::for_display_object(
                 context.gc_context,
                 (*self).into(),
                 Some(context.system_prototypes.movie_clip),
             );
             self.0.write(context.gc_context).object = Some(object.into());
+            if let Some(constructor) = self.0.read().avm1_constructor {
+                context.action_queue_high.queue_actions(
+                    (*self).into(),
+                    ActionType::ChangePrototype {
+                        object: object.into(),
+                        constructor,
+                    },
+                    false,
+                );
+            }
         }
     }
 

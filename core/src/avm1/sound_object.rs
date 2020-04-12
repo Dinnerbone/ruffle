@@ -150,6 +150,10 @@ impl<'gc> TObject<'gc> for SoundObject<'gc> {
         self.base().set(name, value, avm, context)
     }
 
+    fn set_proto(&self, gc_context: MutationContext<'gc, '_>, prototype: Option<Object<'gc>>) {
+        self.base().set_proto(gc_context, prototype)
+    }
+
     fn call(
         &self,
         avm: &mut Avm1<'gc>,

@@ -64,6 +64,15 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         context: &mut UpdateContext<'_, 'gc, '_>,
     ) -> Result<ReturnValue<'gc>, Error> {
         let props = avm.display_properties;
+        if name == "boundingBox_mc" {
+            dbg!(name);
+            let mut good = false;
+            for child in self.display_object.children() {
+                dbg!(child.name());
+                good = true;
+            }
+            assert!(good);
+        }
         // Property search order for DisplayObjects:
         if self.has_own_property(context, name) {
             // 1) Actual properties on the underlying object
@@ -144,6 +153,9 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
     }
     fn proto(&self) -> Option<Object<'gc>> {
         self.base.proto()
+    }
+    fn set_proto(&self, gc_context: MutationContext<'gc, '_>, prototype: Option<Object<'gc>>) {
+        self.base.set_proto(gc_context, prototype)
     }
     fn define_value(
         &self,
@@ -651,6 +663,7 @@ fn name<'gc>(
     _context: &mut UpdateContext<'_, 'gc, '_>,
     this: DisplayObject<'gc>,
 ) -> Result<Value<'gc>, Error> {
+    dbg!(this.name());
     Ok((*this.name()).into())
 }
 

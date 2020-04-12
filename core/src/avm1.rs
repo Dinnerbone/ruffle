@@ -46,7 +46,7 @@ pub mod xml_object;
 mod tests;
 
 use crate::avm1::listeners::SystemListener;
-use activation::Activation;
+pub use activation::Activation;
 pub use globals::SystemPrototypes;
 pub use object::{Object, ObjectPtr, TObject};
 use scope::Scope;
