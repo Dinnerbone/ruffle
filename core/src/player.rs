@@ -651,6 +651,8 @@ impl Player {
                 continue;
             }
 
+            info!("Running queued action {:?} on {:?} / {:?}", actions.action_type, actions.clip.name(), actions.clip.id());
+
             match actions.action_type {
                 // DoAction/clip event code
                 ActionType::Normal { bytecode } => {
@@ -679,8 +681,10 @@ impl Player {
                     {
                         if let Value::Object(object) = actions.clip.object() {
                             object.set_proto(context.gc_context, Some(prototype));
-                            if let Ok(result) = constructor.call(avm, context, object, &[]) {
-                                let _ = result.resolve(avm, context);
+                            if let Ok(result) = constructor.call(avm, context, object, None, &[]) {
+                                let _ = result.resolve(avm, context).unwrap();
+                            } else {
+                                error!("Couldn't call constructor for prototype-change");
                             }
                         }
                     }

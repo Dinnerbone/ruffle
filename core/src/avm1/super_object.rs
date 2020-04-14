@@ -181,7 +181,9 @@ impl<'gc> TObject<'gc> for SuperObject<'gc> {
     }
 
     fn set_proto(&self, gc_context: MutationContext<'gc, '_>, prototype: Option<Object<'gc>>) {
-        self.0.write(gc_context).proto = prototype;
+        if let Some(prototype) = prototype {
+            self.0.write(gc_context).base_proto = prototype;
+        }
     }
 
     fn define_value(

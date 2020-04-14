@@ -656,8 +656,8 @@ impl<'gc> TDisplayObject<'gc> for MovieClip<'gc> {
                     )
                     .into();
                     self.0.write(context.gc_context).object = Some(object);
-                    if let Ok(result) = constructor.call(avm, context, object, &[]) {
-                        let _ = result.resolve(avm, context);
+                    if let Ok(result) = constructor.call(avm, context, object, None, &[]) {
+                        let _ = result.resolve(avm, context)
                     }
                     return;
                 }
@@ -2006,6 +2006,7 @@ impl<'gc, 'a> MovieClipData<'gc> {
         use swf::PlaceObjectAction;
         match place_object.action {
             PlaceObjectAction::Place(id) | PlaceObjectAction::Replace(id) => {
+                info!("Place object {:?} on {:?}", id, self.id());
                 if let Some(child) = self.instantiate_child(
                     self_display_object,
                     avm,
