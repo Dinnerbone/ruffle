@@ -1,0 +1,81 @@
+/// Root frame 1
+
+// instance1._name
+instance1
+
+// instance2._name
+instance2
+
+// instance3._name
+undefined
+
+// instance4._name
+undefined
+
+// instance5._name
+instance5
+
+// instance6._name
+undefined
+
+// instance7._name
+undefined
+
+// instance8._name
+undefined
+
+
+/// Children frame 1 (children)
+
+// instance1._name
+undefined
+
+// instance2._name
+undefined
+
+// instance3._name
+instance3
+
+// instance4._name
+instance4
+
+// instance5._name
+undefined
+
+// instance6._name
+undefined
+
+// instance7._name
+undefined
+
+// instance8._name
+undefined
+
+
+/// Children frame 1 (children2)
+
+// instance1._name
+undefined
+
+// instance2._name
+undefined
+
+// instance3._name
+undefined
+
+// instance4._name
+undefined
+
+// instance5._name
+undefined
+
+// instance6._name
+instance6
+
+// instance7._name
+instance7
+
+// instance8._name
+undefined
+
+
