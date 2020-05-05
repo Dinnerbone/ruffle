@@ -4,19 +4,20 @@ use crate::context::{RenderContext, UpdateContext};
 use crate::display_object::{DisplayObjectBase, TDisplayObject};
 use crate::prelude::*;
 use gc_arena::{Collect, GcCell};
+use crate::backend::Backends;
 
 #[derive(Clone, Debug, Collect, Copy)]
 #[collect(no_drop)]
-pub struct Graphic<'gc>(GcCell<'gc, GraphicData<'gc>>);
+pub struct Graphic<'gc, B: Backends>(GcCell<'gc, GraphicData<'gc, B>>);
 
 #[derive(Clone, Debug)]
-pub struct GraphicData<'gc> {
-    base: DisplayObjectBase<'gc>,
+pub struct GraphicData<'gc, B: Backends> {
+    base: DisplayObjectBase<'gc, B>,
     static_data: gc_arena::Gc<'gc, GraphicStatic>,
 }
 
-impl<'gc> Graphic<'gc> {
-    pub fn from_swf_tag(context: &mut UpdateContext<'_, 'gc, '_>, swf_shape: &swf::Shape) -> Self {
+impl<'gc, B: Backends> Graphic<'gc, B> {
+    pub fn from_swf_tag(context: &mut UpdateContext<'_, 'gc, '_, B>, swf_shape: &swf::Shape) -> Self {
         let static_data = GraphicStatic {
             id: swf_shape.id,
             render_handle: context.renderer.register_shape(swf_shape),
@@ -32,7 +33,7 @@ impl<'gc> Graphic<'gc> {
     }
 }
 
-impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
+impl<'gc, B: Backends> TDisplayObject<'gc, B> for Graphic<'gc, B> {
     impl_display_object!(base);
 
     fn id(&self) -> CharacterId {
@@ -54,11 +55,11 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
         bounds
     }
 
-    fn run_frame(&mut self, _avm: &mut Avm1<'gc>, _context: &mut UpdateContext) {
+    fn run_frame(&mut self, _avm: &mut Avm1<'gc, B>, _context: &mut UpdateContext<B>) {
         // Noop
     }
 
-    fn render(&self, context: &mut RenderContext) {
+    fn render(&self, context: &mut RenderContext<B>) {
         if !self.world_bounds().intersects(&context.view_bounds) {
             // Off-screen; culled
             return;
@@ -75,7 +76,7 @@ impl<'gc> TDisplayObject<'gc> for Graphic<'gc> {
     }
 }
 
-unsafe impl<'gc> gc_arena::Collect for GraphicData<'gc> {
+unsafe impl<'gc, B: Backends> gc_arena::Collect for GraphicData<'gc, B> {
     fn trace(&self, cc: gc_arena::CollectionContext) {
         self.base.trace(cc);
         self.static_data.trace(cc);

@@ -4,24 +4,25 @@ use crate::avm1::return_value::ReturnValue;
 use crate::avm1::{Avm1, Error, Object, ScriptObject, TObject, UpdateContext, Value};
 use enumset::EnumSet;
 use gc_arena::MutationContext;
+use crate::backend::Backends;
 
 /// Implements `Function`
-pub fn constructor<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _action_context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn constructor<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _action_context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     Ok(Value::Undefined.into())
 }
 
 /// Implements `Function.prototype.call`
-pub fn call<'gc>(
-    avm: &mut Avm1<'gc>,
-    action_context: &mut UpdateContext<'_, 'gc, '_>,
-    func: Object<'gc>,
-    myargs: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn call<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    action_context: &mut UpdateContext<'_, 'gc, '_, B>,
+    func: Object<'gc, B>,
+    myargs: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let this = match myargs.get(0) {
         Some(Value::Object(this)) => *this,
         _ => avm.globals,
@@ -40,12 +41,12 @@ pub fn call<'gc>(
 }
 
 /// Implements `Function.prototype.apply`
-pub fn apply<'gc>(
-    avm: &mut Avm1<'gc>,
-    action_context: &mut UpdateContext<'_, 'gc, '_>,
-    func: Object<'gc>,
-    myargs: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn apply<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    action_context: &mut UpdateContext<'_, 'gc, '_, B>,
+    func: Object<'gc, B>,
+    myargs: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let this = match myargs.get(0) {
         Some(Value::Object(this)) => *this,
         _ => avm.globals,
@@ -76,12 +77,12 @@ pub fn apply<'gc>(
 }
 
 /// Implements `Function.prototype.toString`
-fn to_string<'gc>(
-    _: &mut Avm1<'gc>,
-    _: &mut UpdateContext<'_, 'gc, '_>,
-    _: Object<'gc>,
-    _: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn to_string<'gc, B: Backends>(
+    _: &mut Avm1<'gc, B>,
+    _: &mut UpdateContext<'_, 'gc, '_, B>,
+    _: Object<'gc, B>,
+    _: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     Ok(ReturnValue::Immediate("[type Function]".into()))
 }
 
@@ -92,7 +93,7 @@ fn to_string<'gc>(
 /// them in order to obtain a valid ECMAScript `Function` prototype. The
 /// returned object is also a bare object, which will need to be linked into
 /// the prototype of `Object`.
-pub fn create_proto<'gc>(gc_context: MutationContext<'gc, '_>, proto: Object<'gc>) -> Object<'gc> {
+pub fn create_proto<'gc, B: Backends>(gc_context: MutationContext<'gc, '_>, proto: Object<'gc, B>) -> Object<'gc, B> {
     let function_proto = ScriptObject::object_cell(gc_context, Some(proto));
     let this = Some(function_proto);
     function_proto

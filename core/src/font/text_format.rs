@@ -1,6 +1,7 @@
 //! Classes that store formatting options
 use crate::avm1::{Avm1, Object, ScriptObject, TObject, Value};
 use crate::context::UpdateContext;
+use crate::backend::Backends;
 
 type Error = Box<dyn std::error::Error>;
 
@@ -60,11 +61,11 @@ impl Default for TextFormat {
     }
 }
 
-fn getstr_from_avm1_object<'gc>(
-    object: Object<'gc>,
+fn getstr_from_avm1_object<'gc, B: Backends>(
+    object: Object<'gc, B>,
     name: &str,
-    avm1: &mut Avm1<'gc>,
-    uc: &mut UpdateContext<'_, 'gc, '_>,
+    avm1: &mut Avm1<'gc, B>,
+    uc: &mut UpdateContext<'_, 'gc, '_, B>,
 ) -> Result<Option<String>, Error> {
     Ok(match object.get(name, avm1, uc)?.resolve(avm1, uc)? {
         Value::Undefined => None,
@@ -73,11 +74,11 @@ fn getstr_from_avm1_object<'gc>(
     })
 }
 
-fn getfloat_from_avm1_object<'gc>(
-    object: Object<'gc>,
+fn getfloat_from_avm1_object<'gc, B: Backends>(
+    object: Object<'gc, B>,
     name: &str,
-    avm1: &mut Avm1<'gc>,
-    uc: &mut UpdateContext<'_, 'gc, '_>,
+    avm1: &mut Avm1<'gc, B>,
+    uc: &mut UpdateContext<'_, 'gc, '_, B>,
 ) -> Result<Option<f64>, Error> {
     Ok(match object.get(name, avm1, uc)?.resolve(avm1, uc)? {
         Value::Undefined => None,
@@ -86,11 +87,11 @@ fn getfloat_from_avm1_object<'gc>(
     })
 }
 
-fn getbool_from_avm1_object<'gc>(
-    object: Object<'gc>,
+fn getbool_from_avm1_object<'gc, B: Backends>(
+    object: Object<'gc, B>,
     name: &str,
-    avm1: &mut Avm1<'gc>,
-    uc: &mut UpdateContext<'_, 'gc, '_>,
+    avm1: &mut Avm1<'gc, B>,
+    uc: &mut UpdateContext<'_, 'gc, '_, B>,
 ) -> Result<Option<bool>, Error> {
     Ok(match object.get(name, avm1, uc)?.resolve(avm1, uc)? {
         Value::Undefined => None,
@@ -101,10 +102,10 @@ fn getbool_from_avm1_object<'gc>(
 
 impl TextFormat {
     /// Construct a `TextFormat` from an object that is
-    pub fn from_avm1_object<'gc>(
-        object1: Object<'gc>,
-        avm1: &mut Avm1<'gc>,
-        uc: &mut UpdateContext<'_, 'gc, '_>,
+    pub fn from_avm1_object<'gc, B: Backends>(
+        object1: Object<'gc, B>,
+        avm1: &mut Avm1<'gc, B>,
+        uc: &mut UpdateContext<'_, 'gc, '_, B>,
     ) -> Result<Self, Error> {
         Ok(Self {
             font: getstr_from_avm1_object(object1, "font", avm1, uc)?,
@@ -142,11 +143,11 @@ impl TextFormat {
     }
 
     /// Construct a `TextFormat` AVM1 object from this text format object.
-    pub fn as_avm1_object<'gc>(
+    pub fn as_avm1_object<'gc, B: Backends>(
         &self,
-        avm1: &mut Avm1<'gc>,
-        uc: &mut UpdateContext<'_, 'gc, '_>,
-    ) -> Result<Object<'gc>, Error> {
+        avm1: &mut Avm1<'gc, B>,
+        uc: &mut UpdateContext<'_, 'gc, '_, B>,
+    ) -> Result<Object<'gc, B>, Error> {
         let object = ScriptObject::object(uc.gc_context, Some(avm1.prototypes().text_format));
 
         object.set(

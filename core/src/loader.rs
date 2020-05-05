@@ -11,15 +11,16 @@ use gc_arena::{Collect, CollectionContext};
 use generational_arena::{Arena, Index};
 use std::sync::{Arc, Mutex, Weak};
 use url::form_urlencoded;
+use crate::backend::Backends;
 
 pub type Handle = Index;
 
 type Error = Box<dyn std::error::Error>;
 
 /// Holds all in-progress loads for the player.
-pub struct LoadManager<'gc>(Arena<Loader<'gc>>);
+pub struct LoadManager<'gc, B: Backends>(Arena<Loader<'gc, B>>);
 
-unsafe impl<'gc> Collect for LoadManager<'gc> {
+unsafe impl<'gc, B: Backends> Collect for LoadManager<'gc, B> {
     fn trace(&self, cc: CollectionContext) {
         for (_, loader) in self.0.iter() {
             loader.trace(cc)
@@ -27,7 +28,7 @@ unsafe impl<'gc> Collect for LoadManager<'gc> {
     }
 }
 
-impl<'gc> LoadManager<'gc> {
+impl<'gc, B: Backends> LoadManager<'gc, B> {
     /// Construct a new `LoadManager`.
     pub fn new() -> Self {
         Self(Arena::new())
@@ -39,7 +40,7 @@ impl<'gc> LoadManager<'gc> {
     /// handle is valid for as long as the load operation. Once the load
     /// finishes, the handle will be invalidated (and the underlying loader
     /// deleted).
-    pub fn add_loader(&mut self, loader: Loader<'gc>) -> Handle {
+    pub fn add_loader(&mut self, loader: Loader<'gc, B>) -> Handle {
         let handle = self.0.insert(loader);
         self.0
             .get_mut(handle)
@@ -50,12 +51,12 @@ impl<'gc> LoadManager<'gc> {
     }
 
     /// Retrieve a loader by handle.
-    pub fn get_loader(&self, handle: Handle) -> Option<&Loader<'gc>> {
+    pub fn get_loader(&self, handle: Handle) -> Option<&Loader<'gc, B>> {
         self.0.get(handle)
     }
 
     /// Retrieve a loader by handle for mutation.
-    pub fn get_loader_mut(&mut self, handle: Handle) -> Option<&mut Loader<'gc>> {
+    pub fn get_loader_mut(&mut self, handle: Handle) -> Option<&mut Loader<'gc, B>> {
         self.0.get_mut(handle)
     }
 
@@ -64,10 +65,10 @@ impl<'gc> LoadManager<'gc> {
     /// Returns the loader's async process, which you will need to spawn.
     pub fn load_movie_into_clip(
         &mut self,
-        player: Weak<Mutex<Player>>,
-        target_clip: DisplayObject<'gc>,
+        player: Weak<Mutex<Player<B>>>,
+        target_clip: DisplayObject<'gc, B>,
         fetch: OwnedFuture<Vec<u8>, Error>,
-        target_broadcaster: Option<Object<'gc>>,
+        target_broadcaster: Option<Object<'gc, B>>,
     ) -> OwnedFuture<(), Error> {
         let loader = Loader::Movie {
             self_handle: None,
@@ -88,9 +89,9 @@ impl<'gc> LoadManager<'gc> {
     /// Interested loaders will be invoked from here.
     pub fn movie_clip_on_load(
         &mut self,
-        loaded_clip: DisplayObject<'gc>,
-        clip_object: Option<Object<'gc>>,
-        queue: &mut ActionQueue<'gc>,
+        loaded_clip: DisplayObject<'gc, B>,
+        clip_object: Option<Object<'gc, B>>,
+        queue: &mut ActionQueue<'gc, B>,
     ) {
         let mut invalidated_loaders = vec![];
 
@@ -110,8 +111,8 @@ impl<'gc> LoadManager<'gc> {
     /// Returns the loader's async process, which you will need to spawn.
     pub fn load_form_into_object(
         &mut self,
-        player: Weak<Mutex<Player>>,
-        target_object: Object<'gc>,
+        player: Weak<Mutex<Player<B>>>,
+        target_object: Object<'gc, B>,
         fetch: OwnedFuture<Vec<u8>, Error>,
     ) -> OwnedFuture<(), Error> {
         let loader = Loader::Form {
@@ -131,9 +132,9 @@ impl<'gc> LoadManager<'gc> {
     /// Returns the loader's async process, which you will need to spawn.
     pub fn load_xml_into_node(
         &mut self,
-        player: Weak<Mutex<Player>>,
-        target_node: XMLNode<'gc>,
-        active_clip: DisplayObject<'gc>,
+        player: Weak<Mutex<Player<B>>>,
+        target_node: XMLNode<'gc, B>,
+        active_clip: DisplayObject<'gc, B>,
         fetch: OwnedFuture<Vec<u8>, Error>,
     ) -> OwnedFuture<(), Error> {
         let loader = Loader::XML {
@@ -150,25 +151,25 @@ impl<'gc> LoadManager<'gc> {
     }
 }
 
-impl<'gc> Default for LoadManager<'gc> {
+impl<'gc, B: Backends> Default for LoadManager<'gc, B> {
     fn default() -> Self {
         Self::new()
     }
 }
 
 /// A struct that holds garbage-collected pointers for asynchronous code.
-pub enum Loader<'gc> {
+pub enum Loader<'gc, B: Backends> {
     /// Loader that is loading a new movie into a movieclip.
     Movie {
         /// The handle to refer to this loader instance.
         self_handle: Option<Handle>,
 
         /// The target movie clip to load the movie into.
-        target_clip: DisplayObject<'gc>,
+        target_clip: DisplayObject<'gc, B>,
 
         /// Event broadcaster (typically a `MovieClipLoader`) to fire events
         /// into.
-        target_broadcaster: Option<Object<'gc>>,
+        target_broadcaster: Option<Object<'gc, B>>,
 
         /// Indicates that the load has completed.
         ///
@@ -187,7 +188,7 @@ pub enum Loader<'gc> {
         self_handle: Option<Handle>,
 
         /// The target AVM1 object to load form data into.
-        target_object: Object<'gc>,
+        target_object: Object<'gc, B>,
     },
 
     /// Loader that is loading XML data into an XML tree.
@@ -201,14 +202,14 @@ pub enum Loader<'gc> {
         /// not supposed to be a load factor, and only exists so that the
         /// runtime can do *something* in really contrived scenarios where we
         /// actually need an active clip.
-        active_clip: DisplayObject<'gc>,
+        active_clip: DisplayObject<'gc, B>,
 
         /// The target node whose contents will be replaced with the parsed XML.
-        target_node: XMLNode<'gc>,
+        target_node: XMLNode<'gc, B>,
     },
 }
 
-unsafe impl<'gc> Collect for Loader<'gc> {
+unsafe impl<'gc, B: Backends> Collect for Loader<'gc, B> {
     fn trace(&self, cc: CollectionContext) {
         match self {
             Loader::Movie {
@@ -225,7 +226,7 @@ unsafe impl<'gc> Collect for Loader<'gc> {
     }
 }
 
-impl<'gc> Loader<'gc> {
+impl<'gc, B: Backends> Loader<'gc, B> {
     /// Set the loader handle for this loader.
     ///
     /// An active loader handle is required before asynchronous loader code can
@@ -247,7 +248,7 @@ impl<'gc> Loader<'gc> {
     /// error immediately once spawned.
     pub fn movie_loader(
         &mut self,
-        player: Weak<Mutex<Player>>,
+        player: Weak<Mutex<Player<B>>>,
         fetch: OwnedFuture<Vec<u8>, Error>,
     ) -> OwnedFuture<(), Error> {
         let handle = match self {
@@ -419,7 +420,7 @@ impl<'gc> Loader<'gc> {
 
     pub fn form_loader(
         &mut self,
-        player: Weak<Mutex<Player>>,
+        player: Weak<Mutex<Player<B>>>,
         fetch: OwnedFuture<Vec<u8>, Error>,
     ) -> OwnedFuture<(), Error> {
         let handle = match self {
@@ -458,9 +459,9 @@ impl<'gc> Loader<'gc> {
     /// Used to fire listener events on clips and terminate completed loaders.
     pub fn movie_clip_loaded(
         &mut self,
-        loaded_clip: DisplayObject<'gc>,
-        clip_object: Option<Object<'gc>>,
-        queue: &mut ActionQueue<'gc>,
+        loaded_clip: DisplayObject<'gc, B>,
+        clip_object: Option<Object<'gc, B>>,
+        queue: &mut ActionQueue<'gc, B>,
     ) -> bool {
         let (clip, broadcaster, load_complete) = match self {
             Loader::Movie {
@@ -496,7 +497,7 @@ impl<'gc> Loader<'gc> {
 
     pub fn xml_loader(
         &mut self,
-        player: Weak<Mutex<Player>>,
+        player: Weak<Mutex<Player<B>>>,
         fetch: OwnedFuture<Vec<u8>, Error>,
     ) -> OwnedFuture<(), Error> {
         let handle = match self {

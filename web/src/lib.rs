@@ -24,7 +24,7 @@ thread_local! {
 type AnimationHandler = Closure<dyn FnMut(f64)>;
 
 struct RuffleInstance {
-    core: Arc<Mutex<ruffle_core::Player>>,
+    core: Arc<Mutex<ruffle_core::Player<B>>>,
     canvas: HtmlCanvasElement,
     canvas_width: i32,
     canvas_height: i32,

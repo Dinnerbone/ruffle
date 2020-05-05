@@ -11,6 +11,7 @@ use crate::property_map::PropertyMap;
 use enumset::EnumSet;
 use gc_arena::{Collect, GcCell, MutationContext};
 use std::fmt;
+use crate::backend::Backends;
 
 /// The type string for MovieClip objects.
 pub const TYPE_OF_MOVIE_CLIP: &str = "movieclip";
@@ -18,23 +19,23 @@ pub const TYPE_OF_MOVIE_CLIP: &str = "movieclip";
 /// A ScriptObject that is inherently tied to a display node.
 #[derive(Clone, Copy, Collect)]
 #[collect(no_drop)]
-pub struct StageObject<'gc> {
+pub struct StageObject<'gc, B: Backends> {
     /// The underlying script object.
     ///
     /// This is used to handle "expando properties" on AVM1 display nodes, as
     /// well as the underlying prototype chain.
-    base: ScriptObject<'gc>,
+    base: ScriptObject<'gc, B>,
 
     /// The display node this stage object
-    display_object: DisplayObject<'gc>,
+    display_object: DisplayObject<'gc, B>,
 }
 
-impl<'gc> StageObject<'gc> {
+impl<'gc, B: Backends> StageObject<'gc, B> {
     /// Create a stage object for a given display node.
     pub fn for_display_object(
         gc_context: MutationContext<'gc, '_>,
-        display_object: DisplayObject<'gc>,
-        proto: Option<Object<'gc>>,
+        display_object: DisplayObject<'gc, B>,
+        proto: Option<Object<'gc, B>>,
     ) -> Self {
         let mut base = ScriptObject::object(gc_context, proto);
 
@@ -48,7 +49,7 @@ impl<'gc> StageObject<'gc> {
     }
 }
 
-impl fmt::Debug for StageObject<'_> {
+impl<B: Backends> fmt::Debug for StageObject<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("StageObject")
             .field("base", &self.base)
@@ -57,13 +58,13 @@ impl fmt::Debug for StageObject<'_> {
     }
 }
 
-impl<'gc> TObject<'gc> for StageObject<'gc> {
+impl<'gc, B: Backends> TObject<'gc, B> for StageObject<'gc, B> {
     fn get(
         &self,
         name: &str,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-    ) -> Result<ReturnValue<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         let props = avm.display_properties;
         let case_sensitive = avm.is_case_sensitive();
         // Property search order for DisplayObjects:
@@ -93,19 +94,19 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
     fn get_local(
         &self,
         name: &str,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-    ) -> Result<ReturnValue<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         self.base.get_local(name, avm, context, this)
     }
 
     fn set(
         &self,
         name: &str,
-        value: Value<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        value: Value<'gc, B>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         let props = avm.display_properties;
         if self.base.has_own_property(avm, context, name) {
@@ -137,52 +138,52 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
 
     fn call(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-        base_proto: Option<Object<'gc>>,
-        args: &[Value<'gc>],
-    ) -> Result<ReturnValue<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+        base_proto: Option<Object<'gc, B>>,
+        args: &[Value<'gc, B>],
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         self.base.call(avm, context, this, base_proto, args)
     }
 
     fn call_setter(
         &self,
         name: &str,
-        value: Value<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-    ) -> Result<ReturnValue<'gc>, Error> {
+        value: Value<'gc, B>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         self.base.call_setter(name, value, avm, context, this)
     }
 
     #[allow(clippy::new_ret_no_self)]
     fn new(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-        args: &[Value<'gc>],
-    ) -> Result<Object<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+        args: &[Value<'gc, B>],
+    ) -> Result<Object<'gc, B>, Error> {
         //TODO: Create a StageObject of some kind
         self.base.new(avm, context, this, args)
     }
 
     fn delete(
         &self,
-        avm: &mut Avm1<'gc>,
+        avm: &mut Avm1<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
     ) -> bool {
         self.base.delete(avm, gc_context, name)
     }
 
-    fn proto(&self) -> Option<Object<'gc>> {
+    fn proto(&self) -> Option<Object<'gc, B>> {
         self.base.proto()
     }
 
-    fn set_proto(&self, gc_context: MutationContext<'gc, '_>, prototype: Option<Object<'gc>>) {
+    fn set_proto(&self, gc_context: MutationContext<'gc, '_>, prototype: Option<Object<'gc, B>>) {
         self.base.set_proto(gc_context, prototype);
     }
 
@@ -190,7 +191,7 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         &self,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
-        value: Value<'gc>,
+        value: Value<'gc, B>,
         attributes: EnumSet<Attribute>,
     ) {
         self.base.define_value(gc_context, name, value, attributes)
@@ -211,8 +212,8 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         &self,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
-        get: Executable<'gc>,
-        set: Option<Executable<'gc>>,
+        get: Executable<'gc, B>,
+        set: Option<Executable<'gc, B>>,
         attributes: EnumSet<Attribute>,
     ) {
         self.base
@@ -221,11 +222,11 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
 
     fn add_property_with_case(
         &self,
-        avm: &mut Avm1<'gc>,
+        avm: &mut Avm1<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
-        get: Executable<'gc>,
-        set: Option<Executable<'gc>>,
+        get: Executable<'gc, B>,
+        set: Option<Executable<'gc, B>>,
         attributes: EnumSet<Attribute>,
     ) {
         self.base
@@ -234,8 +235,8 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
 
     fn has_property(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         if self.base.has_property(avm, context, name) {
@@ -264,8 +265,8 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
 
     fn has_own_property(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         // Note that `hasOwnProperty` does NOT return true for child display objects.
@@ -274,22 +275,22 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
 
     fn has_own_virtual(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         self.base.has_own_virtual(avm, context, name)
     }
 
-    fn is_property_enumerable(&self, avm: &mut Avm1<'gc>, name: &str) -> bool {
+    fn is_property_enumerable(&self, avm: &mut Avm1<'gc, B>, name: &str) -> bool {
         self.base.is_property_enumerable(avm, name)
     }
 
-    fn is_property_overwritable(&self, avm: &mut Avm1<'gc>, name: &str) -> bool {
+    fn is_property_overwritable(&self, avm: &mut Avm1<'gc, B>, name: &str) -> bool {
         self.base.is_property_overwritable(avm, name)
     }
 
-    fn get_keys(&self, avm: &mut Avm1<'gc>) -> Vec<String> {
+    fn get_keys(&self, avm: &mut Avm1<'gc, B>) -> Vec<String> {
         // Keys from the underlying object are listed first, followed by
         // child display objects in order from highest depth to lowest depth.
         let mut keys = self.base.get_keys(avm);
@@ -309,18 +310,18 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         self.base.set_length(gc_context, new_length)
     }
 
-    fn array(&self) -> Vec<Value<'gc>> {
+    fn array(&self) -> Vec<Value<'gc, B>> {
         self.base.array()
     }
 
-    fn array_element(&self, index: usize) -> Value<'gc> {
+    fn array_element(&self, index: usize) -> Value<'gc, B> {
         self.base.array_element(index)
     }
 
     fn set_array_element(
         &self,
         index: usize,
-        value: Value<'gc>,
+        value: Value<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
     ) -> usize {
         self.base.set_array_element(index, value, gc_context)
@@ -330,11 +331,11 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         self.base.delete_array_element(index, gc_context)
     }
 
-    fn interfaces(&self) -> Vec<Object<'gc>> {
+    fn interfaces(&self) -> Vec<Object<'gc, B>> {
         self.base.interfaces()
     }
 
-    fn set_interfaces(&mut self, context: MutationContext<'gc, '_>, iface_list: Vec<Object<'gc>>) {
+    fn set_interfaces(&mut self, context: MutationContext<'gc, '_>, iface_list: Vec<Object<'gc, B>>) {
         self.base.set_interfaces(context, iface_list)
     }
 
@@ -345,14 +346,14 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
     fn type_of(&self) -> &'static str {
         self.base.type_of()
     }
-    fn as_script_object(&self) -> Option<ScriptObject<'gc>> {
+    fn as_script_object(&self) -> Option<ScriptObject<'gc, B>> {
         Some(self.base)
     }
 
-    fn as_display_object(&self) -> Option<DisplayObject<'gc>> {
+    fn as_display_object(&self) -> Option<DisplayObject<'gc, B>> {
         Some(self.display_object)
     }
-    fn as_executable(&self) -> Option<Executable<'gc>> {
+    fn as_executable(&self) -> Option<Executable<'gc, B>> {
         None
     }
 
@@ -368,40 +369,40 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
 /// to normal property lookup.
 /// The map of property names to display object getts/setters.
 #[derive(Copy, Clone)]
-pub struct DisplayProperty<'gc> {
-    get: DisplayGetter<'gc>,
-    set: Option<DisplaySetter<'gc>>,
+pub struct DisplayProperty<'gc, B: Backends> {
+    get: DisplayGetter<'gc, B>,
+    set: Option<DisplaySetter<'gc, B>>,
 }
 
-pub type DisplayGetter<'gc> = fn(
-    &mut Avm1<'gc>,
-    &mut UpdateContext<'_, 'gc, '_>,
-    DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error>;
+pub type DisplayGetter<'gc, B: Backends> = fn(
+    &mut Avm1<'gc, B>,
+    &mut UpdateContext<'_, 'gc, '_, B>,
+    DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error>;
 
-pub type DisplaySetter<'gc> = fn(
-    &mut Avm1<'gc>,
-    &mut UpdateContext<'_, 'gc, '_>,
-    DisplayObject<'gc>,
-    Value<'gc>,
+pub type DisplaySetter<'gc, B: Backends> = fn(
+    &mut Avm1<'gc, B>,
+    &mut UpdateContext<'_, 'gc, '_, B>,
+    DisplayObject<'gc, B>,
+    Value<'gc, B>,
 ) -> Result<(), Error>;
 
-impl<'gc> DisplayProperty<'gc> {
+impl<'gc, B: Backends> DisplayProperty<'gc, B> {
     pub fn get(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: DisplayObject<'gc>,
-    ) -> Result<Value<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: DisplayObject<'gc, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         (self.get)(avm, context, this)
     }
 
     pub fn set(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: DisplayObject<'gc>,
-        value: Value<'gc>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: DisplayObject<'gc, B>,
+        value: Value<'gc, B>,
     ) -> Result<(), Error> {
         self.set
             .map(|f| f(avm, context, this, value))
@@ -409,7 +410,7 @@ impl<'gc> DisplayProperty<'gc> {
     }
 }
 
-unsafe impl<'gc> Collect for DisplayProperty<'gc> {
+unsafe impl<'gc, B: Backends> Collect for DisplayProperty<'gc, B> {
     fn needs_trace() -> bool {
         false
     }
@@ -418,11 +419,11 @@ unsafe impl<'gc> Collect for DisplayProperty<'gc> {
 /// The map from key/index to function pointers for special display object properties.
 #[derive(Collect)]
 #[collect(no_drop)]
-pub struct DisplayPropertyMap<'gc>(PropertyMap<DisplayProperty<'gc>>);
+pub struct DisplayPropertyMap<'gc, B: Backends>(PropertyMap<DisplayProperty<'gc, B>>);
 
-impl<'gc> DisplayPropertyMap<'gc> {
+impl<'gc, B: Backends> DisplayPropertyMap<'gc, B> {
     /// Creates the display property map.
-    pub fn new(gc_context: MutationContext<'gc, '_>) -> GcCell<'gc, DisplayPropertyMap<'gc>> {
+    pub fn new(gc_context: MutationContext<'gc, '_>) -> GcCell<'gc, DisplayPropertyMap<'gc, B>> {
         let mut property_map = DisplayPropertyMap(PropertyMap::new());
 
         // Order is important:
@@ -455,7 +456,7 @@ impl<'gc> DisplayPropertyMap<'gc> {
 
     /// Gets a property slot by name.
     /// Used by `GetMember`, `GetVariable`, `SetMember`, and `SetVariable`.
-    pub fn get_by_name(&self, name: &str) -> Option<&DisplayProperty<'gc>> {
+    pub fn get_by_name(&self, name: &str) -> Option<&DisplayProperty<'gc, B>> {
         // Display object properties are case insensitive, regardless of SWF version!?
         // TODO: Another string alloc; optimize this eventually.
         self.0.get(&name, false)
@@ -465,34 +466,34 @@ impl<'gc> DisplayPropertyMap<'gc> {
     /// The order is defined by the SWF specs.
     /// Used by `GetProperty`/`SetProperty`.
     /// SWF19 pp. 85-86
-    pub fn get_by_index(&self, index: usize) -> Option<&DisplayProperty<'gc>> {
+    pub fn get_by_index(&self, index: usize) -> Option<&DisplayProperty<'gc, B>> {
         self.0.get_index(index)
     }
 
     fn add_property(
         &mut self,
         name: &str,
-        get: DisplayGetter<'gc>,
-        set: Option<DisplaySetter<'gc>>,
+        get: DisplayGetter<'gc, B>,
+        set: Option<DisplaySetter<'gc, B>>,
     ) {
         let prop = DisplayProperty { get, set };
         self.0.insert(name.to_string(), prop.clone(), false);
     }
 }
 
-fn x<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn x<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     Ok(this.x().into())
 }
 
-fn set_x<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    mut this: DisplayObject<'gc>,
-    val: Value<'gc>,
+fn set_x<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    mut this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
 ) -> Result<(), Error> {
     if let Some(val) = property_coerce_to_number(avm, context, val)? {
         this.set_x(context.gc_context, val);
@@ -500,19 +501,19 @@ fn set_x<'gc>(
     Ok(())
 }
 
-fn y<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn y<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     Ok(this.y().into())
 }
 
-fn set_y<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    mut this: DisplayObject<'gc>,
-    val: Value<'gc>,
+fn set_y<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    mut this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
 ) -> Result<(), Error> {
     if let Some(val) = property_coerce_to_number(avm, context, val)? {
         this.set_y(context.gc_context, val);
@@ -520,20 +521,20 @@ fn set_y<'gc>(
     Ok(())
 }
 
-fn x_scale<'gc>(
-    _avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    mut this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn x_scale<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    mut this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     let val = this.scale_x(context.gc_context) * 100.0;
     Ok(val.into())
 }
 
-fn set_x_scale<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    mut this: DisplayObject<'gc>,
-    val: Value<'gc>,
+fn set_x_scale<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    mut this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
 ) -> Result<(), Error> {
     if let Some(val) = property_coerce_to_number(avm, context, val)? {
         this.set_scale_x(context.gc_context, val / 100.0);
@@ -541,20 +542,20 @@ fn set_x_scale<'gc>(
     Ok(())
 }
 
-fn y_scale<'gc>(
-    _avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    mut this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn y_scale<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    mut this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     let scale_y = this.scale_y(context.gc_context) * 100.0;
     Ok(scale_y.into())
 }
 
-fn set_y_scale<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    mut this: DisplayObject<'gc>,
-    val: Value<'gc>,
+fn set_y_scale<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    mut this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
 ) -> Result<(), Error> {
     if let Some(val) = property_coerce_to_number(avm, context, val)? {
         this.set_scale_y(context.gc_context, val / 100.0);
@@ -562,11 +563,11 @@ fn set_y_scale<'gc>(
     Ok(())
 }
 
-fn current_frame<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn current_frame<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     Ok(this
         .as_movie_clip()
         .map(MovieClip::current_frame)
@@ -574,11 +575,11 @@ fn current_frame<'gc>(
         .unwrap_or(Value::Undefined))
 }
 
-fn total_frames<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn total_frames<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     Ok(this
         .as_movie_clip()
         .map(MovieClip::total_frames)
@@ -586,20 +587,20 @@ fn total_frames<'gc>(
         .unwrap_or(Value::Undefined))
 }
 
-fn alpha<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn alpha<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     let val = this.alpha() * 100.0;
     Ok(val.into())
 }
 
-fn set_alpha<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-    val: Value<'gc>,
+fn set_alpha<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
 ) -> Result<(), Error> {
     if let Some(val) = property_coerce_to_number(avm, context, val)? {
         this.set_alpha(context.gc_context, val / 100.0);
@@ -607,20 +608,20 @@ fn set_alpha<'gc>(
     Ok(())
 }
 
-fn visible<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn visible<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     let val = this.visible();
     Ok(val.into())
 }
 
-fn set_visible<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    mut this: DisplayObject<'gc>,
-    val: Value<'gc>,
+fn set_visible<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    mut this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
 ) -> Result<(), Error> {
     // Because this property dates to the era of Flash 4, this is actually coerced to an integer.
     // `_visible = "false";` coerces to NaN and has no effect.
@@ -630,19 +631,19 @@ fn set_visible<'gc>(
     Ok(())
 }
 
-fn width<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn width<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     Ok(this.width().into())
 }
 
-fn set_width<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    mut this: DisplayObject<'gc>,
-    val: Value<'gc>,
+fn set_width<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    mut this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
 ) -> Result<(), Error> {
     if let Some(val) = property_coerce_to_number(avm, context, val)? {
         this.set_width(context.gc_context, val);
@@ -650,19 +651,19 @@ fn set_width<'gc>(
     Ok(())
 }
 
-fn height<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn height<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     Ok(this.height().into())
 }
 
-fn set_height<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    mut this: DisplayObject<'gc>,
-    val: Value<'gc>,
+fn set_height<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    mut this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
 ) -> Result<(), Error> {
     if let Some(val) = property_coerce_to_number(avm, context, val)? {
         this.set_height(context.gc_context, val);
@@ -670,19 +671,19 @@ fn set_height<'gc>(
     Ok(())
 }
 
-fn rotation<'gc>(
-    _avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    mut this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn rotation<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    mut this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     Ok(this.rotation(context.gc_context).to_degrees().into())
 }
 
-fn set_rotation<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    mut this: DisplayObject<'gc>,
-    degrees: Value<'gc>,
+fn set_rotation<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    mut this: DisplayObject<'gc, B>,
+    degrees: Value<'gc, B>,
 ) -> Result<(), Error> {
     if let Some(mut degrees) = property_coerce_to_number(avm, context, degrees)? {
         // Normalize into the range of [-180, 180].
@@ -697,19 +698,19 @@ fn set_rotation<'gc>(
     Ok(())
 }
 
-fn target<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn target<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     Ok(this.slash_path().into())
 }
 
-fn frames_loaded<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn frames_loaded<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     Ok(this
         .as_movie_clip()
         .map(MovieClip::frames_loaded)
@@ -717,141 +718,141 @@ fn frames_loaded<'gc>(
         .unwrap_or(Value::Undefined))
 }
 
-fn name<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn name<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     Ok((*this.name()).into())
 }
 
-fn set_name<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    mut this: DisplayObject<'gc>,
-    val: Value<'gc>,
+fn set_name<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    mut this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
 ) -> Result<(), Error> {
     let name = val.coerce_to_string(avm, context)?;
     this.set_name(context.gc_context, &name);
     Ok(())
 }
 
-fn drop_target<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn drop_target<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     log::warn!("Unimplemented property _droptarget");
     Ok("".into())
 }
 
-fn url<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn url<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     log::warn!("Unimplemented property _url");
     Ok("".into())
 }
 
-fn high_quality<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn high_quality<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     log::warn!("Unimplemented property _highquality");
     Ok(1.into())
 }
 
-fn set_high_quality<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
-    _val: Value<'gc>,
+fn set_high_quality<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: DisplayObject<'gc, B>,
+    _val: Value<'gc, B>,
 ) -> Result<(), Error> {
     log::warn!("Unimplemented property _highquality");
     Ok(())
 }
 
-fn focus_rect<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn focus_rect<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     log::warn!("Unimplemented property _focusrect");
     Ok(Value::Null)
 }
 
-fn set_focus_rect<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
-    _val: Value<'gc>,
+fn set_focus_rect<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: DisplayObject<'gc, B>,
+    _val: Value<'gc, B>,
 ) -> Result<(), Error> {
     log::warn!("Unimplemented property _focusrect");
     Ok(())
 }
 
-fn sound_buf_time<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn sound_buf_time<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     log::warn!("Unimplemented property _soundbuftime");
     Ok(5.into())
 }
 
-fn set_sound_buf_time<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
-    _val: Value<'gc>,
+fn set_sound_buf_time<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: DisplayObject<'gc, B>,
+    _val: Value<'gc, B>,
 ) -> Result<(), Error> {
     log::warn!("Unimplemented property _soundbuftime");
     Ok(())
 }
 
-fn quality<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn quality<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     log::warn!("Unimplemented property _quality");
     Ok("HIGH".into())
 }
 
-fn set_quality<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
-    _val: Value<'gc>,
+fn set_quality<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: DisplayObject<'gc, B>,
+    _val: Value<'gc, B>,
 ) -> Result<(), Error> {
     log::warn!("Unimplemented property _quality");
     Ok(())
 }
 
-fn x_mouse<'gc>(
-    _avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn x_mouse<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     let local = this.global_to_local(*context.mouse_position);
     Ok(local.0.to_pixels().into())
 }
 
-fn y_mouse<'gc>(
-    _avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-) -> Result<Value<'gc>, Error> {
+fn y_mouse<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     let local = this.global_to_local(*context.mouse_position);
     Ok(local.1.to_pixels().into())
 }
 
-fn property_coerce_to_number<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    value: Value<'gc>,
+fn property_coerce_to_number<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    value: Value<'gc, B>,
 ) -> Result<Option<f64>, Error> {
     if value != Value::Undefined && value != Value::Null {
         let n = value.as_number(avm, context)?;

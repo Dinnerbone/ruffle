@@ -5,13 +5,14 @@ use crate::avm1::{Avm1, Error, Object, ScriptObject, TObject, UpdateContext, Val
 use crate::events::KeyCode;
 use gc_arena::MutationContext;
 use std::convert::TryFrom;
+use crate::backend::Backends;
 
-pub fn is_down<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn is_down<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(key) = args
         .get(0)
         .and_then(|v| v.as_number(avm, context).ok())
@@ -23,21 +24,21 @@ pub fn is_down<'gc>(
     }
 }
 
-pub fn get_code<'gc>(
-    _avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn get_code<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let code: u8 = context.input.get_last_key_code().into();
     Ok(code.into())
 }
 
-pub fn create_key_object<'gc>(
+pub fn create_key_object<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Option<Object<'gc>>,
-    fn_proto: Option<Object<'gc>>,
-) -> Object<'gc> {
+    proto: Option<Object<'gc, B>>,
+    fn_proto: Option<Object<'gc, B>>,
+) -> Object<'gc, B> {
     let mut key = ScriptObject::object(gc_context, proto);
 
     key.define_value(

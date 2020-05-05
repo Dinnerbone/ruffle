@@ -9,17 +9,18 @@ use quick_xml::{Error as QXError, Writer};
 use std::collections::{BTreeMap, HashSet};
 use std::fmt;
 use std::io::Cursor;
+use crate::backend::Backends;
 
 /// The entirety of an XML document.
 #[derive(Copy, Clone, Collect)]
 #[collect(no_drop)]
-pub struct XMLDocument<'gc>(GcCell<'gc, XMLDocumentData<'gc>>);
+pub struct XMLDocument<'gc, B: Backends>(GcCell<'gc, XMLDocumentData<'gc, B>>);
 
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct XMLDocumentData<'gc> {
+pub struct XMLDocumentData<'gc, B: Backends> {
     /// The root node of the XML document.
-    root: Option<XMLNode<'gc>>,
+    root: Option<XMLNode<'gc, B>>,
 
     /// Whether or not the document has a document declaration.
     has_xmldecl: bool,
@@ -34,23 +35,23 @@ pub struct XMLDocumentData<'gc> {
     standalone: Option<String>,
 
     /// The XML doctype, if set.
-    doctype: Option<XMLNode<'gc>>,
+    doctype: Option<XMLNode<'gc, B>>,
 
     /// The document's ID map.
     ///
     /// When nodes are parsed into the document by way of `parseXML` or the
     /// document constructor, they get put into this list here, which is used
     /// to populate the document's `idMap`.
-    idmap: BTreeMap<String, XMLNode<'gc>>,
+    idmap: BTreeMap<String, XMLNode<'gc, B>>,
 
     /// The script object associated with this XML node, if any.
-    idmap_script_object: Option<Object<'gc>>,
+    idmap_script_object: Option<Object<'gc, B>>,
 
     /// The last parse error encountered, if any.
     last_parse_error: Option<ParseError>,
 }
 
-impl<'gc> XMLDocument<'gc> {
+impl<'gc, B: Backends> XMLDocument<'gc, B> {
     /// Construct a new, empty XML document.
     pub fn new(mc: MutationContext<'gc, '_>) -> Self {
         let document = Self(GcCell::allocate(
@@ -77,7 +78,7 @@ impl<'gc> XMLDocument<'gc> {
     /// Yield the document in node form.
     ///
     /// If the document does not have a node, then this function will panic.
-    pub fn as_node(self) -> XMLNode<'gc> {
+    pub fn as_node(self) -> XMLNode<'gc, B> {
         self.0
             .read()
             .root
@@ -117,7 +118,7 @@ impl<'gc> XMLDocument<'gc> {
     pub fn link_root_node(
         &mut self,
         gc_context: MutationContext<'gc, '_>,
-        proposed_root: XMLNode<'gc>,
+        proposed_root: XMLNode<'gc, B>,
     ) {
         match (
             &mut *self.0.write(gc_context),
@@ -140,7 +141,7 @@ impl<'gc> XMLDocument<'gc> {
     pub fn link_doctype(
         &mut self,
         gc_context: MutationContext<'gc, '_>,
-        proposed_doctype: XMLNode<'gc>,
+        proposed_doctype: XMLNode<'gc, B>,
     ) {
         let mut self_write = self.0.write(gc_context);
 
@@ -150,7 +151,7 @@ impl<'gc> XMLDocument<'gc> {
     }
 
     /// Retrieve the first DocType node in the document.
-    pub fn doctype(self) -> Option<XMLNode<'gc>> {
+    pub fn doctype(self) -> Option<XMLNode<'gc, B>> {
         self.0.read().doctype
     }
 
@@ -202,7 +203,7 @@ impl<'gc> XMLDocument<'gc> {
 
     /// Obtain the script object for the document's `idMap` property, or create
     /// one if it doesn't exist
-    pub fn idmap_script_object(&mut self, gc_context: MutationContext<'gc, '_>) -> Object<'gc> {
+    pub fn idmap_script_object(&mut self, gc_context: MutationContext<'gc, '_>) -> Object<'gc, B> {
         let mut object = self.0.read().idmap_script_object;
         if object.is_none() {
             object = Some(XMLIDMapObject::from_xml_document(gc_context, *self));
@@ -213,7 +214,7 @@ impl<'gc> XMLDocument<'gc> {
     }
 
     /// Update the idmap object with a given new node.
-    pub fn update_idmap(&mut self, mc: MutationContext<'gc, '_>, node: XMLNode<'gc>) {
+    pub fn update_idmap(&mut self, mc: MutationContext<'gc, '_>, node: XMLNode<'gc, B>) {
         if let Some(id) = node.attribute_value(&XMLName::from_str("id")) {
             self.0.write(mc).idmap.insert(id, node);
         }
@@ -225,7 +226,7 @@ impl<'gc> XMLDocument<'gc> {
     /// parsing*. Nodes which obtained the `id` after the fact, or nodes with
     /// the `id` that were added to the document after the fact, will not be
     /// returned by this function.
-    pub fn get_node_by_id(self, id: &str) -> Option<XMLNode<'gc>> {
+    pub fn get_node_by_id(self, id: &str) -> Option<XMLNode<'gc, B>> {
         self.0.read().idmap.get(id).copied()
     }
 
@@ -270,7 +271,7 @@ impl<'gc> XMLDocument<'gc> {
     }
 }
 
-impl<'gc> fmt::Debug for XMLDocument<'gc> {
+impl<'gc, B: Backends> fmt::Debug for XMLDocument<'gc, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("XMLDocument")
             .field("root", &self.0.read().root)

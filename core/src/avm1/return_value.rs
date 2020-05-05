@@ -5,6 +5,7 @@ use crate::avm1::{Avm1, Error, Object, Value};
 use crate::context::UpdateContext;
 use gc_arena::{Collect, GcCell};
 use std::fmt;
+use crate::backend::Backends;
 
 /// Represents the return value of a function call.
 ///
@@ -21,17 +22,17 @@ use std::fmt;
 /// interested in the result of a call.
 #[must_use = "Return values must be used"]
 #[derive(Clone)]
-pub enum ReturnValue<'gc> {
+pub enum ReturnValue<'gc, B> {
     /// Indicates that the return value is available immediately.
-    Immediate(Value<'gc>),
+    Immediate(Value<'gc, B>),
 
     /// Indicates that the return value is the result of a given user-defined
     /// function call. The activation record returned is the frame that needs
     /// to return to get your value.
-    ResultOf(GcCell<'gc, Activation<'gc>>),
+    ResultOf(GcCell<'gc, Activation<'gc, B>>),
 }
 
-unsafe impl<'gc> Collect for ReturnValue<'gc> {
+unsafe impl<'gc, B: Backends> Collect for ReturnValue<'gc, B> {
     #[inline]
     fn trace(&self, cc: gc_arena::CollectionContext) {
         use ReturnValue::*;
@@ -43,7 +44,7 @@ unsafe impl<'gc> Collect for ReturnValue<'gc> {
     }
 }
 
-impl PartialEq for ReturnValue<'_> {
+impl<B: Backends> PartialEq for ReturnValue<'_, B> {
     fn eq(&self, other: &Self) -> bool {
         use ReturnValue::*;
 
@@ -55,7 +56,7 @@ impl PartialEq for ReturnValue<'_> {
     }
 }
 
-impl fmt::Debug for ReturnValue<'_> {
+impl<B: Backends> fmt::Debug for ReturnValue<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use ReturnValue::*;
 
@@ -66,12 +67,12 @@ impl fmt::Debug for ReturnValue<'_> {
     }
 }
 
-impl<'gc> ReturnValue<'gc> {
+impl<'gc, B: Backends> ReturnValue<'gc, B> {
     /// Mark a given return value as intended to be pushed onto the stack.
     ///
     /// The natural result of a stack frame retiring is to be pushed, so this
     /// only ensures that Immediate values are pushed.
-    pub fn push(self, avm: &mut Avm1<'gc>) {
+    pub fn push(self, avm: &mut Avm1<'gc, B>) {
         use ReturnValue::*;
 
         match self {
@@ -84,9 +85,9 @@ impl<'gc> ReturnValue<'gc> {
     /// into the AVM.
     pub fn resolve(
         self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         use ReturnValue::*;
 
         match self {
@@ -113,7 +114,7 @@ impl<'gc> ReturnValue<'gc> {
     ///
     /// This should only be used in test assertions.
     #[cfg(test)]
-    pub fn unwrap_immediate(self) -> Value<'gc> {
+    pub fn unwrap_immediate(self) -> Value<'gc, B> {
         use ReturnValue::*;
 
         match self {
@@ -123,71 +124,71 @@ impl<'gc> ReturnValue<'gc> {
     }
 }
 
-impl<'gc> From<Value<'gc>> for ReturnValue<'gc> {
-    fn from(val: Value<'gc>) -> Self {
+impl<'gc, B: Backends> From<Value<'gc, B>> for ReturnValue<'gc, B> {
+    fn from(val: Value<'gc, B>) -> Self {
         ReturnValue::Immediate(val)
     }
 }
 
-impl<'gc> From<String> for ReturnValue<'gc> {
+impl<'gc, B: Backends> From<String> for ReturnValue<'gc, B> {
     fn from(string: String) -> Self {
         ReturnValue::Immediate(Value::String(string))
     }
 }
 
-impl<'gc> From<&str> for ReturnValue<'gc> {
+impl<'gc, B: Backends> From<&str> for ReturnValue<'gc, B> {
     fn from(string: &str) -> Self {
         ReturnValue::Immediate(Value::String(string.to_owned()))
     }
 }
 
-impl<'gc> From<bool> for ReturnValue<'gc> {
+impl<'gc, B: Backends> From<bool> for ReturnValue<'gc, B> {
     fn from(value: bool) -> Self {
         ReturnValue::Immediate(Value::Bool(value))
     }
 }
 
-impl<'gc, T> From<T> for ReturnValue<'gc>
+impl<'gc, T, B: Backends> From<T> for ReturnValue<'gc, B>
 where
-    Object<'gc>: From<T>,
+    Object<'gc, B>: From<T>,
 {
     fn from(value: T) -> Self {
         ReturnValue::Immediate(Value::Object(Object::from(value)))
     }
 }
 
-impl<'gc> From<f64> for ReturnValue<'gc> {
+impl<'gc, B: Backends> From<f64> for ReturnValue<'gc, B> {
     fn from(value: f64) -> Self {
         ReturnValue::Immediate(Value::Number(value))
     }
 }
 
-impl<'gc> From<f32> for ReturnValue<'gc> {
+impl<'gc, B: Backends> From<f32> for ReturnValue<'gc, B> {
     fn from(value: f32) -> Self {
         ReturnValue::Immediate(Value::Number(f64::from(value)))
     }
 }
 
-impl<'gc> From<u8> for ReturnValue<'gc> {
+impl<'gc, B: Backends> From<u8> for ReturnValue<'gc, B> {
     fn from(value: u8) -> Self {
         ReturnValue::Immediate(Value::Number(f64::from(value)))
     }
 }
 
-impl<'gc> From<i32> for ReturnValue<'gc> {
+impl<'gc, B: Backends> From<i32> for ReturnValue<'gc, B> {
     fn from(value: i32) -> Self {
         ReturnValue::Immediate(Value::Number(f64::from(value)))
     }
 }
 
-impl<'gc> From<u32> for ReturnValue<'gc> {
+impl<'gc, B: Backends> From<u32> for ReturnValue<'gc, B> {
     fn from(value: u32) -> Self {
         ReturnValue::Immediate(Value::Number(f64::from(value)))
     }
 }
 
-impl<'gc> From<GcCell<'gc, Activation<'gc>>> for ReturnValue<'gc> {
-    fn from(frame: GcCell<'gc, Activation<'gc>>) -> Self {
+impl<'gc, B: Backends> From<GcCell<'gc, Activation<'gc, B>>> for ReturnValue<'gc, B> {
+    fn from(frame: GcCell<'gc, Activation<'gc, B>>) -> Self {
         ReturnValue::ResultOf(frame)
     }
 }

@@ -7,14 +7,15 @@ use crate::avm1::{Avm1, Error, Object, TObject, Value};
 use crate::context::UpdateContext;
 use enumset::EnumSet;
 use gc_arena::MutationContext;
+use crate::backend::Backends;
 
 /// `Boolean` constructor/function
-pub fn boolean<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn boolean<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let (ret_value, cons_value) = if let Some(val) = args.get(0) {
         let b = Value::Bool(val.as_bool(avm.current_swf_version()));
         (b.clone(), b)
@@ -32,11 +33,11 @@ pub fn boolean<'gc>(
     Ok(ret_value.into())
 }
 
-pub fn create_boolean_object<'gc>(
+pub fn create_boolean_object<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-    boolean_proto: Option<Object<'gc>>,
-    fn_proto: Option<Object<'gc>>,
-) -> Object<'gc> {
+    boolean_proto: Option<Object<'gc, B>>,
+    fn_proto: Option<Object<'gc, B>>,
+) -> Object<'gc, B> {
     FunctionObject::function(
         gc_context,
         Executable::Native(boolean),
@@ -46,11 +47,11 @@ pub fn create_boolean_object<'gc>(
 }
 
 /// Creates `Boolean.prototype`.
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let boolean_proto = ValueObject::empty_box(gc_context, Some(proto));
     let mut object = boolean_proto.as_script_object().unwrap();
 
@@ -72,12 +73,12 @@ pub fn create_proto<'gc>(
     boolean_proto
 }
 
-pub fn to_string<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn to_string<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(vbox) = this.as_value_object() {
         // Must be a bool.
         // Boolean.prototype.toString.call(x) returns undefined for non-bools.
@@ -89,12 +90,12 @@ pub fn to_string<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn value_of<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn value_of<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(vbox) = this.as_value_object() {
         // Must be a bool.
         // Boolean.prototype.valueOf.call(x) returns undefined for non-bools.

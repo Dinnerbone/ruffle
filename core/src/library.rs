@@ -9,16 +9,17 @@ use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use swf::CharacterId;
 use weak_table::PtrWeakKeyHashMap;
+use crate::backend::Backends;
 
 /// Symbol library for a single given SWF.
-pub struct MovieLibrary<'gc> {
-    characters: HashMap<CharacterId, Character<'gc>>,
-    export_characters: HashMap<String, Character<'gc>>,
+pub struct MovieLibrary<'gc, B: Backends> {
+    characters: HashMap<CharacterId, Character<'gc, B>>,
+    export_characters: HashMap<String, Character<'gc, B>>,
     jpeg_tables: Option<Vec<u8>>,
-    device_font: Option<Font<'gc>>,
+    device_font: Option<Font<'gc, B>>,
 }
 
-impl<'gc> MovieLibrary<'gc> {
+impl<'gc, B: Backends> MovieLibrary<'gc, B> {
     pub fn new() -> Self {
         MovieLibrary {
             characters: HashMap::new(),
@@ -28,7 +29,7 @@ impl<'gc> MovieLibrary<'gc> {
         }
     }
 
-    pub fn register_character(&mut self, id: CharacterId, character: Character<'gc>) {
+    pub fn register_character(&mut self, id: CharacterId, character: Character<'gc, B>) {
         // TODO(Herschel): What is the behavior if id already exists?
         if !self.contains_character(id) {
             self.characters.insert(id, character);
@@ -67,12 +68,12 @@ impl<'gc> MovieLibrary<'gc> {
     }
 
     #[allow(dead_code)]
-    pub fn get_character_by_id(&self, id: CharacterId) -> Option<&Character<'gc>> {
+    pub fn get_character_by_id(&self, id: CharacterId) -> Option<&Character<'gc, B>> {
         self.characters.get(&id)
     }
 
     #[allow(dead_code)]
-    pub fn get_character_by_export_name(&self, name: &str) -> Option<&Character<'gc>> {
+    pub fn get_character_by_export_name(&self, name: &str) -> Option<&Character<'gc, B>> {
         self.export_characters.get(name)
     }
 
@@ -82,7 +83,7 @@ impl<'gc> MovieLibrary<'gc> {
         &self,
         id: CharacterId,
         gc_context: MutationContext<'gc, '_>,
-    ) -> Result<DisplayObject<'gc>, Box<dyn std::error::Error>> {
+    ) -> Result<DisplayObject<'gc, B>, Box<dyn std::error::Error>> {
         if let Some(character) = self.characters.get(&id) {
             self.instantiate_display_object(character, gc_context)
         } else {
@@ -97,7 +98,7 @@ impl<'gc> MovieLibrary<'gc> {
         &self,
         export_name: &str,
         gc_context: MutationContext<'gc, '_>,
-    ) -> Result<DisplayObject<'gc>, Box<dyn std::error::Error>> {
+    ) -> Result<DisplayObject<'gc, B>, Box<dyn std::error::Error>> {
         if let Some(character) = self.export_characters.get(export_name) {
             self.instantiate_display_object(character, gc_context)
         } else {
@@ -113,9 +114,9 @@ impl<'gc> MovieLibrary<'gc> {
     /// The object must then be post-instantiated before being used.
     fn instantiate_display_object(
         &self,
-        character: &Character<'gc>,
+        character: &Character<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
-    ) -> Result<DisplayObject<'gc>, Box<dyn std::error::Error>> {
+    ) -> Result<DisplayObject<'gc, B>, Box<dyn std::error::Error>> {
         match character {
             Character::Bitmap(bitmap) => Ok(bitmap.instantiate(gc_context)),
             Character::EditText(edit_text) => Ok(edit_text.instantiate(gc_context)),
@@ -128,7 +129,7 @@ impl<'gc> MovieLibrary<'gc> {
         }
     }
 
-    pub fn get_font(&self, id: CharacterId) -> Option<Font<'gc>> {
+    pub fn get_font(&self, id: CharacterId) -> Option<Font<'gc, B>> {
         if let Some(&Character::Font(font)) = self.characters.get(&id) {
             Some(font)
         } else {
@@ -165,17 +166,17 @@ impl<'gc> MovieLibrary<'gc> {
     }
 
     /// Returns the device font for use when a font is unavailable.
-    pub fn device_font(&self) -> Option<Font<'gc>> {
+    pub fn device_font(&self) -> Option<Font<'gc, B>> {
         self.device_font
     }
 
     /// Sets the device font.
-    pub fn set_device_font(&mut self, font: Option<Font<'gc>>) {
+    pub fn set_device_font(&mut self, font: Option<Font<'gc, B>>) {
         self.device_font = font;
     }
 }
 
-unsafe impl<'gc> gc_arena::Collect for MovieLibrary<'gc> {
+unsafe impl<'gc, B: Backends> gc_arena::Collect for MovieLibrary<'gc, B> {
     #[inline]
     fn trace(&self, cc: gc_arena::CollectionContext) {
         for character in self.characters.values() {
@@ -185,19 +186,19 @@ unsafe impl<'gc> gc_arena::Collect for MovieLibrary<'gc> {
     }
 }
 
-impl Default for MovieLibrary<'_> {
+impl<B: Backends> Default for MovieLibrary<'_, B> {
     fn default() -> Self {
         Self::new()
     }
 }
 
 /// Symbol library for multiple movies.
-pub struct Library<'gc> {
+pub struct Library<'gc, B> {
     /// All the movie libraries.
-    movie_libraries: PtrWeakKeyHashMap<Weak<SwfMovie>, MovieLibrary<'gc>>,
+    movie_libraries: PtrWeakKeyHashMap<Weak<SwfMovie>, MovieLibrary<'gc, B>>,
 }
 
-unsafe impl<'gc> gc_arena::Collect for Library<'gc> {
+unsafe impl<'gc, B: Backends> gc_arena::Collect for Library<'gc, B> {
     #[inline]
     fn trace(&self, cc: gc_arena::CollectionContext) {
         for (_, val) in self.movie_libraries.iter() {
@@ -206,12 +207,12 @@ unsafe impl<'gc> gc_arena::Collect for Library<'gc> {
     }
 }
 
-impl<'gc> Library<'gc> {
-    pub fn library_for_movie(&self, movie: Arc<SwfMovie>) -> Option<&MovieLibrary<'gc>> {
+impl<'gc, B: Backends> Library<'gc, B> {
+    pub fn library_for_movie(&self, movie: Arc<SwfMovie>) -> Option<&MovieLibrary<'gc, B>> {
         self.movie_libraries.get(&movie)
     }
 
-    pub fn library_for_movie_mut(&mut self, movie: Arc<SwfMovie>) -> &mut MovieLibrary<'gc> {
+    pub fn library_for_movie_mut(&mut self, movie: Arc<SwfMovie>) -> &mut MovieLibrary<'gc, B> {
         if !self.movie_libraries.contains_key(&movie) {
             self.movie_libraries
                 .insert(movie.clone(), MovieLibrary::default());
@@ -221,7 +222,7 @@ impl<'gc> Library<'gc> {
     }
 }
 
-impl<'gc> Default for Library<'gc> {
+impl<'gc, B: Backends> Default for Library<'gc, B> {
     fn default() -> Self {
         Self {
             movie_libraries: PtrWeakKeyHashMap::new(),

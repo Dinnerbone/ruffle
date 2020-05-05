@@ -5,13 +5,14 @@ use crate::avm1::{Avm1, Error, ScriptObject, TObject, UpdateContext, Value};
 use gc_arena::MutationContext;
 use rand::Rng;
 use std::f64::{INFINITY, NAN, NEG_INFINITY};
+use crate::backend::Backends;
 
 macro_rules! wrap_std {
     ( $object: ident, $gc_context: ident, $proto: ident, $($name:expr => $std:path),* ) => {{
         $(
             $object.force_set_function(
                 $name,
-                |avm, context, _this, args| -> Result<ReturnValue<'gc>, Error> {
+                |avm, context, _this, args| -> Result<ReturnValue<'gc, B>, Error> {
                     if let Some(input) = args.get(0) {
                         Ok($std(input.as_number(avm, context)?).into())
                     } else {
@@ -26,12 +27,12 @@ macro_rules! wrap_std {
     }};
 }
 
-fn atan2<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn atan2<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(y) = args.get(0) {
         if let Some(x) = args.get(1) {
             return Ok(y
@@ -45,12 +46,12 @@ fn atan2<'gc>(
     Ok(NAN.into())
 }
 
-fn pow<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn pow<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(y) = args.get(0) {
         if let Some(x) = args.get(1) {
             let x = x.as_number(avm, context)?;
@@ -63,12 +64,12 @@ fn pow<'gc>(
     Ok(NAN.into())
 }
 
-fn round<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn round<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(x) = args.get(0) {
         let x = x.as_number(avm, context)?;
         // Note that Flash Math.round always rounds toward infinity,
@@ -79,12 +80,12 @@ fn round<'gc>(
     Ok(NAN.into())
 }
 
-fn max<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn max<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(a) = args.get(0) {
         return if let Some(b) = args.get(1) {
             match a.abstract_lt(b.to_owned(), avm, context)? {
@@ -104,12 +105,12 @@ fn max<'gc>(
     Ok(NEG_INFINITY.into())
 }
 
-fn min<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn min<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(a) = args.get(0) {
         return if let Some(b) = args.get(1) {
             match a.abstract_lt(b.to_owned(), avm, context)? {
@@ -129,20 +130,20 @@ fn min<'gc>(
     Ok(INFINITY.into())
 }
 
-pub fn random<'gc>(
-    _avm: &mut Avm1<'gc>,
-    action_context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn random<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    action_context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     Ok(action_context.rng.gen_range(0.0f64, 1.0f64).into())
 }
 
-pub fn create<'gc>(
+pub fn create<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Option<Object<'gc>>,
-    fn_proto: Option<Object<'gc>>,
-) -> Object<'gc> {
+    proto: Option<Object<'gc, B>>,
+    fn_proto: Option<Object<'gc, B>>,
+) -> Object<'gc, B> {
     let mut math = ScriptObject::object(gc_context, proto);
 
     math.define_value(
@@ -260,7 +261,7 @@ mod tests {
     use super::*;
     use crate::avm1::test_utils::with_avm;
 
-    fn setup<'gc>(avm: &mut Avm1<'gc>, context: &mut UpdateContext<'_, 'gc, '_>) -> Object<'gc> {
+    fn setup<'gc, B: Backends>(avm: &mut Avm1<'gc, B>, context: &mut UpdateContext<'_, 'gc, '_, B>) -> Object<'gc, B> {
         create(
             context.gc_context,
             Some(avm.prototypes().object),

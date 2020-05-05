@@ -9,13 +9,14 @@ use crate::backend::navigator::RequestOptions;
 use crate::display_object::{DisplayObject, TDisplayObject};
 use enumset::EnumSet;
 use gc_arena::MutationContext;
+use crate::backend::Backends;
 
-pub fn constructor<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn constructor<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let listeners = ScriptObject::array(context.gc_context, Some(avm.prototypes().array));
     this.define_value(
         context.gc_context,
@@ -28,12 +29,12 @@ pub fn constructor<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn add_listener<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn add_listener<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let new_listener = args.get(0).cloned().unwrap_or(Value::Undefined);
     let listeners = this
         .get("_listeners", avm, context)?
@@ -48,12 +49,12 @@ pub fn add_listener<'gc>(
     Ok(true.into())
 }
 
-pub fn remove_listener<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn remove_listener<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let old_listener = args.get(0).cloned().unwrap_or(Value::Undefined);
     let listeners = this
         .get("_listeners", avm, context)?
@@ -95,12 +96,12 @@ pub fn remove_listener<'gc>(
     Ok(true.into())
 }
 
-pub fn broadcast_message<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn broadcast_message<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let event_name = args
         .get(0)
         .cloned()
@@ -128,12 +129,12 @@ pub fn broadcast_message<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn load_clip<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn load_clip<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let url = args
         .get(0)
         .cloned()
@@ -163,12 +164,12 @@ pub fn load_clip<'gc>(
     }
 }
 
-pub fn unload_clip<'gc>(
-    _avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn unload_clip<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let target = args.get(0).cloned().unwrap_or(Value::Undefined);
 
     if let Value::Object(target) = target {
@@ -186,12 +187,12 @@ pub fn unload_clip<'gc>(
     Ok(false.into())
 }
 
-pub fn get_progress<'gc>(
-    _avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn get_progress<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let target = args.get(0).cloned().unwrap_or(Value::Undefined);
 
     if let Value::Object(target) = target {
@@ -226,11 +227,11 @@ pub fn get_progress<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let mcl_proto = ScriptObject::object(gc_context, Some(proto));
 
     mcl_proto.as_script_object().unwrap().force_set_function(

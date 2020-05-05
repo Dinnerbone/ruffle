@@ -1,6 +1,7 @@
 //! FSCommand handling
 
 use crate::avm1::{Avm1, Error, UpdateContext};
+use crate::backend::Backends;
 
 /// Parse an FSCommand URL.
 pub fn parse(url: &str) -> Option<&str> {
@@ -13,7 +14,7 @@ pub fn parse(url: &str) -> Option<&str> {
 }
 
 /// TODO: FSCommand URL handling
-pub fn handle(fscommand: &str, _avm: &mut Avm1, _ac: &mut UpdateContext) -> Result<(), Error> {
+pub fn handle<B: Backends>(fscommand: &str, _avm: &mut Avm1<B>, _ac: &mut UpdateContext<B>) -> Result<(), Error> {
     log::warn!("Unhandled FSCommand: {}", fscommand);
 
     //This should be an error.

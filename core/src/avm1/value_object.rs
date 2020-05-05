@@ -8,28 +8,29 @@ use crate::avm1::{Avm1, Error, Object, ScriptObject, UpdateContext, Value};
 use enumset::EnumSet;
 use gc_arena::{Collect, GcCell, MutationContext};
 use std::fmt;
+use crate::backend::Backends;
 
 /// An Object that serves as a box for a primitive value.
 #[derive(Clone, Copy, Collect)]
 #[collect(no_drop)]
-pub struct ValueObject<'gc>(GcCell<'gc, ValueObjectData<'gc>>);
+pub struct ValueObject<'gc, B>(GcCell<'gc, ValueObjectData<'gc, B>>);
 
 /// The internal data for a boxed value.
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct ValueObjectData<'gc> {
+pub struct ValueObjectData<'gc, B: Backends> {
     /// Base implementation of ScriptObject.
-    base: ScriptObject<'gc>,
+    base: ScriptObject<'gc, B>,
 
     /// The value being boxed.
     ///
     /// It is a logic error for this to be another object. All extant
     /// constructors for `ValueObject` guard against this by returning the
     /// original object if an attempt is made to box objects.
-    value: Value<'gc>,
+    value: Value<'gc, B>,
 }
 
-impl<'gc> ValueObject<'gc> {
+impl<'gc, B: Backends> ValueObject<'gc, B> {
     /// Box a value into a `ValueObject`.
     ///
     /// If this function is given an object to box, then this function returns
@@ -38,10 +39,10 @@ impl<'gc> ValueObject<'gc> {
     /// If a class exists for a given value type, this function automatically
     /// selects the correct prototype for it from the system prototypes list.
     pub fn boxed(
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        value: Value<'gc>,
-    ) -> Object<'gc> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        value: Value<'gc, B>,
+    ) -> Object<'gc, B> {
         if let Value::Object(ob) = value {
             ob
         } else {
@@ -84,8 +85,8 @@ impl<'gc> ValueObject<'gc> {
     /// Construct an empty box to be filled by a constructor.
     pub fn empty_box(
         gc_context: MutationContext<'gc, '_>,
-        proto: Option<Object<'gc>>,
-    ) -> Object<'gc> {
+        proto: Option<Object<'gc, B>>,
+    ) -> Object<'gc, B> {
         ValueObject(GcCell::allocate(
             gc_context,
             ValueObjectData {
@@ -97,17 +98,17 @@ impl<'gc> ValueObject<'gc> {
     }
 
     /// Retrieve the boxed value.
-    pub fn unbox(self) -> Value<'gc> {
+    pub fn unbox(self) -> Value<'gc, B> {
         self.0.read().value.clone()
     }
 
     /// Change the value in the box.
-    pub fn replace_value(&mut self, gc_context: MutationContext<'gc, '_>, value: Value<'gc>) {
+    pub fn replace_value(&mut self, gc_context: MutationContext<'gc, '_>, value: Value<'gc, B>) {
         self.0.write(gc_context).value = value;
     }
 }
 
-impl fmt::Debug for ValueObject<'_> {
+impl<B: Backends> fmt::Debug for ValueObject<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let this = self.0.read();
         f.debug_struct("ValueObject")
@@ -117,35 +118,35 @@ impl fmt::Debug for ValueObject<'_> {
     }
 }
 
-impl<'gc> TObject<'gc> for ValueObject<'gc> {
+impl<'gc, B: Backends> TObject<'gc, B> for ValueObject<'gc, B> {
     fn get_local(
         &self,
         name: &str,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-    ) -> Result<ReturnValue<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         self.0.read().base.get_local(name, avm, context, this)
     }
 
     fn set(
         &self,
         name: &str,
-        value: Value<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        value: Value<'gc, B>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         self.0.read().base.set(name, value, avm, context)
     }
 
     fn call(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-        base_proto: Option<Object<'gc>>,
-        args: &[Value<'gc>],
-    ) -> Result<ReturnValue<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+        base_proto: Option<Object<'gc, B>>,
+        args: &[Value<'gc, B>],
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         self.0
             .read()
             .base
@@ -155,11 +156,11 @@ impl<'gc> TObject<'gc> for ValueObject<'gc> {
     fn call_setter(
         &self,
         name: &str,
-        value: Value<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-    ) -> Result<ReturnValue<'gc>, Error> {
+        value: Value<'gc, B>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         self.0
             .read()
             .base
@@ -169,17 +170,17 @@ impl<'gc> TObject<'gc> for ValueObject<'gc> {
     #[allow(clippy::new_ret_no_self)]
     fn new(
         &self,
-        _avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-        _args: &[Value<'gc>],
-    ) -> Result<Object<'gc>, Error> {
+        _avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+        _args: &[Value<'gc, B>],
+    ) -> Result<Object<'gc, B>, Error> {
         Ok(ValueObject::empty_box(context.gc_context, Some(this)))
     }
 
     fn delete(
         &self,
-        avm: &mut Avm1<'gc>,
+        avm: &mut Avm1<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
     ) -> bool {
@@ -190,8 +191,8 @@ impl<'gc> TObject<'gc> for ValueObject<'gc> {
         &self,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
-        get: Executable<'gc>,
-        set: Option<Executable<'gc>>,
+        get: Executable<'gc, B>,
+        set: Option<Executable<'gc, B>>,
         attributes: EnumSet<Attribute>,
     ) {
         self.0
@@ -202,11 +203,11 @@ impl<'gc> TObject<'gc> for ValueObject<'gc> {
 
     fn add_property_with_case(
         &self,
-        avm: &mut Avm1<'gc>,
+        avm: &mut Avm1<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
-        get: Executable<'gc>,
-        set: Option<Executable<'gc>>,
+        get: Executable<'gc, B>,
+        set: Option<Executable<'gc, B>>,
         attributes: EnumSet<Attribute>,
     ) {
         self.0
@@ -219,7 +220,7 @@ impl<'gc> TObject<'gc> for ValueObject<'gc> {
         &self,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
-        value: Value<'gc>,
+        value: Value<'gc, B>,
         attributes: EnumSet<Attribute>,
     ) {
         self.0
@@ -243,11 +244,11 @@ impl<'gc> TObject<'gc> for ValueObject<'gc> {
         )
     }
 
-    fn proto(&self) -> Option<Object<'gc>> {
+    fn proto(&self) -> Option<Object<'gc, B>> {
         self.0.read().base.proto()
     }
 
-    fn set_proto(&self, gc_context: MutationContext<'gc, '_>, prototype: Option<Object<'gc>>) {
+    fn set_proto(&self, gc_context: MutationContext<'gc, '_>, prototype: Option<Object<'gc, B>>) {
         self.0
             .write(gc_context)
             .base
@@ -256,8 +257,8 @@ impl<'gc> TObject<'gc> for ValueObject<'gc> {
 
     fn has_property(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         self.0.read().base.has_property(avm, context, name)
@@ -265,8 +266,8 @@ impl<'gc> TObject<'gc> for ValueObject<'gc> {
 
     fn has_own_property(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         self.0.read().base.has_own_property(avm, context, name)
@@ -274,22 +275,22 @@ impl<'gc> TObject<'gc> for ValueObject<'gc> {
 
     fn has_own_virtual(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         self.0.read().base.has_own_virtual(avm, context, name)
     }
 
-    fn is_property_overwritable(&self, avm: &mut Avm1<'gc>, name: &str) -> bool {
+    fn is_property_overwritable(&self, avm: &mut Avm1<'gc, B>, name: &str) -> bool {
         self.0.read().base.is_property_overwritable(avm, name)
     }
 
-    fn is_property_enumerable(&self, avm: &mut Avm1<'gc>, name: &str) -> bool {
+    fn is_property_enumerable(&self, avm: &mut Avm1<'gc, B>, name: &str) -> bool {
         self.0.read().base.is_property_enumerable(avm, name)
     }
 
-    fn get_keys(&self, avm: &mut Avm1<'gc>) -> Vec<String> {
+    fn get_keys(&self, avm: &mut Avm1<'gc, B>) -> Vec<String> {
         self.0.read().base.get_keys(avm)
     }
 
@@ -301,22 +302,22 @@ impl<'gc> TObject<'gc> for ValueObject<'gc> {
         self.0.read().base.type_of()
     }
 
-    fn interfaces(&self) -> Vec<Object<'gc>> {
+    fn interfaces(&self) -> Vec<Object<'gc, B>> {
         self.0.read().base.interfaces()
     }
 
-    fn set_interfaces(&mut self, context: MutationContext<'gc, '_>, iface_list: Vec<Object<'gc>>) {
+    fn set_interfaces(&mut self, context: MutationContext<'gc, '_>, iface_list: Vec<Object<'gc, B>>) {
         self.0
             .write(context)
             .base
             .set_interfaces(context, iface_list)
     }
 
-    fn as_script_object(&self) -> Option<ScriptObject<'gc>> {
+    fn as_script_object(&self) -> Option<ScriptObject<'gc, B>> {
         Some(self.0.read().base)
     }
 
-    fn as_value_object(&self) -> Option<ValueObject<'gc>> {
+    fn as_value_object(&self) -> Option<ValueObject<'gc, B>> {
         Some(*self)
     }
 
@@ -328,7 +329,7 @@ impl<'gc> TObject<'gc> for ValueObject<'gc> {
         self.0.read().base.length()
     }
 
-    fn array(&self) -> Vec<Value<'gc>> {
+    fn array(&self) -> Vec<Value<'gc, B>> {
         self.0.read().base.array()
     }
 
@@ -336,14 +337,14 @@ impl<'gc> TObject<'gc> for ValueObject<'gc> {
         self.0.read().base.set_length(gc_context, length)
     }
 
-    fn array_element(&self, index: usize) -> Value<'gc> {
+    fn array_element(&self, index: usize) -> Value<'gc, B> {
         self.0.read().base.array_element(index)
     }
 
     fn set_array_element(
         &self,
         index: usize,
-        value: Value<'gc>,
+        value: Value<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
     ) -> usize {
         self.0

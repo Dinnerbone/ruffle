@@ -8,10 +8,11 @@ type Error = Box<dyn std::error::Error>;
 mod text_format;
 
 pub use text_format::TextFormat;
+use crate::backend::Backends;
 
 #[derive(Debug, Clone, Collect, Copy)]
 #[collect(no_drop)]
-pub struct Font<'gc>(Gc<'gc, FontData>);
+pub struct Font<'gc, B: Backends>(Gc<'gc, FontData>);
 
 #[derive(Debug, Clone, Collect)]
 #[collect(require_static)]
@@ -33,12 +34,12 @@ struct FontData {
     kerning_pairs: fnv::FnvHashMap<(u16, u16), Twips>,
 }
 
-impl<'gc> Font<'gc> {
+impl<'gc, B: Backends> Font<'gc, B> {
     pub fn from_swf_tag(
         gc_context: MutationContext<'gc, '_>,
         renderer: &mut dyn RenderBackend,
         tag: &swf::Font,
-    ) -> Result<Font<'gc>, Error> {
+    ) -> Result<Font<'gc, B>, Error> {
         let mut glyphs = vec![];
         let mut code_point_to_glyph = fnv::FnvHashMap::default();
         for swf_glyph in &tag.glyphs {

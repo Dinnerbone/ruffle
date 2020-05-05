@@ -14,14 +14,15 @@ use gc_arena::{rootless_arena, GcCell, MutationContext};
 use rand::{rngs::SmallRng, SeedableRng};
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use crate::backend::Backends;
 
-pub fn with_avm<F, R>(swf_version: u8, test: F) -> R
+pub fn with_avm<F, R, B: Backends>(swf_version: u8, test: F) -> R
 where
-    F: for<'a, 'gc> FnOnce(&mut Avm1<'gc>, &mut UpdateContext<'a, 'gc, '_>, Object<'gc>) -> R,
+    F: for<'a, 'gc> FnOnce(&mut Avm1<'gc, B>, &mut UpdateContext<'a, 'gc, '_, B>, Object<'gc, B>) -> R,
 {
-    fn in_the_arena<'gc, F, R>(swf_version: u8, test: F, gc_context: MutationContext<'gc, '_>) -> R
+    fn in_the_arena<'gc, F, R, B: Backends>(swf_version: u8, test: F, gc_context: MutationContext<'gc, '_>) -> R
     where
-        F: for<'a> FnOnce(&mut Avm1<'gc>, &mut UpdateContext<'a, 'gc, '_>, Object<'gc>) -> R,
+        F: for<'a> FnOnce(&mut Avm1<'gc, B>, &mut UpdateContext<'a, 'gc, '_, B>, Object<'gc, B>) -> R,
     {
         let mut avm = Avm1::new(gc_context, swf_version);
         let swf = Arc::new(SwfMovie::empty(swf_version));

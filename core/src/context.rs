@@ -4,7 +4,7 @@ use crate::avm1;
 use crate::avm1::listeners::SystemListener;
 use crate::avm1::{Object, Value};
 use crate::backend::input::InputBackend;
-use crate::backend::{audio::AudioBackend, navigator::NavigatorBackend, render::RenderBackend};
+use crate::backend::{audio::AudioBackend, navigator::NavigatorBackend, render::RenderBackend, Backends};
 use crate::library::Library;
 use crate::loader::LoadManager;
 use crate::player::Player;
@@ -21,10 +21,10 @@ use std::sync::{Arc, Mutex, Weak};
 /// `UpdateContext` holds shared data that is used by the various subsystems of Ruffle.
 /// `Player` crates this when it begins a tick and passes it through the call stack to
 /// children and the VM.
-pub struct UpdateContext<'a, 'gc, 'gc_context> {
+pub struct UpdateContext<'a, 'gc, 'gc_context, B: Backends> {
     /// The queue of actions that will be run after the display list updates.
     /// Display objects and actions can push actions onto the queue.
-    pub action_queue: &'a mut ActionQueue<'gc>,
+    pub action_queue: &'a mut ActionQueue<'gc, B>,
 
     /// The background color of the Stage. Changed by the `SetBackgroundColor` SWF tag.
     /// TODO: Move this into a `Stage` display object.
@@ -39,7 +39,7 @@ pub struct UpdateContext<'a, 'gc, 'gc_context> {
 
     /// The library containing character definitions for this SWF.
     /// Used to instantiate a `DisplayObject` of a given ID.
-    pub library: &'a mut Library<'gc>,
+    pub library: &'a mut Library<'gc, B>,
 
     /// The version of the Flash Player we are emulating.
     /// TODO: This is a little confusing because this represents the player's max SWF version,
@@ -67,20 +67,20 @@ pub struct UpdateContext<'a, 'gc, 'gc_context> {
     pub rng: &'a mut SmallRng,
 
     /// All loaded levels of the current player.
-    pub levels: &'a mut BTreeMap<u32, DisplayObject<'gc>>,
+    pub levels: &'a mut BTreeMap<u32, DisplayObject<'gc, B>>,
 
     /// The current set of system-specified prototypes to use when constructing
     /// new built-in objects.
-    pub system_prototypes: avm1::SystemPrototypes<'gc>,
+    pub system_prototypes: avm1::SystemPrototypes<'gc, B>,
 
     /// The display object that the mouse is currently hovering over.
-    pub mouse_hovered_object: Option<DisplayObject<'gc>>,
+    pub mouse_hovered_object: Option<DisplayObject<'gc, B>>,
 
     /// The location of the mouse when it was last over the player.
     pub mouse_position: &'a (Twips, Twips),
 
     /// The object being dragged via a `startDrag` action.
-    pub drag_object: &'a mut Option<crate::player::DragObject<'gc>>,
+    pub drag_object: &'a mut Option<crate::player::DragObject<'gc, B>>,
 
     /// The dimensions of the stage.
     pub stage_size: (Twips, Twips),
@@ -89,28 +89,28 @@ pub struct UpdateContext<'a, 'gc, 'gc_context> {
     ///
     /// Recipients of an update context may upgrade the reference to ensure
     /// that the player lives across I/O boundaries.
-    pub player: Option<Weak<Mutex<Player>>>,
+    pub player: Option<Weak<Mutex<Player<B>>>>,
 
     /// The player's load manager.
     ///
     /// This is required for asynchronous behavior, such as fetching data from
     /// a URL.
-    pub load_manager: &'a mut LoadManager<'gc>,
+    pub load_manager: &'a mut LoadManager<'gc, B>,
 }
 
 /// A queued ActionScript call.
-pub struct QueuedActions<'gc> {
+pub struct QueuedActions<'gc, B: Backends> {
     /// The movie clip this ActionScript is running on.
-    pub clip: DisplayObject<'gc>,
+    pub clip: DisplayObject<'gc, B>,
 
     /// The type of action this is, along with the corresponding bytecode/method data.
-    pub action_type: ActionType<'gc>,
+    pub action_type: ActionType<'gc, B>,
 
     /// Whether this is an unload action, which can still run if the clip is removed.
     pub is_unload: bool,
 }
 
-unsafe impl<'gc> Collect for QueuedActions<'gc> {
+unsafe impl<'gc, B: Backends> Collect for QueuedActions<'gc, B> {
     #[inline]
     fn trace(&self, cc: gc_arena::CollectionContext) {
         self.clip.trace(cc);
@@ -119,12 +119,12 @@ unsafe impl<'gc> Collect for QueuedActions<'gc> {
 }
 
 /// Action and gotos need to be queued up to execute at the end of the frame.
-pub struct ActionQueue<'gc> {
-    change_prototype_queue: VecDeque<QueuedActions<'gc>>,
-    action_queue: VecDeque<QueuedActions<'gc>>,
+pub struct ActionQueue<'gc, B: Backends> {
+    change_prototype_queue: VecDeque<QueuedActions<'gc, B>>,
+    action_queue: VecDeque<QueuedActions<'gc, B>>,
 }
 
-impl<'gc> ActionQueue<'gc> {
+impl<'gc, B: Backends> ActionQueue<'gc, B> {
     const DEFAULT_CAPACITY: usize = 32;
 
     /// Crates a new `ActionQueue` with an empty queue.
@@ -140,8 +140,8 @@ impl<'gc> ActionQueue<'gc> {
     /// The actions will be skipped if the clip is removed before the actions run.
     pub fn queue_actions(
         &mut self,
-        clip: DisplayObject<'gc>,
-        action_type: ActionType<'gc>,
+        clip: DisplayObject<'gc, B>,
+        action_type: ActionType<'gc, B>,
         is_unload: bool,
     ) {
         // Prototype change goes a higher priority queue.
@@ -161,7 +161,7 @@ impl<'gc> ActionQueue<'gc> {
     }
 
     /// Sorts and drains the actions from the queue.
-    pub fn pop_action(&mut self) -> Option<QueuedActions<'gc>> {
+    pub fn pop_action(&mut self) -> Option<QueuedActions<'gc, B>> {
         if !self.change_prototype_queue.is_empty() {
             self.change_prototype_queue.pop_front()
         } else {
@@ -170,13 +170,13 @@ impl<'gc> ActionQueue<'gc> {
     }
 }
 
-impl<'gc> Default for ActionQueue<'gc> {
+impl<'gc, B: Backends> Default for ActionQueue<'gc, B> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-unsafe impl<'gc> Collect for ActionQueue<'gc> {
+unsafe impl<'gc, B: Backends> Collect for ActionQueue<'gc, B> {
     #[inline]
     fn trace(&self, cc: gc_arena::CollectionContext) {
         self.change_prototype_queue.iter().for_each(|o| o.trace(cc));
@@ -186,12 +186,12 @@ unsafe impl<'gc> Collect for ActionQueue<'gc> {
 
 /// Shared data used during rendering.
 /// `Player` creates this when it renders a frame and passes it down to display objects.
-pub struct RenderContext<'a, 'gc> {
+pub struct RenderContext<'a, 'gc, B: Backends> {
     /// The renderer, used by the display objects to draw themselves.
-    pub renderer: &'a mut dyn RenderBackend,
+    pub renderer: &'a mut B::Renderer,
 
     /// The library, which provides access to fonts and other definitions when rendering.
-    pub library: &'a Library<'gc>,
+    pub library: &'a Library<'gc, B>,
 
     /// The transform stack controls the matrix and color transform as we traverse the display hierarchy.
     pub transform_stack: &'a mut TransformStack,
@@ -204,32 +204,32 @@ pub struct RenderContext<'a, 'gc> {
 
 /// The type of action being run.
 #[derive(Clone)]
-pub enum ActionType<'gc> {
+pub enum ActionType<'gc, B: Backends> {
     /// Normal frame or event actions.
     Normal { bytecode: SwfSlice },
 
     /// Construct a movie with a custom class or on(construct) events
     Construct {
-        constructor: Option<Object<'gc>>,
+        constructor: Option<Object<'gc, B>>,
         events: Vec<SwfSlice>,
     },
 
     /// An event handler method, e.g. `onEnterFrame`.
     Method {
-        object: Object<'gc>,
+        object: Object<'gc, B>,
         name: &'static str,
-        args: Vec<Value<'gc>>,
+        args: Vec<Value<'gc, B>>,
     },
 
     /// A system listener method,
     NotifyListeners {
         listener: SystemListener,
         method: &'static str,
-        args: Vec<Value<'gc>>,
+        args: Vec<Value<'gc, B>>,
     },
 }
 
-impl fmt::Debug for ActionType<'_> {
+impl<B: Backends> fmt::Debug for ActionType<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             ActionType::Normal { bytecode } => f
@@ -264,7 +264,7 @@ impl fmt::Debug for ActionType<'_> {
     }
 }
 
-unsafe impl<'gc> Collect for ActionType<'gc> {
+unsafe impl<'gc, B: Backends> Collect for ActionType<'gc, B> {
     #[inline]
     fn trace(&self, cc: gc_arena::CollectionContext) {
         match self {

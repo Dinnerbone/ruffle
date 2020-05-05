@@ -1,21 +1,22 @@
 use crate::backend::audio::SoundHandle;
 use crate::display_object::{Bitmap, Button, EditText, Graphic, MorphShape, MovieClip, Text};
 use crate::font::Font;
+use crate::backend::Backends;
 
 #[derive(Clone)]
-pub enum Character<'gc> {
-    EditText(EditText<'gc>),
-    Graphic(Graphic<'gc>),
-    MovieClip(MovieClip<'gc>),
-    Bitmap(Bitmap<'gc>),
-    Button(Button<'gc>),
-    Font(Font<'gc>),
-    MorphShape(MorphShape<'gc>),
-    Text(Text<'gc>),
+pub enum Character<'gc, B: Backends> {
+    EditText(EditText<'gc, B>),
+    Graphic(Graphic<'gc, B>),
+    MovieClip(MovieClip<'gc, B>),
+    Bitmap(Bitmap<'gc, B>),
+    Button(Button<'gc, B>),
+    Font(Font<'gc, B>),
+    MorphShape(MorphShape<'gc, B>),
+    Text(Text<'gc, B>),
     Sound(SoundHandle),
 }
 
-unsafe impl<'gc> gc_arena::Collect for Character<'gc> {
+unsafe impl<'gc, B: Backends> gc_arena::Collect for Character<'gc, B> {
     #[inline]
     fn trace(&self, cc: gc_arena::CollectionContext) {
         match self {

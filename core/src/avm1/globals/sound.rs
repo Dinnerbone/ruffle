@@ -8,14 +8,15 @@ use crate::avm1::{Avm1, Error, Object, SoundObject, TObject, UpdateContext, Valu
 use crate::character::Character;
 use crate::display_object::TDisplayObject;
 use gc_arena::MutationContext;
+use crate::backend::Backends;
 
 /// Implements `Sound`
-pub fn constructor<'gc>(
-    _avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn constructor<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     // 1st parameter is the movie clip that "owns" all sounds started by this object.
     // `Sound.setTransform`, `Sound.stop`, etc. will affect all sounds owned by this clip.
     let owner = args
@@ -29,11 +30,11 @@ pub fn constructor<'gc>(
     Ok(this.into())
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let object = SoundObject::empty_sound(gc_context, Some(proto));
 
     object.as_script_object().unwrap().force_set_function(
@@ -159,12 +160,12 @@ pub fn create_proto<'gc>(
     object.into()
 }
 
-fn attach_sound<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn attach_sound<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let name = args.get(0).unwrap_or(&Value::Undefined);
     if let Some(sound_object) = this.as_sound_object() {
         let name = name.clone().coerce_to_string(avm, context)?;
@@ -199,12 +200,12 @@ fn attach_sound<'gc>(
     Ok(Value::Undefined.into())
 }
 
-fn duration<'gc>(
-    avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn duration<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if avm.current_swf_version() >= 6 {
         if let Some(sound_object) = this.as_sound_object() {
             return Ok(sound_object.duration().into());
@@ -216,12 +217,12 @@ fn duration<'gc>(
     Ok(Value::Undefined.into())
 }
 
-fn get_bytes_loaded<'gc>(
-    avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn get_bytes_loaded<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if avm.current_swf_version() >= 6 {
         log::warn!("Sound.getBytesLoaded: Unimplemented");
         Ok(1.into())
@@ -230,12 +231,12 @@ fn get_bytes_loaded<'gc>(
     }
 }
 
-fn get_bytes_total<'gc>(
-    avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn get_bytes_total<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if avm.current_swf_version() >= 6 {
         log::warn!("Sound.getBytesTotal: Unimplemented");
         Ok(1.into())
@@ -244,66 +245,66 @@ fn get_bytes_total<'gc>(
     }
 }
 
-fn get_pan<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn get_pan<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     log::warn!("Sound.getPan: Unimplemented");
     Ok(0.into())
 }
 
-fn get_transform<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn get_transform<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     log::warn!("Sound.getTransform: Unimplemented");
     Ok(Value::Undefined.into())
 }
 
-fn get_volume<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn get_volume<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     log::warn!("Sound.getVolume: Unimplemented");
     Ok(100.into())
 }
 
-fn id3<'gc>(
-    avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn id3<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if avm.current_swf_version() >= 6 {
         log::warn!("Sound.id3: Unimplemented");
     }
     Ok(Value::Undefined.into())
 }
 
-fn load_sound<'gc>(
-    avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn load_sound<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if avm.current_swf_version() >= 6 {
         log::warn!("Sound.loadSound: Unimplemented");
     }
     Ok(Value::Undefined.into())
 }
 
-fn position<'gc>(
-    avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn position<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if avm.current_swf_version() >= 6 {
         if let Some(sound_object) = this.as_sound_object() {
             // TODO: The position is "sticky"; even if the sound is no longer playing, it should return
@@ -322,42 +323,42 @@ fn position<'gc>(
     Ok(Value::Undefined.into())
 }
 
-fn set_pan<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn set_pan<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     log::warn!("Sound.setPan: Unimplemented");
     Ok(Value::Undefined.into())
 }
 
-fn set_transform<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn set_transform<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     log::warn!("Sound.setTransform: Unimplemented");
     Ok(Value::Undefined.into())
 }
 
-fn set_volume<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn set_volume<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     log::warn!("Sound.setVolume: Unimplemented");
     Ok(Value::Undefined.into())
 }
 
-fn start<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn start<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let start_offset = args
         .get(0)
         .unwrap_or(&Value::Number(0.0))
@@ -401,12 +402,12 @@ fn start<'gc>(
     Ok(Value::Undefined.into())
 }
 
-fn stop<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn stop<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(sound) = this.as_sound_object() {
         if let Some(name) = args.get(0) {
             // Usage 1: Stop all instances of a particular sound, using the name parameter.

@@ -7,6 +7,7 @@ use crate::avm1::{Avm1, Error, Object, ScriptObject, TObject, UpdateContext, Val
 use enumset::EnumSet;
 use gc_arena::MutationContext;
 use std::cmp::Ordering;
+use crate::backend::Backends;
 
 // Flags used by `Array.sort` and `sortOn`.
 const CASE_INSENSITIVE: i32 = 1;
@@ -21,16 +22,16 @@ const NUMERIC: i32 = 16;
 const DEFAULT_ORDERING: Ordering = Ordering::Equal;
 
 // Compare function used by sort and sortOn.
-type CompareFn<'a, 'gc> = Box<
+type CompareFn<'a, 'gc, B: Backends> = Box<
     dyn 'a
-        + FnMut(&mut Avm1<'gc>, &mut UpdateContext<'_, 'gc, '_>, &Value<'gc>, &Value<'gc>) -> Ordering,
+        + FnMut(&mut Avm1<'gc, B>, &mut UpdateContext<'_, 'gc, '_, B>, &Value<'gc, B>, &Value<'gc, B>) -> Ordering,
 >;
 
-pub fn create_array_object<'gc>(
+pub fn create_array_object<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-    array_proto: Option<Object<'gc>>,
-    fn_proto: Option<Object<'gc>>,
-) -> Object<'gc> {
+    array_proto: Option<Object<'gc, B>>,
+    fn_proto: Option<Object<'gc, B>>,
+) -> Object<'gc, B> {
     let array = FunctionObject::function(
         gc_context,
         Executable::Native(constructor),
@@ -81,12 +82,12 @@ pub fn create_array_object<'gc>(
 }
 
 /// Implements `Array`
-pub fn constructor<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn constructor<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let mut consumed = false;
 
     if args.len() == 1 {
@@ -116,12 +117,12 @@ pub fn constructor<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn push<'gc>(
-    _avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn push<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let old_length = this.length();
     let new_length = old_length + args.len();
     this.set_length(context.gc_context, new_length);
@@ -137,12 +138,12 @@ pub fn push<'gc>(
     Ok((new_length as f64).into())
 }
 
-pub fn unshift<'gc>(
-    _avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn unshift<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let old_length = this.length();
     let new_length = old_length + args.len();
     let offset = new_length - old_length;
@@ -162,12 +163,12 @@ pub fn unshift<'gc>(
     Ok((new_length as f64).into())
 }
 
-pub fn shift<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn shift<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let old_length = this.length();
     if old_length == 0 {
         return Ok(Value::Undefined.into());
@@ -189,12 +190,12 @@ pub fn shift<'gc>(
     Ok(removed.into())
 }
 
-pub fn pop<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn pop<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let old_length = this.length();
     if old_length == 0 {
         return Ok(Value::Undefined.into());
@@ -211,12 +212,12 @@ pub fn pop<'gc>(
     Ok(removed.into())
 }
 
-pub fn reverse<'gc>(
-    _avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn reverse<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let length = this.length();
     let mut values = this.array().to_vec();
 
@@ -227,17 +228,17 @@ pub fn reverse<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn join<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn join<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let separator = args
         .get(0)
         .and_then(|v| v.to_owned().coerce_to_string(avm, context).ok())
         .unwrap_or_else(|| ",".to_owned());
-    let values: Vec<Value<'gc>> = this.array();
+    let values: Vec<Value<'gc, B>> = this.array();
 
     Ok(values
         .iter()
@@ -262,12 +263,12 @@ fn make_index_absolute(mut index: i32, length: usize) -> usize {
     }
 }
 
-pub fn slice<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn slice<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let start = args
         .get(0)
         .and_then(|v| v.as_number(avm, context).ok())
@@ -293,12 +294,12 @@ pub fn slice<'gc>(
     Ok(array.into())
 }
 
-pub fn splice<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn splice<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if args.is_empty() {
         return Ok(Value::Undefined.into());
     }
@@ -365,12 +366,12 @@ pub fn splice<'gc>(
     Ok(removed.into())
 }
 
-pub fn concat<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn concat<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let array = ScriptObject::array(context.gc_context, Some(avm.prototypes.array));
     let mut length = 0;
 
@@ -427,21 +428,21 @@ pub fn concat<'gc>(
     Ok(array.into())
 }
 
-pub fn to_string<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn to_string<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     join(avm, context, this, &[])
 }
 
-fn sort<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn sort<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     // Overloads:
     // 1) a.sort(flags: Number = 0): Sorts with the given flags.
     // 2) a.sort(compare_fn: Object, flags: Number = 0): Sorts using the given compare function and flags.
@@ -469,7 +470,7 @@ fn sort<'gc>(
     let compare_fn: CompareFn<'_, 'gc> = if let Some(f) = compare_fn {
         let this = crate::avm1::value_object::ValueObject::boxed(avm, context, Value::Undefined);
         // this is undefined in the compare function
-        Box::new(move |avm, context, a: &Value<'gc>, b: &Value<'gc>| {
+        Box::new(move |avm, context, a: &Value<'gc, B>, b: &Value<'gc, B>| {
             sort_compare_custom(avm, context, this, a, b, &f)
         })
     } else if numeric {
@@ -481,12 +482,12 @@ fn sort<'gc>(
     sort_with_function(avm, context, this, compare_fn, flags)
 }
 
-fn sort_on<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn sort_on<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     // a.sortOn(field_name, flags: Number = 0): Sorts with the given flags.
     // a.sortOn(field_names: Array, flags: Number = 0): Sorts with fields in order of precedence with the given flags.
     // a.sortOn(field_names: Array, flags: Array: Sorts with fields in order of precedence with the given flags respectively.
@@ -562,20 +563,20 @@ fn sort_on<'gc>(
     sort_with_function(avm, context, this, compare_fn, main_flags)
 }
 
-fn sort_with_function<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
+fn sort_with_function<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
     mut compare_fn: impl FnMut(
-        &mut Avm1<'gc>,
-        &mut UpdateContext<'_, 'gc, '_>,
-        &Value<'gc>,
-        &Value<'gc>,
+        &mut Avm1<'gc, B>,
+        &mut UpdateContext<'_, 'gc, '_, B>,
+        &Value<'gc, B>,
+        &Value<'gc, B>,
     ) -> Ordering,
     flags: i32,
-) -> Result<ReturnValue<'gc>, Error> {
+) -> Result<ReturnValue<'gc, B>, Error> {
     let length = this.length();
-    let mut values: Vec<(usize, Value<'gc>)> = this.array().into_iter().enumerate().collect();
+    let mut values: Vec<(usize, Value<'gc, B>)> = this.array().into_iter().enumerate().collect();
     let array_proto = avm.prototypes.array;
 
     let descending = (flags & DESCENDING) != 0;
@@ -620,11 +621,11 @@ fn sort_with_function<'gc>(
     }
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let array = ScriptObject::array(gc_context, Some(proto));
     let mut object = array.as_script_object().unwrap();
 
@@ -710,11 +711,11 @@ pub fn create_proto<'gc>(
     array.into()
 }
 
-fn sort_compare_string<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    a: &Value<'gc>,
-    b: &Value<'gc>,
+fn sort_compare_string<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    a: &Value<'gc, B>,
+    b: &Value<'gc, B>,
 ) -> Ordering {
     let a_str = a.clone().coerce_to_string(avm, context);
     let b_str = b.clone().coerce_to_string(avm, context);
@@ -726,11 +727,11 @@ fn sort_compare_string<'gc>(
     }
 }
 
-fn sort_compare_string_ignore_case<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    a: &Value<'gc>,
-    b: &Value<'gc>,
+fn sort_compare_string_ignore_case<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    a: &Value<'gc, B>,
+    b: &Value<'gc, B>,
 ) -> Ordering {
     let a_str = a.clone().coerce_to_string(avm, context);
     let b_str = b.clone().coerce_to_string(avm, context);
@@ -742,14 +743,14 @@ fn sort_compare_string_ignore_case<'gc>(
     }
 }
 
-fn sort_compare_numeric<'gc>(
+fn sort_compare_numeric<'gc, B: Backends>(
     mut string_compare_fn: impl FnMut(
-        &mut Avm1<'gc>,
-        &mut UpdateContext<'_, 'gc, '_>,
-        &Value<'gc>,
-        &Value<'gc>,
+        &mut Avm1<'gc, B>,
+        &mut UpdateContext<'_, 'gc, '_, B>,
+        &Value<'gc, B>,
+        &Value<'gc, B>,
     ) -> Ordering,
-) -> impl FnMut(&mut Avm1<'gc>, &mut UpdateContext<'_, 'gc, '_>, &Value<'gc>, &Value<'gc>) -> Ordering
+) -> impl FnMut(&mut Avm1<'gc, B>, &mut UpdateContext<'_, 'gc, '_, B>, &Value<'gc, B>, &Value<'gc, B>) -> Ordering
 {
     move |avm, context, a, b| {
         if let (Value::Number(a), Value::Number(b)) = (a, b) {
@@ -760,10 +761,10 @@ fn sort_compare_numeric<'gc>(
     }
 }
 
-fn sort_compare_fields<'a, 'gc: 'a>(
+fn sort_compare_fields<'a, 'gc: 'a, B: Backends>(
     field_names: Vec<String>,
-    mut compare_fns: Vec<CompareFn<'a, 'gc>>,
-) -> impl 'a + FnMut(&mut Avm1<'gc>, &mut UpdateContext<'_, 'gc, '_>, &Value<'gc>, &Value<'gc>) -> Ordering
+    mut compare_fns: Vec<CompareFn<'a, 'gc, B>>,
+) -> impl 'a + FnMut(&mut Avm1<'gc, B>, &mut UpdateContext<'_, 'gc, '_, B>, &Value<'gc, B>, &Value<'gc, B>) -> Ordering
 {
     use crate::avm1::value_object::ValueObject;
     move |avm, context, a, b| {
@@ -792,13 +793,13 @@ fn sort_compare_fields<'a, 'gc: 'a>(
 }
 
 // Returning an impl Trait here doesn't work yet because of https://github.com/rust-lang/rust/issues/65805 (?)
-fn sort_compare_custom<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    a: &Value<'gc>,
-    b: &Value<'gc>,
-    compare_fn: &Value<'gc>,
+fn sort_compare_custom<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    a: &Value<'gc, B>,
+    b: &Value<'gc, B>,
+    compare_fn: &Value<'gc, B>,
 ) -> Ordering {
     // TODO: Handle errors.
     let args = [a.clone(), b.clone()];

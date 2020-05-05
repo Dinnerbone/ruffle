@@ -6,6 +6,7 @@ use crate::context::{RenderContext, UpdateContext};
 use crate::display_object::{DisplayObjectBase, TDisplayObject};
 use crate::prelude::*;
 use gc_arena::{Collect, Gc, GcCell};
+use crate::backend::Backends;
 
 /// A Bitmap display object is a raw bitamp on the stage.
 /// This can only be instanitated on the display list in SWFv9 AVM2 files.
@@ -16,17 +17,17 @@ use gc_arena::{Collect, Gc, GcCell};
 /// It can also be crated in ActionScript using the `Bitmap` class.
 #[derive(Clone, Debug, Collect, Copy)]
 #[collect(no_drop)]
-pub struct Bitmap<'gc>(GcCell<'gc, BitmapData<'gc>>);
+pub struct Bitmap<'gc, B: Backends>(GcCell<'gc, BitmapData<'gc, B>>);
 
 #[derive(Clone, Debug)]
-pub struct BitmapData<'gc> {
-    base: DisplayObjectBase<'gc>,
+pub struct BitmapData<'gc, B: Backends> {
+    base: DisplayObjectBase<'gc, B>,
     static_data: Gc<'gc, BitmapStatic>,
 }
 
-impl<'gc> Bitmap<'gc> {
+impl<'gc, B: Backends> Bitmap<'gc, B> {
     pub fn new(
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         id: CharacterId,
         bitmap_handle: BitmapHandle,
         width: u16,
@@ -63,7 +64,7 @@ impl<'gc> Bitmap<'gc> {
     }
 }
 
-impl<'gc> TDisplayObject<'gc> for Bitmap<'gc> {
+impl<'gc, B: Backends> TDisplayObject<'gc, B> for Bitmap<'gc, B> {
     impl_display_object!(base);
 
     fn id(&self) -> CharacterId {
@@ -80,11 +81,11 @@ impl<'gc> TDisplayObject<'gc> for Bitmap<'gc> {
         }
     }
 
-    fn run_frame(&mut self, _avm: &mut Avm1<'gc>, _context: &mut UpdateContext) {
+    fn run_frame(&mut self, _avm: &mut Avm1<'gc, B>, _context: &mut UpdateContext<B>) {
         // Noop
     }
 
-    fn render(&self, context: &mut RenderContext) {
+    fn render(&self, context: &mut RenderContext<B>) {
         if !self.world_bounds().intersects(&context.view_bounds) {
             // Off-screen; culled
             return;
@@ -101,7 +102,7 @@ impl<'gc> TDisplayObject<'gc> for Bitmap<'gc> {
     }
 }
 
-unsafe impl<'gc> gc_arena::Collect for BitmapData<'gc> {
+unsafe impl<'gc, B: Backends> gc_arena::Collect for BitmapData<'gc, B> {
     fn trace(&self, cc: gc_arena::CollectionContext) {
         self.base.trace(cc);
         self.static_data.trace(cc);

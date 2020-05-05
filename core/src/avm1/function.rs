@@ -13,6 +13,7 @@ use enumset::EnumSet;
 use gc_arena::{Collect, CollectionContext, GcCell, MutationContext};
 use std::fmt;
 use swf::avm1::types::FunctionParam;
+use crate::backend::Backends;
 
 /// Represents a function defined in Ruffle's code.
 ///
@@ -28,18 +29,18 @@ use swf::avm1::types::FunctionParam;
 /// resolve on the AVM stack, as if you had called a non-native function. If
 /// your function yields `None`, you must ensure that the top-most activation
 /// in the AVM1 runtime will return with the value of this function.
-pub type NativeFunction<'gc> = fn(
-    &mut Avm1<'gc>,
-    &mut UpdateContext<'_, 'gc, '_>,
-    Object<'gc>,
-    &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error>;
+pub type NativeFunction<'gc, B: Backends> = fn(
+    &mut Avm1<'gc, B>,
+    &mut UpdateContext<'_, 'gc, '_, B>,
+    Object<'gc, B>,
+    &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error>;
 
 /// Represents a function defined in the AVM1 runtime, either through
 /// `DefineFunction` or `DefineFunction2`.
 #[derive(Debug, Clone, Collect)]
 #[collect(no_drop)]
-pub struct Avm1Function<'gc> {
+pub struct Avm1Function<'gc, B: Backends> {
     /// The file format version of the SWF that generated this function.
     swf_version: u8,
 
@@ -68,17 +69,17 @@ pub struct Avm1Function<'gc> {
     params: Vec<(Option<u8>, String)>,
 
     /// The scope the function was born into.
-    scope: GcCell<'gc, Scope<'gc>>,
+    scope: GcCell<'gc, Scope<'gc, B>>,
 
     /// The constant pool the function executes with.
     constant_pool: GcCell<'gc, Vec<String>>,
 
     /// The base movie clip that the function was defined on.
     /// This is the movie clip that contains the bytecode.
-    base_clip: DisplayObject<'gc>,
+    base_clip: DisplayObject<'gc, B>,
 }
 
-impl<'gc> Avm1Function<'gc> {
+impl<'gc, B: Backends> Avm1Function<'gc, B> {
     /// Construct a function from a DefineFunction action.
     ///
     /// Parameters not specified in DefineFunction are filled with reasonable
@@ -88,9 +89,9 @@ impl<'gc> Avm1Function<'gc> {
         actions: SwfSlice,
         name: &str,
         params: &[&str],
-        scope: GcCell<'gc, Scope<'gc>>,
+        scope: GcCell<'gc, Scope<'gc, B>>,
         constant_pool: GcCell<'gc, Vec<String>>,
-        base_clip: DisplayObject<'gc>,
+        base_clip: DisplayObject<'gc, B>,
     ) -> Self {
         let name = match name {
             "" => None,
@@ -123,9 +124,9 @@ impl<'gc> Avm1Function<'gc> {
         swf_version: u8,
         actions: SwfSlice,
         swf_function: &swf::avm1::types::Function,
-        scope: GcCell<'gc, Scope<'gc>>,
+        scope: GcCell<'gc, Scope<'gc, B>>,
         constant_pool: GcCell<'gc, Vec<String>>,
-        base_clip: DisplayObject<'gc>,
+        base_clip: DisplayObject<'gc, B>,
     ) -> Self {
         let name = match swf_function.name {
             "" => None,
@@ -170,7 +171,7 @@ impl<'gc> Avm1Function<'gc> {
         self.data.clone()
     }
 
-    pub fn scope(&self) -> GcCell<'gc, Scope<'gc>> {
+    pub fn scope(&self) -> GcCell<'gc, Scope<'gc, B>> {
         self.scope
     }
 
@@ -182,16 +183,16 @@ impl<'gc> Avm1Function<'gc> {
 /// Represents a function that can be defined in the Ruffle runtime or by the
 /// AVM1 bytecode itself.
 #[derive(Clone)]
-pub enum Executable<'gc> {
+pub enum Executable<'gc, B: Backends> {
     /// A function provided by the Ruffle runtime and implemented in Rust.
-    Native(NativeFunction<'gc>),
+    Native(NativeFunction<'gc, B>),
 
     /// ActionScript data defined by a previous `DefineFunction` or
     /// `DefineFunction2` action.
-    Action(Avm1Function<'gc>),
+    Action(Avm1Function<'gc, B>),
 }
 
-unsafe impl<'gc> Collect for Executable<'gc> {
+unsafe impl<'gc, B: Backends> Collect for Executable<'gc, B> {
     fn trace(&self, cc: CollectionContext) {
         match self {
             Self::Native(_) => {}
@@ -200,7 +201,7 @@ unsafe impl<'gc> Collect for Executable<'gc> {
     }
 }
 
-impl fmt::Debug for Executable<'_> {
+impl<B: Backends> fmt::Debug for Executable<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Executable::Native(nf) => f
@@ -212,7 +213,7 @@ impl fmt::Debug for Executable<'_> {
     }
 }
 
-impl<'gc> Executable<'gc> {
+impl<'gc, B: Backends> Executable<'gc, B> {
     /// Execute the given code.
     ///
     /// Execution is not guaranteed to have completed when this function
@@ -221,12 +222,12 @@ impl<'gc> Executable<'gc> {
     /// create a new stack frame and execute the action data yourself.
     pub fn exec(
         &self,
-        avm: &mut Avm1<'gc>,
-        ac: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-        base_proto: Option<Object<'gc>>,
-        args: &[Value<'gc>],
-    ) -> Result<ReturnValue<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        ac: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+        base_proto: Option<Object<'gc, B>>,
+        args: &[Value<'gc, B>],
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         match self {
             Executable::Native(nf) => nf(avm, ac, this, args),
             Executable::Action(af) => {
@@ -254,7 +255,7 @@ impl<'gc> Executable<'gc> {
                 }
 
                 let argcell = arguments.into();
-                let super_object: Option<Object<'gc>> = if !af.suppress_super {
+                let super_object: Option<Object<'gc, B>> = if !af.suppress_super {
                     Some(
                         SuperObject::from_this_and_base_proto(
                             this,
@@ -363,14 +364,14 @@ impl<'gc> Executable<'gc> {
     }
 }
 
-impl<'gc> From<NativeFunction<'gc>> for Executable<'gc> {
-    fn from(nf: NativeFunction<'gc>) -> Self {
+impl<'gc, B: Backends> From<NativeFunction<'gc, B>> for Executable<'gc, B> {
+    fn from(nf: NativeFunction<'gc, B>) -> Self {
         Executable::Native(nf)
     }
 }
 
-impl<'gc> From<Avm1Function<'gc>> for Executable<'gc> {
-    fn from(af: Avm1Function<'gc>) -> Self {
+impl<'gc, B: Backends> From<Avm1Function<'gc, B>> for Executable<'gc, B> {
+    fn from(af: Avm1Function<'gc, B>) -> Self {
         Executable::Action(af)
     }
 }
@@ -380,31 +381,31 @@ pub const TYPE_OF_FUNCTION: &str = "function";
 /// Represents an `Object` that holds executable code.
 #[derive(Debug, Clone, Collect, Copy)]
 #[collect(no_drop)]
-pub struct FunctionObject<'gc> {
+pub struct FunctionObject<'gc, B: Backends> {
     /// The script object base.
     ///
     /// TODO: Can we move the object's data into our own struct?
-    base: ScriptObject<'gc>,
+    base: ScriptObject<'gc, B>,
 
-    data: GcCell<'gc, FunctionObjectData<'gc>>,
+    data: GcCell<'gc, FunctionObjectData<'gc, B>>,
 }
 
 #[derive(Debug, Clone, Collect)]
 #[collect(no_drop)]
-struct FunctionObjectData<'gc> {
+struct FunctionObjectData<'gc, B: Backends> {
     /// The code that will be invoked when this object is called.
-    function: Option<Executable<'gc>>,
+    function: Option<Executable<'gc, B>>,
 
     /// The value to be returned by `toString` and `valueOf`.
-    primitive: Value<'gc>,
+    primitive: Value<'gc, B>,
 }
 
-impl<'gc> FunctionObject<'gc> {
+impl<'gc, B: Backends> FunctionObject<'gc, B> {
     /// Construct a function sans prototype.
     pub fn bare_function(
         gc_context: MutationContext<'gc, '_>,
-        function: impl Into<Executable<'gc>>,
-        fn_proto: Option<Object<'gc>>,
+        function: impl Into<Executable<'gc, B>>,
+        fn_proto: Option<Object<'gc, B>>,
     ) -> Self {
         let base = ScriptObject::object(gc_context, fn_proto);
 
@@ -430,10 +431,10 @@ impl<'gc> FunctionObject<'gc> {
     /// provided, the function and it's prototype will be linked to each other.
     pub fn function(
         context: MutationContext<'gc, '_>,
-        function: impl Into<Executable<'gc>>,
-        fn_proto: Option<Object<'gc>>,
-        prototype: Option<Object<'gc>>,
-    ) -> Object<'gc> {
+        function: impl Into<Executable<'gc, B>>,
+        fn_proto: Option<Object<'gc, B>>,
+        prototype: Option<Object<'gc, B>>,
+    ) -> Object<'gc, B> {
         let function = Self::bare_function(context, function, fn_proto).into();
 
         if let Some(p) = prototype {
@@ -450,35 +451,35 @@ impl<'gc> FunctionObject<'gc> {
     }
 }
 
-impl<'gc> TObject<'gc> for FunctionObject<'gc> {
+impl<'gc, B: Backends> TObject<'gc, B> for FunctionObject<'gc, B> {
     fn get_local(
         &self,
         name: &str,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-    ) -> Result<ReturnValue<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         self.base.get_local(name, avm, context, this)
     }
 
     fn set(
         &self,
         name: &str,
-        value: Value<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        value: Value<'gc, B>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         self.base.set(name, value, avm, context)
     }
 
     fn call(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-        base_proto: Option<Object<'gc>>,
-        args: &[Value<'gc>],
-    ) -> Result<ReturnValue<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+        base_proto: Option<Object<'gc, B>>,
+        args: &[Value<'gc, B>],
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         if let Some(exec) = self.as_executable() {
             exec.exec(avm, context, this, base_proto, args)
         } else {
@@ -489,22 +490,22 @@ impl<'gc> TObject<'gc> for FunctionObject<'gc> {
     fn call_setter(
         &self,
         name: &str,
-        value: Value<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-    ) -> Result<ReturnValue<'gc>, Error> {
+        value: Value<'gc, B>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         self.base.call_setter(name, value, avm, context, this)
     }
 
     #[allow(clippy::new_ret_no_self)]
     fn new(
         &self,
-        _avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        prototype: Object<'gc>,
-        _args: &[Value<'gc>],
-    ) -> Result<Object<'gc>, Error> {
+        _avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        prototype: Object<'gc, B>,
+        _args: &[Value<'gc, B>],
+    ) -> Result<Object<'gc, B>, Error> {
         let base = ScriptObject::object(context.gc_context, Some(prototype));
         let fn_object = FunctionObject {
             base,
@@ -522,18 +523,18 @@ impl<'gc> TObject<'gc> for FunctionObject<'gc> {
 
     fn delete(
         &self,
-        avm: &mut Avm1<'gc>,
+        avm: &mut Avm1<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
     ) -> bool {
         self.base.delete(avm, gc_context, name)
     }
 
-    fn proto(&self) -> Option<Object<'gc>> {
+    fn proto(&self) -> Option<Object<'gc, B>> {
         self.base.proto()
     }
 
-    fn set_proto(&self, gc_context: MutationContext<'gc, '_>, prototype: Option<Object<'gc>>) {
+    fn set_proto(&self, gc_context: MutationContext<'gc, '_>, prototype: Option<Object<'gc, B>>) {
         self.base.set_proto(gc_context, prototype);
     }
 
@@ -541,7 +542,7 @@ impl<'gc> TObject<'gc> for FunctionObject<'gc> {
         &self,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
-        value: Value<'gc>,
+        value: Value<'gc, B>,
         attributes: EnumSet<Attribute>,
     ) {
         self.base.define_value(gc_context, name, value, attributes)
@@ -562,8 +563,8 @@ impl<'gc> TObject<'gc> for FunctionObject<'gc> {
         &self,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
-        get: Executable<'gc>,
-        set: Option<Executable<'gc>>,
+        get: Executable<'gc, B>,
+        set: Option<Executable<'gc, B>>,
         attributes: EnumSet<Attribute>,
     ) {
         self.base
@@ -572,11 +573,11 @@ impl<'gc> TObject<'gc> for FunctionObject<'gc> {
 
     fn add_property_with_case(
         &self,
-        avm: &mut Avm1<'gc>,
+        avm: &mut Avm1<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
-        get: Executable<'gc>,
-        set: Option<Executable<'gc>>,
+        get: Executable<'gc, B>,
+        set: Option<Executable<'gc, B>>,
         attributes: EnumSet<Attribute>,
     ) {
         self.base
@@ -585,8 +586,8 @@ impl<'gc> TObject<'gc> for FunctionObject<'gc> {
 
     fn has_property(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         self.base.has_property(avm, context, name)
@@ -594,8 +595,8 @@ impl<'gc> TObject<'gc> for FunctionObject<'gc> {
 
     fn has_own_property(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         self.base.has_own_property(avm, context, name)
@@ -603,22 +604,22 @@ impl<'gc> TObject<'gc> for FunctionObject<'gc> {
 
     fn has_own_virtual(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         self.base.has_own_virtual(avm, context, name)
     }
 
-    fn is_property_overwritable(&self, avm: &mut Avm1<'gc>, name: &str) -> bool {
+    fn is_property_overwritable(&self, avm: &mut Avm1<'gc, B>, name: &str) -> bool {
         self.base.is_property_overwritable(avm, name)
     }
 
-    fn is_property_enumerable(&self, avm: &mut Avm1<'gc>, name: &str) -> bool {
+    fn is_property_enumerable(&self, avm: &mut Avm1<'gc, B>, name: &str) -> bool {
         self.base.is_property_enumerable(avm, name)
     }
 
-    fn get_keys(&self, avm: &mut Avm1<'gc>) -> Vec<String> {
+    fn get_keys(&self, avm: &mut Avm1<'gc, B>) -> Vec<String> {
         self.base.get_keys(avm)
     }
 
@@ -630,7 +631,7 @@ impl<'gc> TObject<'gc> for FunctionObject<'gc> {
         TYPE_OF_FUNCTION
     }
 
-    fn interfaces(&self) -> Vec<Object<'gc>> {
+    fn interfaces(&self) -> Vec<Object<'gc, B>> {
         self.base.interfaces()
     }
 
@@ -638,16 +639,16 @@ impl<'gc> TObject<'gc> for FunctionObject<'gc> {
     fn set_interfaces(
         &mut self,
         gc_context: MutationContext<'gc, '_>,
-        iface_list: Vec<Object<'gc>>,
+        iface_list: Vec<Object<'gc, B>>,
     ) {
         self.base.set_interfaces(gc_context, iface_list)
     }
 
-    fn as_script_object(&self) -> Option<ScriptObject<'gc>> {
+    fn as_script_object(&self) -> Option<ScriptObject<'gc, B>> {
         Some(self.base)
     }
 
-    fn as_executable(&self) -> Option<Executable<'gc>> {
+    fn as_executable(&self) -> Option<Executable<'gc, B>> {
         self.data.read().function.clone()
     }
 
@@ -663,18 +664,18 @@ impl<'gc> TObject<'gc> for FunctionObject<'gc> {
         self.base.set_length(gc_context, new_length)
     }
 
-    fn array(&self) -> Vec<Value<'gc>> {
+    fn array(&self) -> Vec<Value<'gc, B>> {
         self.base.array()
     }
 
-    fn array_element(&self, index: usize) -> Value<'gc> {
+    fn array_element(&self, index: usize) -> Value<'gc, B> {
         self.base.array_element(index)
     }
 
     fn set_array_element(
         &self,
         index: usize,
-        value: Value<'gc>,
+        value: Value<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
     ) -> usize {
         self.base.set_array_element(index, value, gc_context)

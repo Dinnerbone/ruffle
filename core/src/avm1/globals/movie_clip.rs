@@ -10,14 +10,15 @@ use crate::prelude::*;
 use crate::tag_utils::SwfSlice;
 use gc_arena::MutationContext;
 use swf::Twips;
+use crate::backend::Backends;
 
 /// Implements `MovieClip`
-pub fn constructor<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _action_context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn constructor<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _action_context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     Ok(Value::Undefined.into())
 }
 
@@ -26,14 +27,14 @@ macro_rules! with_movie_clip {
         $(
             $object.force_set_function(
                 $name,
-                |avm, context: &mut UpdateContext<'_, 'gc, '_>, this, args| -> Result<ReturnValue<'gc>, Error> {
+                |avm, context: &mut UpdateContext<'_, 'gc, '_, B>, this, args| -> Result<ReturnValue<'gc, B>, Error> {
                     if let Some(display_object) = this.as_display_object() {
                         if let Some(movie_clip) = display_object.as_movie_clip() {
                             return $fn(movie_clip, avm, context, args);
                         }
                     }
                     Ok(Value::Undefined.into())
-                } as crate::avm1::function::NativeFunction<'gc>,
+                } as crate::avm1::function::NativeFunction<'gc, B>,
                 $gc_context,
                 DontDelete | ReadOnly | DontEnum,
                 $fn_proto
@@ -43,12 +44,12 @@ macro_rules! with_movie_clip {
 }
 
 #[allow(clippy::comparison_chain)]
-pub fn hit_test<'gc>(
-    movie_clip: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn hit_test<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if args.len() > 1 {
         let x = args.get(0).unwrap().as_number(avm, context)?;
         let y = args.get(1).unwrap().as_number(avm, context)?;
@@ -85,11 +86,11 @@ pub fn hit_test<'gc>(
     Ok(false.into())
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let mut object = ScriptObject::object(gc_context, Some(proto));
 
     display_object::define_display_object_proto(gc_context, object, fn_proto);
@@ -129,12 +130,12 @@ pub fn create_proto<'gc>(
     object.into()
 }
 
-fn attach_movie<'gc>(
-    mut movie_clip: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn attach_movie<'gc, B: Backends>(
+    mut movie_clip: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let (export_name, new_instance_name, depth) = match &args[0..3] {
         [export_name, new_instance_name, depth] => (
             export_name.clone().coerce_to_string(avm, context)?,
@@ -178,12 +179,12 @@ fn attach_movie<'gc>(
     }
 }
 
-fn create_empty_movie_clip<'gc>(
-    mut movie_clip: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn create_empty_movie_clip<'gc, B: Backends>(
+    mut movie_clip: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let (new_instance_name, depth) = match &args[0..2] {
         [new_instance_name, depth] => (
             new_instance_name.clone().coerce_to_string(avm, context)?,
@@ -211,12 +212,12 @@ fn create_empty_movie_clip<'gc>(
     Ok(new_clip.object().into())
 }
 
-fn create_text_field<'gc>(
-    mut movie_clip: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn create_text_field<'gc, B: Backends>(
+    mut movie_clip: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let movie = avm.base_clip().movie().unwrap();
     let instance_name = args
         .get(0)
@@ -249,7 +250,7 @@ fn create_text_field<'gc>(
         .unwrap_or(Value::Undefined)
         .as_number(avm, context)?;
 
-    let mut text_field: DisplayObject<'gc> =
+    let mut text_field: DisplayObject<'gc, B> =
         EditText::new(context, movie, x, y, width, height).into();
     text_field.set_name(context.gc_context, &instance_name);
     movie_clip.add_child_from_avm(context, text_field, depth as Depth);
@@ -263,23 +264,23 @@ fn create_text_field<'gc>(
     }
 }
 
-fn duplicate_movie_clip<'gc>(
-    movie_clip: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn duplicate_movie_clip<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     // duplicateMovieClip method uses biased depth compared to CloneSprite
     duplicate_movie_clip_with_bias(movie_clip, avm, context, args, AVM_DEPTH_BIAS)
 }
 
-pub fn duplicate_movie_clip_with_bias<'gc>(
-    movie_clip: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    args: &[Value<'gc>],
+pub fn duplicate_movie_clip_with_bias<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
     depth_bias: i32,
-) -> Result<ReturnValue<'gc>, Error> {
+) -> Result<ReturnValue<'gc, B>, Error> {
     let (new_instance_name, depth) = match &args[0..2] {
         [new_instance_name, depth] => (
             new_instance_name.clone().coerce_to_string(avm, context)?,
@@ -336,32 +337,32 @@ pub fn duplicate_movie_clip_with_bias<'gc>(
     }
 }
 
-fn get_bytes_loaded<'gc>(
-    _movie_clip: MovieClip<'gc>,
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn get_bytes_loaded<'gc, B: Backends>(
+    _movie_clip: MovieClip<'gc, B>,
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     // TODO find a correct value
     Ok(1.0.into())
 }
 
-fn get_bytes_total<'gc>(
-    _movie_clip: MovieClip<'gc>,
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn get_bytes_total<'gc, B: Backends>(
+    _movie_clip: MovieClip<'gc, B>,
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     // TODO find a correct value
     Ok(1.0.into())
 }
 
-fn get_next_highest_depth<'gc>(
-    movie_clip: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn get_next_highest_depth<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if avm.current_swf_version() >= 7 {
         let depth = std::cmp::max(
             movie_clip
@@ -376,32 +377,32 @@ fn get_next_highest_depth<'gc>(
     }
 }
 
-fn goto_and_play<'gc>(
-    movie_clip: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn goto_and_play<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     goto_frame(movie_clip, avm, context, args, false, 0)
 }
 
-fn goto_and_stop<'gc>(
-    movie_clip: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn goto_and_stop<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     goto_frame(movie_clip, avm, context, args, true, 0)
 }
 
-pub fn goto_frame<'gc>(
-    movie_clip: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    args: &[Value<'gc>],
+pub fn goto_frame<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
     stop: bool,
     scene_offset: u16,
-) -> Result<ReturnValue<'gc>, Error> {
+) -> Result<ReturnValue<'gc, B>, Error> {
     match args.get(0).cloned().unwrap_or(Value::Undefined) {
         // Goto only runs if n is an integer
         Value::Number(n) if n.fract() == 0.0 => {
@@ -431,51 +432,51 @@ pub fn goto_frame<'gc>(
     Ok(Value::Undefined.into())
 }
 
-fn next_frame<'gc>(
-    movie_clip: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn next_frame<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     movie_clip.next_frame(avm, context);
     Ok(Value::Undefined.into())
 }
 
-fn play<'gc>(
-    movie_clip: MovieClip<'gc>,
-    _avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn play<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    _avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     movie_clip.play(context);
     Ok(Value::Undefined.into())
 }
 
-fn prev_frame<'gc>(
-    movie_clip: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn prev_frame<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     movie_clip.prev_frame(avm, context);
     Ok(Value::Undefined.into())
 }
 
-fn remove_movie_clip<'gc>(
-    movie_clip: MovieClip<'gc>,
-    _avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn remove_movie_clip<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    _avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     // removeMovieClip method uses biased depth compared to RemoveSprite
     remove_movie_clip_with_bias(movie_clip, context, AVM_DEPTH_BIAS)
 }
 
-pub fn remove_movie_clip_with_bias<'gc>(
-    movie_clip: MovieClip<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+pub fn remove_movie_clip_with_bias<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
     depth_bias: i32,
-) -> Result<ReturnValue<'gc>, Error> {
+) -> Result<ReturnValue<'gc, B>, Error> {
     let depth = movie_clip.depth().wrapping_add(depth_bias);
     // Can only remove positive depths (when offset by the AVM depth bias).
     // Generally this prevents you from removing non-dynamically created clips,
@@ -494,43 +495,43 @@ pub fn remove_movie_clip_with_bias<'gc>(
     Ok(Value::Undefined.into())
 }
 
-fn start_drag<'gc>(
-    movie_clip: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn start_drag<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     crate::avm1::start_drag(movie_clip.into(), avm, context, args);
     Ok(Value::Undefined.into())
 }
 
-fn stop<'gc>(
-    movie_clip: MovieClip<'gc>,
-    _avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn stop<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    _avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     movie_clip.stop(context);
     Ok(Value::Undefined.into())
 }
 
-fn stop_drag<'gc>(
-    _movie_clip: MovieClip<'gc>,
-    _avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn stop_drag<'gc, B: Backends>(
+    _movie_clip: MovieClip<'gc, B>,
+    _avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     // It doesn't matter which clip we call this on; it simply stops any active drag.
     *context.drag_object = None;
     Ok(Value::Undefined.into())
 }
 
-fn swap_depths<'gc>(
-    movie_clip: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn swap_depths<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let arg = args.get(0).cloned().unwrap_or(Value::Undefined);
 
     let parent = if let Some(parent) = movie_clip.parent().and_then(|o| o.as_movie_clip()) {
@@ -570,21 +571,21 @@ fn swap_depths<'gc>(
     Ok(Value::Undefined.into())
 }
 
-fn to_string<'gc>(
-    movie_clip: MovieClip<'gc>,
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn to_string<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     Ok(movie_clip.path().into())
 }
 
-fn local_to_global<'gc>(
-    movie_clip: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn local_to_global<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Value::Object(point) = args.get(0).unwrap_or(&Value::Undefined) {
         // localToGlobal does no coercion; it fails if the properties are not numbers.
         // It does not search the prototype chain.
@@ -611,12 +612,12 @@ fn local_to_global<'gc>(
     Ok(Value::Undefined.into())
 }
 
-fn get_bounds<'gc>(
-    movie_clip: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn get_bounds<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let target = match args.get(0) {
         Some(Value::String(s)) if s.is_empty() => None,
         Some(Value::Object(o)) if o.as_display_object().is_some() => o.as_display_object(),
@@ -654,23 +655,23 @@ fn get_bounds<'gc>(
     }
 }
 
-fn get_rect<'gc>(
-    movie_clip: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn get_rect<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     // TODO: This should get the bounds ignoring strokes. Always equal to or smaller than getBounds.
     // Just defer to getBounds for now. Will have to store edge_bounds vs. shape_bounds in Graphic.
     get_bounds(movie_clip, avm, context, args)
 }
 
-fn global_to_local<'gc>(
-    movie_clip: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn global_to_local<'gc, B: Backends>(
+    movie_clip: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Value::Object(point) = args.get(0).unwrap_or(&Value::Undefined) {
         // globalToLocal does no coercion; it fails if the properties are not numbers.
         // It does not search the prototype chain.
@@ -697,12 +698,12 @@ fn global_to_local<'gc>(
     Ok(Value::Undefined.into())
 }
 
-fn load_movie<'gc>(
-    target: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn load_movie<'gc, B: Backends>(
+    target: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let url = args
         .get(0)
         .cloned()
@@ -724,12 +725,12 @@ fn load_movie<'gc>(
     Ok(Value::Undefined.into())
 }
 
-fn load_variables<'gc>(
-    target: MovieClip<'gc>,
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn load_variables<'gc, B: Backends>(
+    target: MovieClip<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let url = args
         .get(0)
         .cloned()
@@ -750,12 +751,12 @@ fn load_variables<'gc>(
     Ok(Value::Undefined.into())
 }
 
-fn unload_movie<'gc>(
-    mut target: MovieClip<'gc>,
-    _avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn unload_movie<'gc, B: Backends>(
+    mut target: MovieClip<'gc, B>,
+    _avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     target.unload(context);
     target.replace_with_movie(context.gc_context, None);
 

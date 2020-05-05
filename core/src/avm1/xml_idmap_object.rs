@@ -9,6 +9,7 @@ use crate::xml::{XMLDocument, XMLNode};
 use enumset::EnumSet;
 use gc_arena::{Collect, MutationContext};
 use std::fmt;
+use crate::backend::Backends;
 
 /// An Object that is inherently tied to an XML document's ID map.
 ///
@@ -17,32 +18,32 @@ use std::fmt;
 /// document.
 #[derive(Clone, Copy, Collect)]
 #[collect(no_drop)]
-pub struct XMLIDMapObject<'gc>(ScriptObject<'gc>, XMLDocument<'gc>);
+pub struct XMLIDMapObject<'gc, B: Backends>(ScriptObject<'gc, B>, XMLDocument<'gc, B>);
 
-impl<'gc> XMLIDMapObject<'gc> {
+impl<'gc, B: Backends> XMLIDMapObject<'gc, B> {
     /// Construct an XMLIDMapObject for an already existing node's
     /// attributes.
     pub fn from_xml_document(
         gc_context: MutationContext<'gc, '_>,
-        xml_doc: XMLDocument<'gc>,
-    ) -> Object<'gc> {
+        xml_doc: XMLDocument<'gc, B>,
+    ) -> Object<'gc, B> {
         XMLIDMapObject(ScriptObject::object(gc_context, None), xml_doc).into()
     }
 
-    fn base(&self) -> ScriptObject<'gc> {
+    fn base(&self) -> ScriptObject<'gc, B> {
         match self {
             XMLIDMapObject(base, ..) => *base,
         }
     }
 
-    fn document(&self) -> XMLDocument<'gc> {
+    fn document(&self) -> XMLDocument<'gc, B> {
         match self {
             XMLIDMapObject(_, document) => *document,
         }
     }
 }
 
-impl fmt::Debug for XMLIDMapObject<'_> {
+impl<B: Backends> fmt::Debug for XMLIDMapObject<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             XMLIDMapObject(base, document) => f
@@ -54,14 +55,14 @@ impl fmt::Debug for XMLIDMapObject<'_> {
     }
 }
 
-impl<'gc> TObject<'gc> for XMLIDMapObject<'gc> {
+impl<'gc, B: Backends> TObject<'gc, B> for XMLIDMapObject<'gc, B> {
     fn get_local(
         &self,
         name: &str,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-    ) -> Result<ReturnValue<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         if let Some(mut node) = self.document().get_node_by_id(name) {
             Ok(node
                 .script_object(context.gc_context, Some(avm.prototypes().xml_node))
@@ -74,50 +75,50 @@ impl<'gc> TObject<'gc> for XMLIDMapObject<'gc> {
     fn set(
         &self,
         name: &str,
-        value: Value<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        value: Value<'gc, B>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         self.base().set(name, value, avm, context)
     }
 
     fn call(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-        base_proto: Option<Object<'gc>>,
-        args: &[Value<'gc>],
-    ) -> Result<ReturnValue<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+        base_proto: Option<Object<'gc, B>>,
+        args: &[Value<'gc, B>],
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         self.base().call(avm, context, this, base_proto, args)
     }
 
     fn call_setter(
         &self,
         name: &str,
-        value: Value<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-    ) -> Result<ReturnValue<'gc>, Error> {
+        value: Value<'gc, B>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         self.base().call_setter(name, value, avm, context, this)
     }
 
     #[allow(clippy::new_ret_no_self)]
     fn new(
         &self,
-        _avm: &mut Avm1<'gc>,
-        _context: &mut UpdateContext<'_, 'gc, '_>,
-        _this: Object<'gc>,
-        _args: &[Value<'gc>],
-    ) -> Result<Object<'gc>, Error> {
+        _avm: &mut Avm1<'gc, B>,
+        _context: &mut UpdateContext<'_, 'gc, '_, B>,
+        _this: Object<'gc, B>,
+        _args: &[Value<'gc, B>],
+    ) -> Result<Object<'gc, B>, Error> {
         //TODO: `new xmlnode.attributes()` returns undefined, not an object
         Err("Cannot create new XML Attributes object".into())
     }
 
     fn delete(
         &self,
-        avm: &mut Avm1<'gc>,
+        avm: &mut Avm1<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
     ) -> bool {
@@ -128,8 +129,8 @@ impl<'gc> TObject<'gc> for XMLIDMapObject<'gc> {
         &self,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
-        get: Executable<'gc>,
-        set: Option<Executable<'gc>>,
+        get: Executable<'gc, B>,
+        set: Option<Executable<'gc, B>>,
         attributes: EnumSet<Attribute>,
     ) {
         self.base()
@@ -138,11 +139,11 @@ impl<'gc> TObject<'gc> for XMLIDMapObject<'gc> {
 
     fn add_property_with_case(
         &self,
-        avm: &mut Avm1<'gc>,
+        avm: &mut Avm1<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
-        get: Executable<'gc>,
-        set: Option<Executable<'gc>>,
+        get: Executable<'gc, B>,
+        set: Option<Executable<'gc, B>>,
         attributes: EnumSet<Attribute>,
     ) {
         self.base()
@@ -153,7 +154,7 @@ impl<'gc> TObject<'gc> for XMLIDMapObject<'gc> {
         &self,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
-        value: Value<'gc>,
+        value: Value<'gc, B>,
         attributes: EnumSet<Attribute>,
     ) {
         self.base()
@@ -171,18 +172,18 @@ impl<'gc> TObject<'gc> for XMLIDMapObject<'gc> {
             .set_attributes(gc_context, name, set_attributes, clear_attributes)
     }
 
-    fn proto(&self) -> Option<Object<'gc>> {
+    fn proto(&self) -> Option<Object<'gc, B>> {
         self.base().proto()
     }
 
-    fn set_proto(&self, gc_context: MutationContext<'gc, '_>, prototype: Option<Object<'gc>>) {
+    fn set_proto(&self, gc_context: MutationContext<'gc, '_>, prototype: Option<Object<'gc, B>>) {
         self.base().set_proto(gc_context, prototype);
     }
 
     fn has_property(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         self.base().has_property(avm, context, name)
@@ -190,8 +191,8 @@ impl<'gc> TObject<'gc> for XMLIDMapObject<'gc> {
 
     fn has_own_property(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         self.document().get_node_by_id(name).is_some()
@@ -200,22 +201,22 @@ impl<'gc> TObject<'gc> for XMLIDMapObject<'gc> {
 
     fn has_own_virtual(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         self.base().has_own_virtual(avm, context, name)
     }
 
-    fn is_property_overwritable(&self, avm: &mut Avm1<'gc>, name: &str) -> bool {
+    fn is_property_overwritable(&self, avm: &mut Avm1<'gc, B>, name: &str) -> bool {
         self.base().is_property_overwritable(avm, name)
     }
 
-    fn is_property_enumerable(&self, avm: &mut Avm1<'gc>, name: &str) -> bool {
+    fn is_property_enumerable(&self, avm: &mut Avm1<'gc, B>, name: &str) -> bool {
         self.base().is_property_enumerable(avm, name)
     }
 
-    fn get_keys(&self, avm: &mut Avm1<'gc>) -> Vec<String> {
+    fn get_keys(&self, avm: &mut Avm1<'gc, B>) -> Vec<String> {
         let mut keys = self.base().get_keys(avm);
         keys.extend(self.document().get_node_ids().into_iter());
         keys
@@ -229,19 +230,19 @@ impl<'gc> TObject<'gc> for XMLIDMapObject<'gc> {
         self.base().type_of()
     }
 
-    fn interfaces(&self) -> Vec<Object<'gc>> {
+    fn interfaces(&self) -> Vec<Object<'gc, B>> {
         self.base().interfaces()
     }
 
-    fn set_interfaces(&mut self, context: MutationContext<'gc, '_>, iface_list: Vec<Object<'gc>>) {
+    fn set_interfaces(&mut self, context: MutationContext<'gc, '_>, iface_list: Vec<Object<'gc, B>>) {
         self.base().set_interfaces(context, iface_list)
     }
 
-    fn as_script_object(&self) -> Option<ScriptObject<'gc>> {
+    fn as_script_object(&self) -> Option<ScriptObject<'gc, B>> {
         Some(self.base())
     }
 
-    fn as_xml_node(&self) -> Option<XMLNode<'gc>> {
+    fn as_xml_node(&self) -> Option<XMLNode<'gc, B>> {
         None
     }
 
@@ -253,7 +254,7 @@ impl<'gc> TObject<'gc> for XMLIDMapObject<'gc> {
         self.base().length()
     }
 
-    fn array(&self) -> Vec<Value<'gc>> {
+    fn array(&self) -> Vec<Value<'gc, B>> {
         self.base().array()
     }
 
@@ -261,14 +262,14 @@ impl<'gc> TObject<'gc> for XMLIDMapObject<'gc> {
         self.base().set_length(gc_context, length)
     }
 
-    fn array_element(&self, index: usize) -> Value<'gc> {
+    fn array_element(&self, index: usize) -> Value<'gc, B> {
         self.base().array_element(index)
     }
 
     fn set_array_element(
         &self,
         index: usize,
-        value: Value<'gc>,
+        value: Value<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
     ) -> usize {
         self.base().set_array_element(index, value, gc_context)

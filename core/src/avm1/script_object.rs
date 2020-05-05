@@ -6,29 +6,30 @@ use crate::property_map::{Entry, PropertyMap};
 use core::fmt;
 use enumset::EnumSet;
 use gc_arena::{Collect, GcCell, MutationContext};
+use crate::backend::Backends;
 
 pub const TYPE_OF_OBJECT: &str = "object";
 
 #[derive(Debug, Clone, Collect)]
 #[collect(no_drop)]
-pub enum ArrayStorage<'gc> {
-    Vector(Vec<Value<'gc>>),
+pub enum ArrayStorage<'gc, B: Backends> {
+    Vector(Vec<Value<'gc, B>>),
     Properties { length: usize },
 }
 
 #[derive(Debug, Copy, Clone, Collect)]
 #[collect(no_drop)]
-pub struct ScriptObject<'gc>(GcCell<'gc, ScriptObjectData<'gc>>);
+pub struct ScriptObject<'gc, B: Backends>(GcCell<'gc, ScriptObjectData<'gc, B>>);
 
-pub struct ScriptObjectData<'gc> {
-    prototype: Option<Object<'gc>>,
-    values: PropertyMap<Property<'gc>>,
-    interfaces: Vec<Object<'gc>>,
+pub struct ScriptObjectData<'gc, B: Backends> {
+    prototype: Option<Object<'gc, B>>,
+    values: PropertyMap<Property<'gc, B>>,
+    interfaces: Vec<Object<'gc, B>>,
     type_of: &'static str,
-    array: ArrayStorage<'gc>,
+    array: ArrayStorage<'gc, B>,
 }
 
-unsafe impl<'gc> Collect for ScriptObjectData<'gc> {
+unsafe impl<'gc, B: Backends> Collect for ScriptObjectData<'gc, B> {
     fn trace(&self, cc: gc_arena::CollectionContext) {
         self.prototype.trace(cc);
         self.values.trace(cc);
@@ -37,7 +38,7 @@ unsafe impl<'gc> Collect for ScriptObjectData<'gc> {
     }
 }
 
-impl fmt::Debug for ScriptObjectData<'_> {
+impl<B: Backends> fmt::Debug for ScriptObjectData<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Object")
             .field("prototype", &self.prototype)
@@ -47,11 +48,11 @@ impl fmt::Debug for ScriptObjectData<'_> {
     }
 }
 
-impl<'gc> ScriptObject<'gc> {
+impl<'gc, B: Backends> ScriptObject<'gc, B> {
     pub fn object(
         gc_context: MutationContext<'gc, '_>,
-        proto: Option<Object<'gc>>,
-    ) -> ScriptObject<'gc> {
+        proto: Option<Object<'gc, B>>,
+    ) -> ScriptObject<'gc, B> {
         ScriptObject(GcCell::allocate(
             gc_context,
             ScriptObjectData {
@@ -66,8 +67,8 @@ impl<'gc> ScriptObject<'gc> {
 
     pub fn array(
         gc_context: MutationContext<'gc, '_>,
-        proto: Option<Object<'gc>>,
-    ) -> ScriptObject<'gc> {
+        proto: Option<Object<'gc, B>>,
+    ) -> ScriptObject<'gc, B> {
         let object = ScriptObject(GcCell::allocate(
             gc_context,
             ScriptObjectData {
@@ -85,8 +86,8 @@ impl<'gc> ScriptObject<'gc> {
     /// Constructs and allocates an empty but normal object in one go.
     pub fn object_cell(
         gc_context: MutationContext<'gc, '_>,
-        proto: Option<Object<'gc>>,
-    ) -> Object<'gc> {
+        proto: Option<Object<'gc, B>>,
+    ) -> Object<'gc, B> {
         ScriptObject(GcCell::allocate(
             gc_context,
             ScriptObjectData {
@@ -128,10 +129,10 @@ impl<'gc> ScriptObject<'gc> {
     pub fn force_set_function<A>(
         &mut self,
         name: &str,
-        function: NativeFunction<'gc>,
+        function: NativeFunction<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
         attributes: A,
-        fn_proto: Option<Object<'gc>>,
+        fn_proto: Option<Object<'gc, B>>,
     ) where
         A: Into<EnumSet<Attribute>>,
     {
@@ -154,7 +155,7 @@ impl<'gc> ScriptObject<'gc> {
         &self,
         name: &str,
         gc_context: MutationContext<'gc, '_>,
-        native_value: Option<Value<'gc>>,
+        native_value: Option<Value<'gc, B>>,
     ) {
         match self
             .0
@@ -189,11 +190,11 @@ impl<'gc> ScriptObject<'gc> {
     pub(crate) fn internal_set(
         &self,
         name: &str,
-        value: Value<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-        base_proto: Option<Object<'gc>>,
+        value: Value<'gc, B>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+        base_proto: Option<Object<'gc, B>>,
     ) -> Result<(), Error> {
         if name == "__proto__" {
             self.0.write(context.gc_context).prototype = value.as_object().ok();
@@ -223,7 +224,7 @@ impl<'gc> ScriptObject<'gc> {
             let mut rval = None;
 
             if is_vacant {
-                let mut proto: Option<Object<'gc>> = Some((*self).into());
+                let mut proto: Option<Object<'gc, B>> = Some((*self).into());
                 while let Some(this_proto) = proto {
                     if this_proto.has_own_virtual(avm, context, name)
                         && this_proto.is_property_overwritable(avm, name)
@@ -278,7 +279,7 @@ impl<'gc> ScriptObject<'gc> {
     }
 }
 
-impl<'gc> TObject<'gc> for ScriptObject<'gc> {
+impl<'gc, B: Backends> TObject<'gc, B> for ScriptObject<'gc, B> {
     /// Get the value of a particular property on this object.
     ///
     /// The `avm`, `context`, and `this` parameters exist so that this object
@@ -290,10 +291,10 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
     fn get_local(
         &self,
         name: &str,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-    ) -> Result<ReturnValue<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         if name == "__proto__" {
             return Ok(self.proto().map_or(Value::Undefined, Value::Object).into());
         }
@@ -313,9 +314,9 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
     fn set(
         &self,
         name: &str,
-        value: Value<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        value: Value<'gc, B>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         self.internal_set(
             name,
@@ -334,23 +335,23 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
     /// overrides that may need to interact with the underlying object.
     fn call(
         &self,
-        _avm: &mut Avm1<'gc>,
-        _context: &mut UpdateContext<'_, 'gc, '_>,
-        _this: Object<'gc>,
-        _base_proto: Option<Object<'gc>>,
-        _args: &[Value<'gc>],
-    ) -> Result<ReturnValue<'gc>, Error> {
+        _avm: &mut Avm1<'gc, B>,
+        _context: &mut UpdateContext<'_, 'gc, '_, B>,
+        _this: Object<'gc, B>,
+        _base_proto: Option<Object<'gc, B>>,
+        _args: &[Value<'gc, B>],
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         Ok(Value::Undefined.into())
     }
 
     fn call_setter(
         &self,
         name: &str,
-        value: Value<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-    ) -> Result<ReturnValue<'gc>, Error> {
+        value: Value<'gc, B>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         match self
             .0
             .write(context.gc_context)
@@ -367,11 +368,11 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
     #[allow(clippy::new_ret_no_self)]
     fn new(
         &self,
-        _avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-        _args: &[Value<'gc>],
-    ) -> Result<Object<'gc>, Error> {
+        _avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+        _args: &[Value<'gc, B>],
+    ) -> Result<Object<'gc, B>, Error> {
         match self.0.read().array {
             ArrayStorage::Vector(_) => {
                 Ok(ScriptObject::array(context.gc_context, Some(this)).into())
@@ -387,7 +388,7 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
     /// Returns false if the property cannot be deleted.
     fn delete(
         &self,
-        avm: &mut Avm1<'gc>,
+        avm: &mut Avm1<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
     ) -> bool {
@@ -406,8 +407,8 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
         &self,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
-        get: Executable<'gc>,
-        set: Option<Executable<'gc>>,
+        get: Executable<'gc, B>,
+        set: Option<Executable<'gc, B>>,
         attributes: EnumSet<Attribute>,
     ) {
         self.0.write(gc_context).values.insert(
@@ -423,11 +424,11 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
 
     fn add_property_with_case(
         &self,
-        avm: &mut Avm1<'gc>,
+        avm: &mut Avm1<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
-        get: Executable<'gc>,
-        set: Option<Executable<'gc>>,
+        get: Executable<'gc, B>,
+        set: Option<Executable<'gc, B>>,
         attributes: EnumSet<Attribute>,
     ) {
         self.0.write(gc_context).values.insert(
@@ -445,7 +446,7 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
         &self,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
-        value: Value<'gc>,
+        value: Value<'gc, B>,
         attributes: EnumSet<Attribute>,
     ) {
         self.0.write(gc_context).values.insert(
@@ -479,19 +480,19 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
         }
     }
 
-    fn proto(&self) -> Option<Object<'gc>> {
+    fn proto(&self) -> Option<Object<'gc, B>> {
         self.0.read().prototype
     }
 
-    fn set_proto(&self, gc_context: MutationContext<'gc, '_>, prototype: Option<Object<'gc>>) {
+    fn set_proto(&self, gc_context: MutationContext<'gc, '_>, prototype: Option<Object<'gc, B>>) {
         self.0.write(gc_context).prototype = prototype;
     }
 
     /// Checks if the object has a given named property.
     fn has_property(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         self.has_own_property(avm, context, name)
@@ -505,8 +506,8 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
     /// say, the object's prototype or superclass)
     fn has_own_property(
         &self,
-        avm: &mut Avm1<'gc>,
-        _context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        _context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         if name == "__proto__" {
@@ -520,8 +521,8 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
 
     fn has_own_virtual(
         &self,
-        avm: &mut Avm1<'gc>,
-        _context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        _context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         if let Some(slot) = self.0.read().values.get(name, avm.is_case_sensitive()) {
@@ -531,7 +532,7 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
         }
     }
 
-    fn is_property_overwritable(&self, avm: &mut Avm1<'gc>, name: &str) -> bool {
+    fn is_property_overwritable(&self, avm: &mut Avm1<'gc, B>, name: &str) -> bool {
         self.0
             .read()
             .values
@@ -541,7 +542,7 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
     }
 
     /// Checks if a named property appears when enumerating the object.
-    fn is_property_enumerable(&self, avm: &mut Avm1<'gc>, name: &str) -> bool {
+    fn is_property_enumerable(&self, avm: &mut Avm1<'gc, B>, name: &str) -> bool {
         if let Some(prop) = self.0.read().values.get(name, avm.is_case_sensitive()) {
             prop.is_enumerable()
         } else {
@@ -550,7 +551,7 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
     }
 
     /// Enumerate the object.
-    fn get_keys(&self, avm: &mut Avm1<'gc>) -> Vec<String> {
+    fn get_keys(&self, avm: &mut Avm1<'gc, B>) -> Vec<String> {
         let proto_keys = self.proto().map_or_else(Vec::new, |p| p.get_keys(avm));
         let mut out_keys = vec![];
         let object = self.0.read();
@@ -582,15 +583,15 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
         self.0.read().type_of
     }
 
-    fn interfaces(&self) -> Vec<Object<'gc>> {
+    fn interfaces(&self) -> Vec<Object<'gc, B>> {
         self.0.read().interfaces.clone()
     }
 
-    fn set_interfaces(&mut self, context: MutationContext<'gc, '_>, iface_list: Vec<Object<'gc>>) {
+    fn set_interfaces(&mut self, context: MutationContext<'gc, '_>, iface_list: Vec<Object<'gc, B>>) {
         self.0.write(context).interfaces = iface_list;
     }
 
-    fn as_script_object(&self) -> Option<ScriptObject<'gc>> {
+    fn as_script_object(&self) -> Option<ScriptObject<'gc, B>> {
         Some(*self)
     }
 
@@ -628,7 +629,7 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
         self.sync_native_property("length", gc_context, Some(new_length.into()));
     }
 
-    fn array(&self) -> Vec<Value<'gc>> {
+    fn array(&self) -> Vec<Value<'gc, B>> {
         match &self.0.read().array {
             ArrayStorage::Vector(vector) => vector.to_owned(),
             ArrayStorage::Properties { length } => {
@@ -641,7 +642,7 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
         }
     }
 
-    fn array_element(&self, index: usize) -> Value<'gc> {
+    fn array_element(&self, index: usize) -> Value<'gc, B> {
         match &self.0.read().array {
             ArrayStorage::Vector(vector) => {
                 if let Some(value) = vector.get(index) {
@@ -666,7 +667,7 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
     fn set_array_element(
         &self,
         index: usize,
-        value: Value<'gc>,
+        value: Value<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
     ) -> usize {
         self.sync_native_property(&index.to_string(), gc_context, Some(value.clone()));
@@ -717,9 +718,9 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::Arc;
 
-    fn with_object<F, R>(swf_version: u8, test: F) -> R
+    fn with_object<F, R, B: Backends>(swf_version: u8, test: F) -> R
     where
-        F: for<'a, 'gc> FnOnce(&mut Avm1<'gc>, &mut UpdateContext<'a, 'gc, '_>, Object<'gc>) -> R,
+        F: for<'a, 'gc> FnOnce(&mut Avm1<'gc, B>, &mut UpdateContext<'a, 'gc, '_, B>, Object<'gc, B>) -> R,
     {
         rootless_arena(|gc_context| {
             let mut avm = Avm1::new(gc_context, swf_version);

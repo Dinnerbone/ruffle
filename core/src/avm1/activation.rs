@@ -10,14 +10,15 @@ use gc_arena::{GcCell, MutationContext};
 use smallvec::SmallVec;
 use std::cell::{Ref, RefMut};
 use std::sync::Arc;
+use crate::backend::Backends;
 
 /// Represents a particular register set.
 ///
 /// This type exists primarily because SmallVec isn't garbage-collectable.
 #[derive(Clone)]
-pub struct RegisterSet<'gc>(SmallVec<[Value<'gc>; 8]>);
+pub struct RegisterSet<'gc, B: Backends>(SmallVec<[Value<'gc, B>; 8]>);
 
-unsafe impl<'gc> gc_arena::Collect for RegisterSet<'gc> {
+unsafe impl<'gc, B: Backends> gc_arena::Collect for RegisterSet<'gc, B> {
     #[inline]
     fn trace(&self, cc: gc_arena::CollectionContext) {
         for register in &self.0 {
@@ -26,7 +27,7 @@ unsafe impl<'gc> gc_arena::Collect for RegisterSet<'gc> {
     }
 }
 
-impl<'gc> RegisterSet<'gc> {
+impl<'gc, B: Backends> RegisterSet<'gc, B> {
     /// Create a new register set with a given number of specified registers.
     ///
     /// The given registers will be set to `undefined`.
@@ -35,12 +36,12 @@ impl<'gc> RegisterSet<'gc> {
     }
 
     /// Return a reference to a given register, if it exists.
-    pub fn get(&self, num: u8) -> Option<&Value<'gc>> {
+    pub fn get(&self, num: u8) -> Option<&Value<'gc, B>> {
         self.0.get(num as usize)
     }
 
     /// Return a mutable reference to a given register, if it exists.
-    pub fn get_mut(&mut self, num: u8) -> Option<&mut Value<'gc>> {
+    pub fn get_mut(&mut self, num: u8) -> Option<&mut Value<'gc, B>> {
         self.0.get_mut(num as usize)
     }
 
@@ -50,7 +51,7 @@ impl<'gc> RegisterSet<'gc> {
 }
 
 /// Represents a single activation of a given AVM1 function or keyframe.
-pub struct Activation<'gc> {
+pub struct Activation<'gc, B: Backends> {
     /// Represents the SWF version of a given function.
     ///
     /// Certain AVM1 operations change behavior based on the version of the SWF
@@ -65,19 +66,19 @@ pub struct Activation<'gc> {
     pc: usize,
 
     /// All defined local variables in this stack frame.
-    scope: GcCell<'gc, Scope<'gc>>,
+    scope: GcCell<'gc, Scope<'gc, B>>,
 
     /// The currently in use constant pool.
     constant_pool: GcCell<'gc, Vec<String>>,
 
     /// The immutable value of `this`.
-    this: Object<'gc>,
+    this: Object<'gc, B>,
 
     /// The arguments this function was called by.
-    arguments: Option<Object<'gc>>,
+    arguments: Option<Object<'gc, B>>,
 
     /// The return value of the activation.
-    return_value: Option<Value<'gc>>,
+    return_value: Option<Value<'gc, B>>,
 
     /// Indicates if this activation object represents a function or embedded
     /// block (e.g. ActionWith).
@@ -94,7 +95,7 @@ pub struct Activation<'gc> {
     ///
     /// Registers are stored in a `GcCell` so that rescopes (e.g. with) use the
     /// same register set.
-    local_registers: Option<GcCell<'gc, RegisterSet<'gc>>>,
+    local_registers: Option<GcCell<'gc, RegisterSet<'gc, B>>>,
 
     /// Flags that the current activation frame is being executed and has a
     /// reader object copied from it. Taking out two readers on the same
@@ -103,14 +104,14 @@ pub struct Activation<'gc> {
 
     /// The base clip of this stack frame.
     /// This will be the movieclip that contains the bytecode.
-    base_clip: DisplayObject<'gc>,
+    base_clip: DisplayObject<'gc, B>,
 
     /// The current target display object of this stack frame.
     /// This can be changed with `tellTarget` (via `ActionSetTarget` and `ActionSetTarget2`).
-    target_clip: Option<DisplayObject<'gc>>,
+    target_clip: Option<DisplayObject<'gc, B>>,
 }
 
-unsafe impl<'gc> gc_arena::Collect for Activation<'gc> {
+unsafe impl<'gc, B: Backends> gc_arena::Collect for Activation<'gc, B> {
     #[inline]
     fn trace(&self, cc: gc_arena::CollectionContext) {
         self.scope.trace(cc);
@@ -124,16 +125,16 @@ unsafe impl<'gc> gc_arena::Collect for Activation<'gc> {
     }
 }
 
-impl<'gc> Activation<'gc> {
+impl<'gc, B: Backends> Activation<'gc, B> {
     pub fn from_action(
         swf_version: u8,
         code: SwfSlice,
-        scope: GcCell<'gc, Scope<'gc>>,
+        scope: GcCell<'gc, Scope<'gc, B>>,
         constant_pool: GcCell<'gc, Vec<String>>,
-        base_clip: DisplayObject<'gc>,
-        this: Object<'gc>,
-        arguments: Option<Object<'gc>>,
-    ) -> Activation<'gc> {
+        base_clip: DisplayObject<'gc, B>,
+        this: Object<'gc, B>,
+        arguments: Option<Object<'gc, B>>,
+    ) -> Activation<'gc, B> {
         Activation {
             swf_version,
             data: code,
@@ -154,12 +155,12 @@ impl<'gc> Activation<'gc> {
     pub fn from_function(
         swf_version: u8,
         code: SwfSlice,
-        scope: GcCell<'gc, Scope<'gc>>,
+        scope: GcCell<'gc, Scope<'gc, B>>,
         constant_pool: GcCell<'gc, Vec<String>>,
-        base_clip: DisplayObject<'gc>,
-        this: Object<'gc>,
-        arguments: Option<Object<'gc>>,
-    ) -> Activation<'gc> {
+        base_clip: DisplayObject<'gc, B>,
+        this: Object<'gc, B>,
+        arguments: Option<Object<'gc, B>>,
+    ) -> Activation<'gc, B> {
         Activation {
             swf_version,
             data: code,
@@ -183,10 +184,10 @@ impl<'gc> Activation<'gc> {
     /// activation frame with access to the global context.
     pub fn from_nothing(
         swf_version: u8,
-        globals: Object<'gc>,
+        globals: Object<'gc, B>,
         mc: MutationContext<'gc, '_>,
-        base_clip: DisplayObject<'gc>,
-    ) -> Activation<'gc> {
+        base_clip: DisplayObject<'gc, B>,
+    ) -> Activation<'gc, B> {
         use crate::tag_utils::SwfMovie;
 
         let global_scope = GcCell::allocate(mc, Scope::from_global_object(globals));
@@ -215,7 +216,7 @@ impl<'gc> Activation<'gc> {
     }
 
     /// Create a new activation to run a block of code with a given scope.
-    pub fn to_rescope(&self, code: SwfSlice, scope: GcCell<'gc, Scope<'gc>>) -> Self {
+    pub fn to_rescope(&self, code: SwfSlice, scope: GcCell<'gc, Scope<'gc, B>>) -> Self {
         Activation {
             swf_version: self.swf_version,
             data: code,
@@ -266,41 +267,41 @@ impl<'gc> Activation<'gc> {
     }
 
     /// Returns AVM local variable scope.
-    pub fn scope(&self) -> Ref<Scope<'gc>> {
+    pub fn scope(&self) -> Ref<Scope<'gc, B>> {
         self.scope.read()
     }
 
     /// Returns AVM local variable scope for mutation.
     #[allow(dead_code)]
-    pub fn scope_mut(&mut self, mc: MutationContext<'gc, '_>) -> RefMut<Scope<'gc>> {
+    pub fn scope_mut(&mut self, mc: MutationContext<'gc, '_>) -> RefMut<Scope<'gc, B>> {
         self.scope.write(mc)
     }
 
     /// Returns AVM local variable scope for reference.
-    pub fn scope_cell(&self) -> GcCell<'gc, Scope<'gc>> {
+    pub fn scope_cell(&self) -> GcCell<'gc, Scope<'gc, B>> {
         self.scope
     }
 
     /// Completely replace the current scope with a new one.
-    pub fn set_scope(&mut self, scope: GcCell<'gc, Scope<'gc>>) {
+    pub fn set_scope(&mut self, scope: GcCell<'gc, Scope<'gc, B>>) {
         self.scope = scope;
     }
 
     /// Gets the base clip of this stack frame.
     /// This is the movie clip that contains the executing bytecode.
-    pub fn base_clip(&self) -> DisplayObject<'gc> {
+    pub fn base_clip(&self) -> DisplayObject<'gc, B> {
         self.base_clip
     }
 
     /// Gets the current target clip of this stack frame.
     /// This is the movie clip to which `GotoFrame` and other actions apply.
     /// Changed via `ActionSetTarget`/`ActionSetTarget2`.
-    pub fn target_clip(&self) -> Option<DisplayObject<'gc>> {
+    pub fn target_clip(&self) -> Option<DisplayObject<'gc, B>> {
         self.target_clip
     }
 
     /// Changes the target clip.
-    pub fn set_target_clip(&mut self, value: Option<DisplayObject<'gc>>) {
+    pub fn set_target_clip(&mut self, value: Option<DisplayObject<'gc, B>>) {
         self.target_clip = value;
     }
 
@@ -316,9 +317,9 @@ impl<'gc> Activation<'gc> {
     pub fn resolve(
         &self,
         name: &str,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-    ) -> Result<ReturnValue<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         if name == "this" {
             return Ok(Value::Object(self.this).into());
         }
@@ -333,8 +334,8 @@ impl<'gc> Activation<'gc> {
     /// Check if a particular property in the scope chain is defined.
     pub fn is_defined(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         if name == "this" {
@@ -349,12 +350,12 @@ impl<'gc> Activation<'gc> {
     }
 
     /// Define a named local variable within this activation.
-    pub fn define(&self, name: &str, value: impl Into<Value<'gc>>, mc: MutationContext<'gc, '_>) {
+    pub fn define(&self, name: &str, value: impl Into<Value<'gc, B>>, mc: MutationContext<'gc, '_>) {
         self.scope().define(name, value, mc)
     }
 
     /// Returns value of `this` as a reference.
-    pub fn this_cell(&self) -> Object<'gc> {
+    pub fn this_cell(&self) -> Object<'gc, B> {
         self.this
     }
 
@@ -373,7 +374,7 @@ impl<'gc> Activation<'gc> {
     }
 
     /// Retrieve a local register.
-    pub fn local_register(&self, id: u8) -> Option<Value<'gc>> {
+    pub fn local_register(&self, id: u8) -> Option<Value<'gc, B>> {
         if let Some(local_registers) = self.local_registers {
             local_registers.read().get(id).cloned()
         } else {
@@ -385,7 +386,7 @@ impl<'gc> Activation<'gc> {
     pub fn set_local_register(
         &mut self,
         id: u8,
-        value: impl Into<Value<'gc>>,
+        value: impl Into<Value<'gc, B>>,
         mc: MutationContext<'gc, '_>,
     ) {
         if let Some(ref mut local_registers) = self.local_registers {
@@ -425,12 +426,12 @@ impl<'gc> Activation<'gc> {
     /// Retrieve the return value from a completed activation, if the function
     /// has already returned.
     #[allow(dead_code)]
-    pub fn return_value(&self) -> Option<Value<'gc>> {
+    pub fn return_value(&self) -> Option<Value<'gc, B>> {
         self.return_value.clone()
     }
 
     /// Set the return value.
-    pub fn set_return_value(&mut self, value: Value<'gc>) {
+    pub fn set_return_value(&mut self, value: Value<'gc, B>) {
         self.return_value = Some(value);
     }
 }

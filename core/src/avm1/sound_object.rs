@@ -10,18 +10,19 @@ use crate::display_object::DisplayObject;
 use enumset::EnumSet;
 use gc_arena::{Collect, GcCell, MutationContext};
 use std::fmt;
+use crate::backend::Backends;
 
 /// A SounObject that is tied to a sound from the AudioBackend.
 #[derive(Clone, Copy, Collect)]
 #[collect(no_drop)]
-pub struct SoundObject<'gc>(GcCell<'gc, SoundObjectData<'gc>>);
+pub struct SoundObject<'gc, B: Backends>(GcCell<'gc, SoundObjectData<'gc, B>>);
 
-pub struct SoundObjectData<'gc> {
+pub struct SoundObjectData<'gc, B: Backends> {
     /// The underlying script object.
     ///
     /// This is used to handle "expando properties" on AVM1 display nodes, as
     /// well as the underlying prototype chain.
-    base: ScriptObject<'gc>,
+    base: ScriptObject<'gc, B>,
 
     /// The sound that is attached to this object.
     sound: Option<SoundHandle>,
@@ -30,7 +31,7 @@ pub struct SoundObjectData<'gc> {
     sound_instance: Option<SoundInstanceHandle>,
 
     /// Sounds in AVM1 are tied to a speicifc movie clip.
-    owner: Option<DisplayObject<'gc>>,
+    owner: Option<DisplayObject<'gc, B>>,
 
     /// Position of the last playing sound in milliseconds.
     position: u32,
@@ -39,14 +40,14 @@ pub struct SoundObjectData<'gc> {
     duration: u32,
 }
 
-unsafe impl<'gc> Collect for SoundObjectData<'gc> {
+unsafe impl<'gc, B: Backends> Collect for SoundObjectData<'gc, B> {
     fn trace(&self, cc: gc_arena::CollectionContext) {
         self.base.trace(cc);
         self.owner.trace(cc);
     }
 }
 
-impl fmt::Debug for SoundObject<'_> {
+impl<B: Backends> fmt::Debug for SoundObject<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let this = self.0.read();
         f.debug_struct("SoundObject")
@@ -57,11 +58,11 @@ impl fmt::Debug for SoundObject<'_> {
     }
 }
 
-impl<'gc> SoundObject<'gc> {
+impl<'gc, B: Backends> SoundObject<'gc, B> {
     pub fn empty_sound(
         gc_context: MutationContext<'gc, '_>,
-        proto: Option<Object<'gc>>,
-    ) -> SoundObject<'gc> {
+        proto: Option<Object<'gc, B>>,
+    ) -> SoundObject<'gc, B> {
         SoundObject(GcCell::allocate(
             gc_context,
             SoundObjectData {
@@ -103,14 +104,14 @@ impl<'gc> SoundObject<'gc> {
         self.0.write(gc_context).sound_instance = sound_instance;
     }
 
-    pub fn owner(self) -> Option<DisplayObject<'gc>> {
+    pub fn owner(self) -> Option<DisplayObject<'gc, B>> {
         self.0.read().owner
     }
 
     pub fn set_owner(
         self,
         gc_context: MutationContext<'gc, '_>,
-        owner: Option<DisplayObject<'gc>>,
+        owner: Option<DisplayObject<'gc, B>>,
     ) {
         self.0.write(gc_context).owner = owner;
     }
@@ -123,79 +124,79 @@ impl<'gc> SoundObject<'gc> {
         self.0.write(gc_context).position = position;
     }
 
-    fn base(self) -> ScriptObject<'gc> {
+    fn base(self) -> ScriptObject<'gc, B> {
         self.0.read().base
     }
 }
 
-impl<'gc> TObject<'gc> for SoundObject<'gc> {
+impl<'gc, B: Backends> TObject<'gc, B> for SoundObject<'gc, B> {
     fn get_local(
         &self,
         name: &str,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-    ) -> Result<ReturnValue<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         self.base().get_local(name, avm, context, this)
     }
 
     fn set(
         &self,
         name: &str,
-        value: Value<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        value: Value<'gc, B>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         self.base().set(name, value, avm, context)
     }
 
     fn call(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-        base_proto: Option<Object<'gc>>,
-        args: &[Value<'gc>],
-    ) -> Result<ReturnValue<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+        base_proto: Option<Object<'gc, B>>,
+        args: &[Value<'gc, B>],
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         self.base().call(avm, context, this, base_proto, args)
     }
 
     fn call_setter(
         &self,
         name: &str,
-        value: Value<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-    ) -> Result<ReturnValue<'gc>, Error> {
+        value: Value<'gc, B>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         self.base().call_setter(name, value, avm, context, this)
     }
 
     #[allow(clippy::new_ret_no_self)]
     fn new(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        _this: Object<'gc>,
-        _args: &[Value<'gc>],
-    ) -> Result<Object<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        _this: Object<'gc, B>,
+        _args: &[Value<'gc, B>],
+    ) -> Result<Object<'gc, B>, Error> {
         Ok(SoundObject::empty_sound(context.gc_context, Some(avm.prototypes.sound)).into())
     }
 
     fn delete(
         &self,
-        avm: &mut Avm1<'gc>,
+        avm: &mut Avm1<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
     ) -> bool {
         self.base().delete(avm, gc_context, name)
     }
 
-    fn proto(&self) -> Option<Object<'gc>> {
+    fn proto(&self) -> Option<Object<'gc, B>> {
         self.base().proto()
     }
 
-    fn set_proto(&self, gc_context: MutationContext<'gc, '_>, prototype: Option<Object<'gc>>) {
+    fn set_proto(&self, gc_context: MutationContext<'gc, '_>, prototype: Option<Object<'gc, B>>) {
         self.base().set_proto(gc_context, prototype);
     }
 
@@ -203,7 +204,7 @@ impl<'gc> TObject<'gc> for SoundObject<'gc> {
         &self,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
-        value: Value<'gc>,
+        value: Value<'gc, B>,
         attributes: EnumSet<Attribute>,
     ) {
         self.base()
@@ -225,8 +226,8 @@ impl<'gc> TObject<'gc> for SoundObject<'gc> {
         &self,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
-        get: Executable<'gc>,
-        set: Option<Executable<'gc>>,
+        get: Executable<'gc, B>,
+        set: Option<Executable<'gc, B>>,
         attributes: EnumSet<Attribute>,
     ) {
         self.base()
@@ -235,11 +236,11 @@ impl<'gc> TObject<'gc> for SoundObject<'gc> {
 
     fn add_property_with_case(
         &self,
-        avm: &mut Avm1<'gc>,
+        avm: &mut Avm1<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
-        get: Executable<'gc>,
-        set: Option<Executable<'gc>>,
+        get: Executable<'gc, B>,
+        set: Option<Executable<'gc, B>>,
         attributes: EnumSet<Attribute>,
     ) {
         self.base()
@@ -248,8 +249,8 @@ impl<'gc> TObject<'gc> for SoundObject<'gc> {
 
     fn has_property(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         self.base().has_property(avm, context, name)
@@ -257,8 +258,8 @@ impl<'gc> TObject<'gc> for SoundObject<'gc> {
 
     fn has_own_property(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         self.base().has_own_property(avm, context, name)
@@ -266,22 +267,22 @@ impl<'gc> TObject<'gc> for SoundObject<'gc> {
 
     fn has_own_virtual(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         self.base().has_own_virtual(avm, context, name)
     }
 
-    fn is_property_overwritable(&self, avm: &mut Avm1<'gc>, name: &str) -> bool {
+    fn is_property_overwritable(&self, avm: &mut Avm1<'gc, B>, name: &str) -> bool {
         self.base().is_property_overwritable(avm, name)
     }
 
-    fn is_property_enumerable(&self, avm: &mut Avm1<'gc>, name: &str) -> bool {
+    fn is_property_enumerable(&self, avm: &mut Avm1<'gc, B>, name: &str) -> bool {
         self.base().is_property_enumerable(avm, name)
     }
 
-    fn get_keys(&self, avm: &mut Avm1<'gc>) -> Vec<String> {
+    fn get_keys(&self, avm: &mut Avm1<'gc, B>) -> Vec<String> {
         self.base().get_keys(avm)
     }
 
@@ -293,31 +294,31 @@ impl<'gc> TObject<'gc> for SoundObject<'gc> {
         self.base().type_of()
     }
 
-    fn interfaces(&self) -> Vec<Object<'gc>> {
+    fn interfaces(&self) -> Vec<Object<'gc, B>> {
         self.base().interfaces()
     }
 
     fn set_interfaces(
         &mut self,
         gc_context: MutationContext<'gc, '_>,
-        iface_list: Vec<Object<'gc>>,
+        iface_list: Vec<Object<'gc, B>>,
     ) {
         self.base().set_interfaces(gc_context, iface_list)
     }
 
-    fn as_script_object(&self) -> Option<ScriptObject<'gc>> {
+    fn as_script_object(&self) -> Option<ScriptObject<'gc, B>> {
         Some(self.base())
     }
 
-    fn as_display_object(&self) -> Option<DisplayObject<'gc>> {
+    fn as_display_object(&self) -> Option<DisplayObject<'gc, B>> {
         None
     }
 
-    fn as_executable(&self) -> Option<Executable<'gc>> {
+    fn as_executable(&self) -> Option<Executable<'gc, B>> {
         None
     }
 
-    fn as_sound_object(&self) -> Option<SoundObject<'gc>> {
+    fn as_sound_object(&self) -> Option<SoundObject<'gc, B>> {
         Some(*self)
     }
 
@@ -329,7 +330,7 @@ impl<'gc> TObject<'gc> for SoundObject<'gc> {
         self.base().length()
     }
 
-    fn array(&self) -> Vec<Value<'gc>> {
+    fn array(&self) -> Vec<Value<'gc, B>> {
         self.base().array()
     }
 
@@ -337,14 +338,14 @@ impl<'gc> TObject<'gc> for SoundObject<'gc> {
         self.base().set_length(gc_context, length)
     }
 
-    fn array_element(&self, index: usize) -> Value<'gc> {
+    fn array_element(&self, index: usize) -> Value<'gc, B> {
         self.base().array_element(index)
     }
 
     fn set_array_element(
         &self,
         index: usize,
-        value: Value<'gc>,
+        value: Value<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
     ) -> usize {
         self.base().set_array_element(index, value, gc_context)

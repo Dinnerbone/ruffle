@@ -5,6 +5,7 @@ use crate::avm1::{Avm1, Error, Object, ScriptObject, TObject, UpdateContext, Val
 use enumset::EnumSet;
 use gc_arena::{GcCell, MutationContext};
 use std::cell::Ref;
+use crate::backend::Backends;
 
 /// Indicates what kind of scope a scope is.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -27,13 +28,13 @@ pub enum ScopeClass {
 
 /// Represents a scope chain for an AVM1 activation.
 #[derive(Debug)]
-pub struct Scope<'gc> {
-    parent: Option<GcCell<'gc, Scope<'gc>>>,
+pub struct Scope<'gc, B: Backends> {
+    parent: Option<GcCell<'gc, Scope<'gc, B>>>,
     class: ScopeClass,
-    values: Object<'gc>,
+    values: Object<'gc, B>,
 }
 
-unsafe impl<'gc> gc_arena::Collect for Scope<'gc> {
+unsafe impl<'gc, B: Backends> gc_arena::Collect for Scope<'gc, B> {
     #[inline]
     fn trace(&self, cc: gc_arena::CollectionContext) {
         self.parent.trace(cc);
@@ -41,9 +42,9 @@ unsafe impl<'gc> gc_arena::Collect for Scope<'gc> {
     }
 }
 
-impl<'gc> Scope<'gc> {
+impl<'gc, B: Backends> Scope<'gc, B> {
     /// Construct a global scope (one without a parent).
-    pub fn from_global_object(globals: Object<'gc>) -> Scope<'gc> {
+    pub fn from_global_object(globals: Object<'gc, B>) -> Scope<'gc, B> {
         Scope {
             parent: None,
             class: ScopeClass::Global,
@@ -52,7 +53,7 @@ impl<'gc> Scope<'gc> {
     }
 
     /// Construct a child scope of another scope.
-    pub fn new_local_scope(parent: GcCell<'gc, Self>, mc: MutationContext<'gc, '_>) -> Scope<'gc> {
+    pub fn new_local_scope(parent: GcCell<'gc, Self>, mc: MutationContext<'gc, '_>) -> Scope<'gc, B> {
         Scope {
             parent: Some(parent),
             class: ScopeClass::Local,
@@ -119,7 +120,7 @@ impl<'gc> Scope<'gc> {
     /// scope has been replaced with another given object.
     pub fn new_target_scope(
         mut parent: GcCell<'gc, Self>,
-        clip: Object<'gc>,
+        clip: Object<'gc, B>,
         mc: MutationContext<'gc, '_>,
     ) -> GcCell<'gc, Self> {
         let mut bottom_scope = None;
@@ -175,7 +176,7 @@ impl<'gc> Scope<'gc> {
     /// references will try to resolve on that object first.
     pub fn new_with_scope(
         parent_scope: GcCell<'gc, Self>,
-        with_object: Object<'gc>,
+        with_object: Object<'gc, B>,
         mc: MutationContext<'gc, '_>,
     ) -> GcCell<'gc, Self> {
         GcCell::allocate(
@@ -192,8 +193,8 @@ impl<'gc> Scope<'gc> {
     pub fn new(
         parent: GcCell<'gc, Self>,
         class: ScopeClass,
-        with_object: Object<'gc>,
-    ) -> Scope<'gc> {
+        with_object: Object<'gc, B>,
+    ) -> Scope<'gc, B> {
         Scope {
             parent: Some(parent),
             class,
@@ -202,18 +203,18 @@ impl<'gc> Scope<'gc> {
     }
 
     /// Returns a reference to the current local scope object.
-    pub fn locals(&self) -> &Object<'gc> {
+    pub fn locals(&self) -> &Object<'gc, B> {
         &self.values
     }
 
     /// Returns a reference to the current local scope object for mutation.
     #[allow(dead_code)]
-    pub fn locals_mut(&mut self) -> &mut Object<'gc> {
+    pub fn locals_mut(&mut self) -> &mut Object<'gc, B> {
         &mut self.values
     }
 
     /// Returns a reference to the parent scope object.
-    pub fn parent(&self) -> Option<Ref<Scope<'gc>>> {
+    pub fn parent(&self) -> Option<Ref<Scope<'gc, B>>> {
         match self.parent {
             Some(ref p) => Some(p.read()),
             None => None,
@@ -221,7 +222,7 @@ impl<'gc> Scope<'gc> {
     }
 
     /// Returns a reference to the parent scope object.
-    pub fn parent_cell(&self) -> Option<GcCell<'gc, Scope<'gc>>> {
+    pub fn parent_cell(&self) -> Option<GcCell<'gc, Scope<'gc, B>>> {
         self.parent
     }
 
@@ -233,10 +234,10 @@ impl<'gc> Scope<'gc> {
     pub fn resolve(
         &self,
         name: &str,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-    ) -> Result<ReturnValue<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         if self.locals().has_property(avm, context, name) {
             return self.locals().get(name, avm, context);
         }
@@ -251,8 +252,8 @@ impl<'gc> Scope<'gc> {
     /// Check if a particular property in the scope chain is defined.
     pub fn is_defined(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
     ) -> bool {
         if self.locals().has_property(avm, context, name) {
@@ -275,10 +276,10 @@ impl<'gc> Scope<'gc> {
     pub fn set(
         &self,
         name: &str,
-        value: Value<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
+        value: Value<'gc, B>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
     ) -> Result<(), Error> {
         if self.class == ScopeClass::Target
             || (self.locals().has_property(avm, context, name)
@@ -305,7 +306,7 @@ impl<'gc> Scope<'gc> {
     /// stored (e.g. not virtual) properties on the lowest object in the scope
     /// chain. As a result, this function always force sets a property on the
     /// local object and does not traverse the scope chain.
-    pub fn define(&self, name: &str, value: impl Into<Value<'gc>>, mc: MutationContext<'gc, '_>) {
+    pub fn define(&self, name: &str, value: impl Into<Value<'gc, B>>, mc: MutationContext<'gc, '_>) {
         self.locals()
             .define_value(mc, name, value.into(), EnumSet::empty());
     }
@@ -313,8 +314,8 @@ impl<'gc> Scope<'gc> {
     /// Delete a value from scope
     pub fn delete(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
         mc: MutationContext<'gc, '_>,
     ) -> bool {

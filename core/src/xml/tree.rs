@@ -13,28 +13,29 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::io::{Cursor, Write};
 use std::mem::swap;
+use crate::backend::Backends;
 
 /// Represents a node in the XML tree.
 #[derive(Copy, Clone, Collect)]
 #[collect(no_drop)]
-pub struct XMLNode<'gc>(GcCell<'gc, XMLNodeData<'gc>>);
+pub struct XMLNode<'gc, B: Backends>(GcCell<'gc, XMLNodeData<'gc, B>>);
 
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub enum XMLNodeData<'gc> {
+pub enum XMLNodeData<'gc, B: Backends> {
     /// The root level of an XML document. Has no parent.
     DocumentRoot {
         /// The script object associated with this XML node, if any.
-        script_object: Option<Object<'gc>>,
+        script_object: Option<Object<'gc, B>>,
 
         /// The script object associated with this XML node's attributes, if any.
-        attributes_script_object: Option<Object<'gc>>,
+        attributes_script_object: Option<Object<'gc, B>>,
 
         /// The document that this is the root of.
-        document: XMLDocument<'gc>,
+        document: XMLDocument<'gc, B>,
 
         /// Child nodes of this element.
-        children: Vec<XMLNode<'gc>>,
+        children: Vec<XMLNode<'gc, B>>,
     },
 
     /// An element node in the XML tree.
@@ -44,22 +45,22 @@ pub enum XMLNodeData<'gc> {
     /// structured data).
     Element {
         /// The script object associated with this XML node, if any.
-        script_object: Option<Object<'gc>>,
+        script_object: Option<Object<'gc, B>>,
 
         /// The script object associated with this XML node's attributes, if any.
-        attributes_script_object: Option<Object<'gc>>,
+        attributes_script_object: Option<Object<'gc, B>>,
 
         /// The document that this tree node currently belongs to.
-        document: XMLDocument<'gc>,
+        document: XMLDocument<'gc, B>,
 
         /// The parent node of this one.
-        parent: Option<XMLNode<'gc>>,
+        parent: Option<XMLNode<'gc, B>>,
 
         /// The previous sibling node to this one.
-        prev_sibling: Option<XMLNode<'gc>>,
+        prev_sibling: Option<XMLNode<'gc, B>>,
 
         /// The next sibling node to this one.
-        next_sibling: Option<XMLNode<'gc>>,
+        next_sibling: Option<XMLNode<'gc, B>>,
 
         /// The tag name of this element.
         tag_name: XMLName,
@@ -68,28 +69,28 @@ pub enum XMLNodeData<'gc> {
         attributes: BTreeMap<XMLName, String>,
 
         /// Child nodes of this element.
-        children: Vec<XMLNode<'gc>>,
+        children: Vec<XMLNode<'gc, B>>,
     },
 
     /// A text node in the XML tree.
     Text {
         /// The script object associated with this XML node, if any.
-        script_object: Option<Object<'gc>>,
+        script_object: Option<Object<'gc, B>>,
 
         /// The script object associated with this XML node's attributes, if any.
-        attributes_script_object: Option<Object<'gc>>,
+        attributes_script_object: Option<Object<'gc, B>>,
 
         /// The document that this tree node currently belongs to.
-        document: XMLDocument<'gc>,
+        document: XMLDocument<'gc, B>,
 
         /// The parent node of this one.
-        parent: Option<XMLNode<'gc>>,
+        parent: Option<XMLNode<'gc, B>>,
 
         /// The previous sibling node to this one.
-        prev_sibling: Option<XMLNode<'gc>>,
+        prev_sibling: Option<XMLNode<'gc, B>>,
 
         /// The next sibling node to this one.
-        next_sibling: Option<XMLNode<'gc>>,
+        next_sibling: Option<XMLNode<'gc, B>>,
 
         /// The string representation of the text.
         contents: String,
@@ -98,19 +99,19 @@ pub enum XMLNodeData<'gc> {
     /// A comment node in the XML tree.
     Comment {
         /// The script object associated with this XML node, if any.
-        script_object: Option<Object<'gc>>,
+        script_object: Option<Object<'gc, B>>,
 
         /// The document that this tree node currently belongs to.
-        document: XMLDocument<'gc>,
+        document: XMLDocument<'gc, B>,
 
         /// The parent node of this one.
-        parent: Option<XMLNode<'gc>>,
+        parent: Option<XMLNode<'gc, B>>,
 
         /// The previous sibling node to this one.
-        prev_sibling: Option<XMLNode<'gc>>,
+        prev_sibling: Option<XMLNode<'gc, B>>,
 
         /// The next sibling node to this one.
-        next_sibling: Option<XMLNode<'gc>>,
+        next_sibling: Option<XMLNode<'gc, B>>,
 
         /// The string representation of the comment.
         contents: String,
@@ -119,31 +120,31 @@ pub enum XMLNodeData<'gc> {
     /// A DOCTYPE node in the XML tree.
     DocType {
         /// The script object associated with this XML node, if any.
-        script_object: Option<Object<'gc>>,
+        script_object: Option<Object<'gc, B>>,
 
         /// The document that this tree node currently belongs to.
-        document: XMLDocument<'gc>,
+        document: XMLDocument<'gc, B>,
 
         /// The parent node of this one.
-        parent: Option<XMLNode<'gc>>,
+        parent: Option<XMLNode<'gc, B>>,
 
         /// The previous sibling node to this one.
-        prev_sibling: Option<XMLNode<'gc>>,
+        prev_sibling: Option<XMLNode<'gc, B>>,
 
         /// The next sibling node to this one.
-        next_sibling: Option<XMLNode<'gc>>,
+        next_sibling: Option<XMLNode<'gc, B>>,
 
         /// The string representation of the DOCTYPE.
         contents: String,
     },
 }
 
-impl<'gc> XMLNode<'gc> {
+impl<'gc, B: Backends> XMLNode<'gc, B> {
     /// Construct a new XML text node.
     pub fn new_text(
         mc: MutationContext<'gc, '_>,
         contents: &str,
-        document: XMLDocument<'gc>,
+        document: XMLDocument<'gc, B>,
     ) -> Self {
         XMLNode(GcCell::allocate(
             mc,
@@ -163,7 +164,7 @@ impl<'gc> XMLNode<'gc> {
     pub fn new_element(
         mc: MutationContext<'gc, '_>,
         element_name: &str,
-        document: XMLDocument<'gc>,
+        document: XMLDocument<'gc, B>,
     ) -> Result<Self, Error> {
         Ok(XMLNode(GcCell::allocate(
             mc,
@@ -182,7 +183,7 @@ impl<'gc> XMLNode<'gc> {
     }
 
     /// Construct a new XML root node.
-    pub fn new_document_root(mc: MutationContext<'gc, '_>, document: XMLDocument<'gc>) -> Self {
+    pub fn new_document_root(mc: MutationContext<'gc, '_>, document: XMLDocument<'gc, B>) -> Self {
         XMLNode(GcCell::allocate(
             mc,
             XMLNodeData::DocumentRoot {
@@ -199,8 +200,8 @@ impl<'gc> XMLNode<'gc> {
     fn add_child_to_tree(
         &mut self,
         mc: MutationContext<'gc, '_>,
-        open_tags: &mut Vec<XMLNode<'gc>>,
-        child: XMLNode<'gc>,
+        open_tags: &mut Vec<XMLNode<'gc, B>>,
+        child: XMLNode<'gc, B>,
     ) -> Result<(), Error> {
         if let Some(node) = open_tags.last_mut() {
             node.append_child(mc, child)?;
@@ -225,7 +226,7 @@ impl<'gc> XMLNode<'gc> {
         let mut parser = Reader::from_str(data);
         let mut buf = Vec::new();
         let document = self.document();
-        let mut open_tags: Vec<XMLNode<'gc>> = Vec::new();
+        let mut open_tags: Vec<XMLNode<'gc, B>> = Vec::new();
 
         document.clear_parse_error(mc);
 
@@ -282,7 +283,7 @@ impl<'gc> XMLNode<'gc> {
     pub fn from_start_event<'a>(
         mc: MutationContext<'gc, '_>,
         bs: BytesStart<'a>,
-        document: XMLDocument<'gc>,
+        document: XMLDocument<'gc, B>,
     ) -> Result<Self, Error> {
         let tag_name = XMLName::from_bytes(bs.name())?;
         let mut attributes = BTreeMap::new();
@@ -320,7 +321,7 @@ impl<'gc> XMLNode<'gc> {
     pub fn text_from_text_event<'a>(
         mc: MutationContext<'gc, '_>,
         bt: BytesText<'a>,
-        document: XMLDocument<'gc>,
+        document: XMLDocument<'gc, B>,
     ) -> Result<Self, Error> {
         Ok(XMLNode(GcCell::allocate(
             mc,
@@ -343,7 +344,7 @@ impl<'gc> XMLNode<'gc> {
     pub fn comment_from_text_event<'a>(
         mc: MutationContext<'gc, '_>,
         bt: BytesText<'a>,
-        document: XMLDocument<'gc>,
+        document: XMLDocument<'gc, B>,
     ) -> Result<Self, Error> {
         Ok(XMLNode(GcCell::allocate(
             mc,
@@ -365,7 +366,7 @@ impl<'gc> XMLNode<'gc> {
     pub fn doctype_from_text_event<'a>(
         mc: MutationContext<'gc, '_>,
         bt: BytesText<'a>,
-        document: XMLDocument<'gc>,
+        document: XMLDocument<'gc, B>,
     ) -> Result<Self, Error> {
         Ok(XMLNode(GcCell::allocate(
             mc,
@@ -384,7 +385,7 @@ impl<'gc> XMLNode<'gc> {
     ///
     /// Every XML node belongs to a document object (see `XMLDocument`) which
     /// stores global information about the document, such as namespace URIs.
-    pub fn document(self) -> XMLDocument<'gc> {
+    pub fn document(self) -> XMLDocument<'gc, B> {
         match &*self.0.read() {
             XMLNodeData::DocumentRoot { document, .. } => *document,
             XMLNodeData::Element { document, .. } => *document,
@@ -408,7 +409,7 @@ impl<'gc> XMLNode<'gc> {
     fn adopt_child(
         &mut self,
         mc: MutationContext<'gc, '_>,
-        mut child: XMLNode<'gc>,
+        mut child: XMLNode<'gc, B>,
         new_child_position: usize,
     ) -> Result<(), Error> {
         if GcCell::ptr_eq(self.0, child.0) {
@@ -474,7 +475,7 @@ impl<'gc> XMLNode<'gc> {
     /// Get the parent, if this node has one.
     ///
     /// If the node cannot have a parent, then this function yields Err.
-    pub fn parent(self) -> Result<Option<XMLNode<'gc>>, Error> {
+    pub fn parent(self) -> Result<Option<XMLNode<'gc, B>>, Error> {
         match *self.0.read() {
             XMLNodeData::DocumentRoot { .. } => Err("Document roots cannot have parents".into()),
             XMLNodeData::Element { parent, .. } => Ok(parent),
@@ -487,7 +488,7 @@ impl<'gc> XMLNode<'gc> {
     /// Get the previous sibling, if this node has one.
     ///
     /// If the node cannot have siblings, then this function yields Err.
-    pub fn prev_sibling(self) -> Result<Option<XMLNode<'gc>>, Error> {
+    pub fn prev_sibling(self) -> Result<Option<XMLNode<'gc, B>>, Error> {
         match *self.0.read() {
             XMLNodeData::DocumentRoot { .. } => Err("Document roots cannot have siblings".into()),
             XMLNodeData::Element { prev_sibling, .. } => Ok(prev_sibling),
@@ -501,7 +502,7 @@ impl<'gc> XMLNode<'gc> {
     fn set_prev_sibling(
         &mut self,
         mc: MutationContext<'gc, '_>,
-        new_prev: Option<XMLNode<'gc>>,
+        new_prev: Option<XMLNode<'gc, B>>,
     ) -> Result<(), Error> {
         match &mut *self.0.write(mc) {
             XMLNodeData::DocumentRoot { .. } => {
@@ -519,7 +520,7 @@ impl<'gc> XMLNode<'gc> {
     /// Get the next sibling, if this node has one.
     ///
     /// If the node cannot have siblings, then this function yields Err.
-    pub fn next_sibling(self) -> Result<Option<XMLNode<'gc>>, Error> {
+    pub fn next_sibling(self) -> Result<Option<XMLNode<'gc, B>>, Error> {
         match *self.0.read() {
             XMLNodeData::DocumentRoot { .. } => Err("Document roots cannot have siblings".into()),
             XMLNodeData::Element { next_sibling, .. } => Ok(next_sibling),
@@ -533,7 +534,7 @@ impl<'gc> XMLNode<'gc> {
     fn set_next_sibling(
         &mut self,
         mc: MutationContext<'gc, '_>,
-        new_next: Option<XMLNode<'gc>>,
+        new_next: Option<XMLNode<'gc, B>>,
     ) -> Result<(), Error> {
         match &mut *self.0.write(mc) {
             XMLNodeData::DocumentRoot { .. } => {
@@ -598,8 +599,8 @@ impl<'gc> XMLNode<'gc> {
     fn adopt_siblings(
         &mut self,
         mc: MutationContext<'gc, '_>,
-        new_prev: Option<XMLNode<'gc>>,
-        new_next: Option<XMLNode<'gc>>,
+        new_prev: Option<XMLNode<'gc, B>>,
+        new_next: Option<XMLNode<'gc, B>>,
     ) -> Result<(), Error> {
         if let Some(mut prev) = new_prev {
             prev.set_next_sibling(mc, Some(*self))?;
@@ -621,7 +622,7 @@ impl<'gc> XMLNode<'gc> {
     fn orphan_child(
         &mut self,
         mc: MutationContext<'gc, '_>,
-        child: XMLNode<'gc>,
+        child: XMLNode<'gc, B>,
     ) -> Result<(), Error> {
         if let Some(position) = self.child_position(child) {
             match &mut *self.0.write(mc) {
@@ -653,7 +654,7 @@ impl<'gc> XMLNode<'gc> {
         &mut self,
         mc: MutationContext<'gc, '_>,
         position: usize,
-        child: XMLNode<'gc>,
+        child: XMLNode<'gc, B>,
     ) -> Result<(), Error> {
         if GcCell::ptr_eq(self.0, child.0) {
             return Err("Cannot insert child into itself".into());
@@ -681,7 +682,7 @@ impl<'gc> XMLNode<'gc> {
     pub fn append_child(
         &mut self,
         mc: MutationContext<'gc, '_>,
-        child: XMLNode<'gc>,
+        child: XMLNode<'gc, B>,
     ) -> Result<(), Error> {
         self.insert_child(mc, self.children_len(), child)
     }
@@ -693,7 +694,7 @@ impl<'gc> XMLNode<'gc> {
     pub fn remove_child(
         &mut self,
         mc: MutationContext<'gc, '_>,
-        mut child: XMLNode<'gc>,
+        mut child: XMLNode<'gc, B>,
     ) -> Result<(), Error> {
         if let Some(position) = self.child_position(child) {
             match &mut *self.0.write(mc) {
@@ -765,7 +766,7 @@ impl<'gc> XMLNode<'gc> {
     ///
     /// This function yields None if the node cannot accept children or if the
     /// child node is not a child of this node.
-    pub fn child_position(self, child: XMLNode<'gc>) -> Option<usize> {
+    pub fn child_position(self, child: XMLNode<'gc, B>) -> Option<usize> {
         if let Some(children) = self.children() {
             for (i, other_child) in children.enumerate() {
                 if GcCell::ptr_eq(child.0, other_child.0) {
@@ -780,15 +781,15 @@ impl<'gc> XMLNode<'gc> {
     /// Returns an iterator that yields child nodes.
     ///
     /// Yields None if this node cannot accept children.
-    pub fn children(self) -> Option<impl DoubleEndedIterator<Item = XMLNode<'gc>>> {
-        struct ChildIter<'gc> {
-            base: XMLNode<'gc>,
+    pub fn children(self) -> Option<impl DoubleEndedIterator<Item = XMLNode<'gc, B>>> {
+        struct ChildIter<'gc, B: Backends> {
+            base: XMLNode<'gc, B>,
             index: usize,
             back_index: usize,
         };
 
-        impl<'gc> ChildIter<'gc> {
-            fn for_node(base: XMLNode<'gc>) -> Self {
+        impl<'gc, B: Backends> ChildIter<'gc, B> {
+            fn for_node(base: XMLNode<'gc, B>) -> Self {
                 Self {
                     base,
                     index: 0,
@@ -797,8 +798,8 @@ impl<'gc> XMLNode<'gc> {
             }
         }
 
-        impl<'gc> Iterator for ChildIter<'gc> {
-            type Item = XMLNode<'gc>;
+        impl<'gc, B: Backends> Iterator for ChildIter<'gc, B> {
+            type Item = XMLNode<'gc, B>;
 
             fn next(&mut self) -> Option<Self::Item> {
                 let read = self.base.0.read();
@@ -821,7 +822,7 @@ impl<'gc> XMLNode<'gc> {
             }
         }
 
-        impl<'gc> DoubleEndedIterator for ChildIter<'gc> {
+        impl<'gc, B: Backends> DoubleEndedIterator for ChildIter<'gc, B> {
             fn next_back(&mut self) -> Option<Self::Item> {
                 let read = self.base.0.read();
                 let children = match &*read {
@@ -852,7 +853,7 @@ impl<'gc> XMLNode<'gc> {
     }
 
     /// Get the already-instantiated script object from the current node.
-    fn get_script_object(self) -> Option<Object<'gc>> {
+    fn get_script_object(self) -> Option<Object<'gc, B>> {
         match &*self.0.read() {
             XMLNodeData::DocumentRoot { script_object, .. } => *script_object,
             XMLNodeData::Element { script_object, .. } => *script_object,
@@ -870,7 +871,7 @@ impl<'gc> XMLNode<'gc> {
     pub fn introduce_script_object(
         &mut self,
         gc_context: MutationContext<'gc, '_>,
-        new_object: Object<'gc>,
+        new_object: Object<'gc, B>,
     ) {
         assert!(self.get_script_object().is_none(), "An attempt was made to change the already-established link between script object and XML node. This has been denied and is likely a bug.");
 
@@ -888,8 +889,8 @@ impl<'gc> XMLNode<'gc> {
     pub fn script_object(
         &mut self,
         gc_context: MutationContext<'gc, '_>,
-        prototype: Option<Object<'gc>>,
-    ) -> Object<'gc> {
+        prototype: Option<Object<'gc, B>>,
+    ) -> Object<'gc, B> {
         let mut object = self.get_script_object();
         if object.is_none() {
             object = Some(XMLObject::from_xml_node(gc_context, *self, prototype));
@@ -904,7 +905,7 @@ impl<'gc> XMLNode<'gc> {
     pub fn attribute_script_object(
         &mut self,
         gc_context: MutationContext<'gc, '_>,
-    ) -> Option<Object<'gc>> {
+    ) -> Option<Object<'gc, B>> {
         match &mut *self.0.write(gc_context) {
             XMLNodeData::Element {
                 attributes_script_object,
@@ -989,7 +990,7 @@ impl<'gc> XMLNode<'gc> {
     ///
     /// If the `deep` flag is set true, then the entire node tree will be
     /// cloned.
-    pub fn duplicate(self, gc_context: MutationContext<'gc, '_>, deep: bool) -> XMLNode<'gc> {
+    pub fn duplicate(self, gc_context: MutationContext<'gc, '_>, deep: bool) -> XMLNode<'gc, B> {
         let mut document = self.document().duplicate(gc_context);
         let mut clone = XMLNode(GcCell::allocate(
             gc_context,
@@ -1170,7 +1171,7 @@ impl<'gc> XMLNode<'gc> {
     /// that yield `true` shall be printed.
     pub fn into_string<F>(self, filter: &mut F) -> Result<String, Error>
     where
-        F: FnMut(XMLNode<'gc>) -> bool,
+        F: FnMut(XMLNode<'gc, B>) -> bool,
     {
         let mut buf = Vec::new();
         let mut writer = Writer::new(Cursor::new(&mut buf));
@@ -1192,7 +1193,7 @@ impl<'gc> XMLNode<'gc> {
     ) -> Result<(), Error>
     where
         W: Write,
-        F: FnMut(XMLNode<'gc>) -> bool,
+        F: FnMut(XMLNode<'gc, B>) -> bool,
     {
         let mut children = Vec::new();
         if let Some(my_children) = self.children() {
@@ -1268,7 +1269,7 @@ impl<'gc> XMLNode<'gc> {
     }
 }
 
-impl<'gc> fmt::Debug for XMLNode<'gc> {
+impl<'gc, B: Backends> fmt::Debug for XMLNode<'gc, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &*self.0.read() {
             XMLNodeData::DocumentRoot {

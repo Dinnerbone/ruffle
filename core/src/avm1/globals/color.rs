@@ -9,13 +9,14 @@ use crate::avm1::{Avm1, Error, Object, ScriptObject, TObject, UpdateContext, Val
 use crate::display_object::{DisplayObject, TDisplayObject};
 use enumset::EnumSet;
 use gc_arena::MutationContext;
+use crate::backend::Backends;
 
-pub fn constructor<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    mut this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn constructor<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    mut this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     // The target display object that this color will modify.
     let target = args.get(0).cloned().unwrap_or(Value::Undefined);
     // Set undocumented `target` property
@@ -30,11 +31,11 @@ pub fn constructor<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let mut object = ScriptObject::object(gc_context, Some(proto));
 
     object.force_set_function(
@@ -73,11 +74,11 @@ pub fn create_proto<'gc>(
 }
 
 /// Gets the target display object of this color transform.
-fn target<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-) -> Result<Option<DisplayObject<'gc>>, Error> {
+fn target<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+) -> Result<Option<DisplayObject<'gc, B>>, Error> {
     // The target path resolves based on the active tellTarget clip of the stack frame.
     // This means calls on the same `Color` object could set the color of different clips
     // depending on which timeline its called from!
@@ -91,12 +92,12 @@ fn target<'gc>(
     }
 }
 
-fn get_rgb<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn get_rgb<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(target) = target(avm, context, this)? {
         let color_transform = target.color_transform();
         let r = ((color_transform.r_add * 255.0) as i32) << 16;
@@ -108,12 +109,12 @@ fn get_rgb<'gc>(
     }
 }
 
-fn get_transform<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn get_transform<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(target) = target(avm, context, this)? {
         let color_transform = target.color_transform();
         let out = ScriptObject::object(context.gc_context, Some(avm.prototypes.object));
@@ -131,12 +132,12 @@ fn get_transform<'gc>(
     }
 }
 
-fn set_rgb<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn set_rgb<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(target) = target(avm, context, this)? {
         let mut color_transform = target.color_transform_mut(context.gc_context);
         let rgb = args
@@ -157,19 +158,19 @@ fn set_rgb<'gc>(
     Ok(Value::Undefined.into())
 }
 
-fn set_transform<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn set_transform<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     // TODO: These map from the 0-100% range for mult and the -255-255 range for addition used by ActionScript
     // to the 16-bit range used by the internal representations of the Flash Player.
     // This will get slightly simpler when we change ColorTransform to the proper representation (see #193).
-    fn set_color_mult<'gc>(
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        transform: Object<'gc>,
+    fn set_color_mult<'gc, B: Backends>(
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        transform: Object<'gc, B>,
         property: &str,
         out: &mut f32,
     ) -> Result<(), Error> {
@@ -184,10 +185,10 @@ fn set_transform<'gc>(
         Ok(())
     }
 
-    fn set_color_add<'gc>(
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        transform: Object<'gc>,
+    fn set_color_add<'gc, B: Backends>(
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        transform: Object<'gc, B>,
         property: &str,
         out: &mut f32,
     ) -> Result<(), Error> {

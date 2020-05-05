@@ -6,24 +6,25 @@ use crate::avm1::{Avm1, Error, Object, TObject, UpdateContext, Value};
 use crate::character::Character;
 use enumset::EnumSet;
 use gc_arena::MutationContext;
+use crate::backend::Backends;
 
 /// Implements `Object`
-pub fn constructor<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _action_context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn constructor<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _action_context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     Ok(Value::Undefined.into())
 }
 
 /// Implements `Object.prototype.addProperty`
-pub fn add_property<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn add_property<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let name = args
         .get(0)
         .and_then(|v| v.to_owned().coerce_to_string(avm, context).ok())
@@ -68,12 +69,12 @@ pub fn add_property<'gc>(
 }
 
 /// Implements `Object.prototype.hasOwnProperty`
-pub fn has_own_property<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn has_own_property<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     match args.get(0) {
         Some(Value::String(name)) => {
             Ok(Value::Bool(this.has_own_property(avm, context, name)).into())
@@ -83,22 +84,22 @@ pub fn has_own_property<'gc>(
 }
 
 /// Implements `Object.prototype.toString`
-fn to_string<'gc>(
-    _: &mut Avm1<'gc>,
-    _: &mut UpdateContext<'_, 'gc, '_>,
-    _: Object<'gc>,
-    _: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn to_string<'gc, B: Backends>(
+    _: &mut Avm1<'gc, B>,
+    _: &mut UpdateContext<'_, 'gc, '_, B>,
+    _: Object<'gc, B>,
+    _: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     Ok(ReturnValue::Immediate("[object Object]".into()))
 }
 
 /// Implements `Object.prototype.isPropertyEnumerable`
-fn is_property_enumerable<'gc>(
-    avm: &mut Avm1<'gc>,
-    _: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn is_property_enumerable<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    _: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     match args.get(0) {
         Some(Value::String(name)) => Ok(Value::Bool(this.is_property_enumerable(avm, name)).into()),
         _ => Ok(Value::Bool(false).into()),
@@ -106,12 +107,12 @@ fn is_property_enumerable<'gc>(
 }
 
 /// Implements `Object.prototype.isPrototypeOf`
-fn is_prototype_of<'gc>(
-    _: &mut Avm1<'gc>,
-    _: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn is_prototype_of<'gc, B: Backends>(
+    _: &mut Avm1<'gc, B>,
+    _: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     match args.get(0) {
         Some(val) => {
             let ob = match val.as_object() {
@@ -126,22 +127,22 @@ fn is_prototype_of<'gc>(
 }
 
 /// Implements `Object.prototype.valueOf`
-fn value_of<'gc>(
-    _: &mut Avm1<'gc>,
-    _: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn value_of<'gc, B: Backends>(
+    _: &mut Avm1<'gc, B>,
+    _: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     Ok(ReturnValue::Immediate(this.into()))
 }
 
 /// Implements `Object.registerClass`
-pub fn register_class<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn register_class<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(class_name) = args.get(0).cloned() {
         let class_name = class_name.coerce_to_string(avm, context)?;
         if let Some(Character::MovieClip(movie_clip)) = context
@@ -168,10 +169,10 @@ pub fn register_class<'gc>(
 /// Since Object and Function are so heavily intertwined, this function does
 /// not allocate an object to store either proto. Instead, you must allocate
 /// bare objects for both and let this function fill Object for you.
-pub fn fill_proto<'gc>(
+pub fn fill_proto<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-    object_proto: Object<'gc>,
-    fn_proto: Object<'gc>,
+    object_proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
 ) {
     object_proto.as_script_object().unwrap().force_set_function(
         "addProperty",
@@ -222,16 +223,16 @@ pub fn fill_proto<'gc>(
 /// This is an undocumented function that allows ActionScript 2.0 classes to
 /// declare the property flags of a given property. It's not part of
 /// `Object.prototype`, and I suspect that's a deliberate omission.
-pub fn as_set_prop_flags<'gc>(
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    _: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn as_set_prop_flags<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    _: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     //This exists because `.into` won't work inline
-    let my_error: Result<ReturnValue<'gc>, Error> =
+    let my_error: Result<ReturnValue<'gc, B>, Error> =
         Err("ASSetPropFlags called without object to apply to!".into());
-    let my_error_2: Result<ReturnValue<'gc>, Error> =
+    let my_error_2: Result<ReturnValue<'gc, B>, Error> =
         Err("ASSetPropFlags called without object list!".into());
 
     let mut object = args
@@ -290,11 +291,11 @@ pub fn as_set_prop_flags<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn create_object_object<'gc>(
+pub fn create_object_object<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let object_function = FunctionObject::function(
         gc_context,
         Executable::Native(constructor),

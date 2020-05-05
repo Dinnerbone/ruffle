@@ -10,6 +10,7 @@ use crate::tag_utils::SwfMovie;
 use crate::transform::Transform;
 use gc_arena::{Collect, Gc, GcCell, MutationContext};
 use std::sync::Arc;
+use crate::backend::Backends;
 
 /// A dynamic text field.
 /// The text in this text field can be changed dynamically.
@@ -22,12 +23,12 @@ use std::sync::Arc;
 /// (SWF19 DefineEditText pp. 171-174)
 #[derive(Clone, Debug, Collect, Copy)]
 #[collect(no_drop)]
-pub struct EditText<'gc>(GcCell<'gc, EditTextData<'gc>>);
+pub struct EditText<'gc, B: Backends>(GcCell<'gc, EditTextData<'gc, B>>);
 
 #[derive(Clone, Debug)]
-pub struct EditTextData<'gc> {
+pub struct EditTextData<'gc, B: Backends> {
     /// DisplayObject common properties.
-    base: DisplayObjectBase<'gc>,
+    base: DisplayObjectBase<'gc, B>,
 
     /// Static data shared among all instances of this `EditText`.
     static_data: Gc<'gc, EditTextStatic>,
@@ -48,13 +49,13 @@ pub struct EditTextData<'gc> {
     cached_break_points: Option<Vec<usize>>,
 
     // The AVM1 object handle
-    object: Option<Object<'gc>>,
+    object: Option<Object<'gc, B>>,
 }
 
-impl<'gc> EditText<'gc> {
+impl<'gc, B: Backends> EditText<'gc, B> {
     /// Creates a new `EditText` from an SWF `DefineEditText` tag.
     pub fn from_swf_tag(
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         swf_movie: Arc<SwfMovie>,
         swf_tag: swf::EditText,
     ) -> Self {
@@ -107,7 +108,7 @@ impl<'gc> EditText<'gc> {
 
     /// Create a new, dynamic `EditText`.
     pub fn new(
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         swf_movie: Arc<SwfMovie>,
         x: f64,
         y: f64,
@@ -288,7 +289,7 @@ impl<'gc> EditText<'gc> {
     ///
     /// The given set of break points should be cached for later use as
     /// calculating them is a relatively expensive operation.
-    fn line_breaks(self, library: &Library<'gc>) -> Vec<usize> {
+    fn line_breaks(self, library: &Library<'gc, B>) -> Vec<usize> {
         let edit_text = self.0.read();
         let static_data = &edit_text.static_data;
 
@@ -332,7 +333,7 @@ impl<'gc> EditText<'gc> {
     fn line_breaks_cached(
         self,
         gc_context: MutationContext<'gc, '_>,
-        library: &Library<'gc>,
+        library: &Library<'gc, B>,
     ) -> Vec<usize> {
         {
             let edit_text = self.0.read();
@@ -351,7 +352,7 @@ impl<'gc> EditText<'gc> {
     /// Measure the width and height of the `EditText`'s current text load.
     ///
     /// The returned tuple should be interpreted as width, then height.
-    pub fn measure_text(self, context: &mut UpdateContext<'_, 'gc, '_>) -> (Twips, Twips) {
+    pub fn measure_text(self, context: &mut UpdateContext<'_, 'gc, '_, B>) -> (Twips, Twips) {
         let breakpoints = self.line_breaks_cached(context.gc_context, context.library);
 
         let edit_text = self.0.read();
@@ -390,7 +391,7 @@ impl<'gc> EditText<'gc> {
 
     /// Returns the device font if this is text field should not use outline glyphs,
     /// or if the font is not found.
-    fn font(self, library: &Library<'gc>) -> Option<Font<'gc>> {
+    fn font(self, library: &Library<'gc, B>) -> Option<Font<'gc, B>> {
         let static_data = self.0.read().static_data;
         let library = library.library_for_movie(static_data.swf.clone()).unwrap();
         if static_data.text.is_device_font {
@@ -408,7 +409,7 @@ impl<'gc> EditText<'gc> {
     }
 }
 
-impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
+impl<'gc, B: Backends> TDisplayObject<'gc, B> for EditText<'gc, B> {
     impl_display_object!(base);
 
     fn id(&self) -> CharacterId {
@@ -419,20 +420,20 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
         Some(self.0.read().static_data.swf.clone())
     }
 
-    fn run_frame(&mut self, _avm: &mut Avm1<'gc>, _context: &mut UpdateContext) {
+    fn run_frame(&mut self, _avm: &mut Avm1<'gc, B>, _context: &mut UpdateContext<B>) {
         // Noop
     }
 
-    fn as_edit_text(&self) -> Option<EditText<'gc>> {
+    fn as_edit_text(&self) -> Option<EditText<'gc, B>> {
         Some(*self)
     }
 
     fn post_instantiation(
         &mut self,
-        _avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        display_object: DisplayObject<'gc>,
-        _init_object: Option<Object<'gc>>,
+        _avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        display_object: DisplayObject<'gc, B>,
+        _init_object: Option<Object<'gc, B>>,
     ) {
         let mut text = self.0.write(context.gc_context);
         if text.object.is_none() {
@@ -449,7 +450,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
         }
     }
 
-    fn object(&self) -> Value<'gc> {
+    fn object(&self) -> Value<'gc, B> {
         self.0
             .read()
             .object
@@ -461,7 +462,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
         self.0.read().static_data.text.bounds.clone().into()
     }
 
-    fn render(&self, context: &mut RenderContext<'_, 'gc>) {
+    fn render(&self, context: &mut RenderContext<'_, 'gc, B>) {
         context.transform_stack.push(&*self.transform());
 
         let mut text_transform = self.text_transform();
@@ -519,7 +520,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
     }
 }
 
-unsafe impl<'gc> gc_arena::Collect for EditTextData<'gc> {
+unsafe impl<'gc, B: Backends> gc_arena::Collect for EditTextData<'gc, B> {
     #[inline]
     fn trace(&self, cc: gc_arena::CollectionContext) {
         self.base.trace(cc);

@@ -7,6 +7,7 @@ use crate::avm1::{Avm1, Error, Object, ScriptObject, TObject, UpdateContext, Val
 use crate::display_object::{DisplayObject, TDisplayObject};
 use enumset::EnumSet;
 use gc_arena::MutationContext;
+use crate::backend::Backends;
 
 /// Depths used/returned by ActionScript are offset by this amount from depths used inside the SWF/by the VM.
 /// The depth of objects placed on the timeline in the Flash IDE start from 0 in the SWF,
@@ -23,12 +24,12 @@ macro_rules! with_display_object {
         $(
             $object.force_set_function(
                 $name,
-                |avm, context: &mut UpdateContext<'_, 'gc, '_>, this, args| -> Result<ReturnValue<'gc>, Error> {
+                |avm, context: &mut UpdateContext<'_, 'gc, '_, B>, this, args| -> Result<ReturnValue<'gc, B>, Error> {
                     if let Some(display_object) = this.as_display_object() {
                         return $fn(display_object, avm, context, args);
                     }
                     Ok(Value::Undefined.into())
-                } as crate::avm1::function::NativeFunction<'gc>,
+                } as crate::avm1::function::NativeFunction<'gc, B>,
                 $gc_context,
                 DontDelete | ReadOnly | DontEnum,
                 $fn_proto
@@ -38,10 +39,10 @@ macro_rules! with_display_object {
 }
 
 /// Add common display object prototype methods to the given prototype.
-pub fn define_display_object_proto<'gc>(
+pub fn define_display_object_proto<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-    mut object: ScriptObject<'gc>,
-    fn_proto: Object<'gc>,
+    mut object: ScriptObject<'gc, B>,
+    fn_proto: Object<'gc, B>,
 ) {
     with_display_object!(
         gc_context,
@@ -83,12 +84,12 @@ pub fn define_display_object_proto<'gc>(
     );
 }
 
-pub fn get_depth<'gc>(
-    display_object: DisplayObject<'gc>,
-    avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn get_depth<'gc, B: Backends>(
+    display_object: DisplayObject<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if avm.current_swf_version() >= 6 {
         let depth = display_object.depth().wrapping_sub(AVM_DEPTH_BIAS);
         Ok(depth.into())
@@ -97,12 +98,12 @@ pub fn get_depth<'gc>(
     }
 }
 
-pub fn overwrite_root<'gc>(
-    _avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn overwrite_root<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let new_val = args
         .get(0)
         .map(|v| v.to_owned())
@@ -112,12 +113,12 @@ pub fn overwrite_root<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn overwrite_global<'gc>(
-    _avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn overwrite_global<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let new_val = args
         .get(0)
         .map(|v| v.to_owned())

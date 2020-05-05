@@ -1,9 +1,7 @@
 use crate::avm1::listeners::SystemListener;
 use crate::avm1::{Activation, Avm1, TObject, Value};
 use crate::backend::input::{InputBackend, MouseCursor};
-use crate::backend::{
-    audio::AudioBackend, navigator::NavigatorBackend, render::Letterbox, render::RenderBackend,
-};
+use crate::backend::{render::Letterbox, Backends};
 use crate::context::{ActionQueue, ActionType, RenderContext, UpdateContext};
 use crate::display_object::{MorphShape, MovieClip};
 use crate::events::{ButtonEvent, ButtonEventResult, ButtonKeyCode, ClipEvent, PlayerEvent};
@@ -12,7 +10,7 @@ use crate::loader::LoadManager;
 use crate::prelude::*;
 use crate::tag_utils::SwfMovie;
 use crate::transform::TransformStack;
-use gc_arena::{make_arena, ArenaParameters, Collect, GcCell};
+use gc_arena::{ArenaParameters, Collect, GcCell};
 use log::info;
 use rand::{rngs::SmallRng, SeedableRng};
 use std::collections::BTreeMap;
@@ -28,45 +26,45 @@ pub const NEWEST_PLAYER_VERSION: u8 = 32;
 
 #[derive(Collect)]
 #[collect(no_drop)]
-struct GcRoot<'gc>(GcCell<'gc, GcRootData<'gc>>);
+struct GcRoot<'gc, B: Backends>(GcCell<'gc, GcRootData<'gc, B>>);
 
 #[derive(Collect)]
 #[collect(no_drop)]
-struct GcRootData<'gc> {
-    library: Library<'gc>,
+struct GcRootData<'gc, B: Backends> {
+    library: Library<'gc, B>,
 
     /// The list of levels on the current stage.
     ///
     /// Each level is a `_root` MovieClip that holds a particular SWF movie, also accessible via
     /// the `_levelN` property.
     /// levels[0] represents the initial SWF file that was loaded.
-    levels: BTreeMap<u32, DisplayObject<'gc>>,
+    levels: BTreeMap<u32, DisplayObject<'gc, B>>,
 
-    mouse_hovered_object: Option<DisplayObject<'gc>>, // TODO: Remove GcCell wrapped inside GcCell.
+    mouse_hovered_object: Option<DisplayObject<'gc, B>>, // TODO: Remove GcCell wrapped inside GcCell.
 
     /// The object being dragged via a `startDrag` action.
-    drag_object: Option<DragObject<'gc>>,
+    drag_object: Option<DragObject<'gc, B>>,
 
-    avm: Avm1<'gc>,
-    action_queue: ActionQueue<'gc>,
+    avm: Avm1<'gc, B>,
+    action_queue: ActionQueue<'gc, B>,
 
     /// Object which manages asynchronous processes that need to interact with
     /// data in the GC arena.
-    load_manager: LoadManager<'gc>,
+    load_manager: LoadManager<'gc, B>,
 }
 
-impl<'gc> GcRootData<'gc> {
+impl<'gc, B: Backends> GcRootData<'gc, B> {
     /// Splits out parameters for creating an `UpdateContext`
     /// (because we can borrow fields of `self` independently)
     fn update_context_params(
         &mut self,
     ) -> (
-        &mut BTreeMap<u32, DisplayObject<'gc>>,
-        &mut Library<'gc>,
-        &mut ActionQueue<'gc>,
-        &mut Avm1<'gc>,
-        &mut Option<DragObject<'gc>>,
-        &mut LoadManager<'gc>,
+        &mut BTreeMap<u32, DisplayObject<'gc, B>>,
+        &mut Library<'gc, B>,
+        &mut ActionQueue<'gc, B>,
+        &mut Avm1<'gc, B>,
+        &mut Option<DragObject<'gc, B>>,
+        &mut LoadManager<'gc, B>,
     ) {
         (
             &mut self.levels,
@@ -80,14 +78,112 @@ impl<'gc> GcRootData<'gc> {
 }
 type Error = Box<dyn std::error::Error>;
 
-make_arena!(GcArena, GcRoot);
+pub(self) struct GcArena<B: Backends> {
+    context: gc_arena::Context,
+    root: ::std::mem::ManuallyDrop<GcRoot<'static, B>>,
+}
+impl<B: Backends> GcArena<B> {
+    #[allow(unused)]
+    pub fn new<F>(arena_parameters: gc_arena::ArenaParameters, f: F) -> GcArena<B>
+        where
+            F: for<'gc> FnOnce(gc_arena::MutationContext<'gc, '_>) -> GcRoot<'gc, B>,
+    {
+        unsafe {
+            let context = gc_arena::Context::new(arena_parameters);
+            let root: GcRoot<'static, B> = ::std::mem::transmute(f(context.mutation_context()));
+            GcArena {
+                context: context,
+                root: ::std::mem::ManuallyDrop::new(root),
+            }
+        }
+    }
 
-type Audio = Box<dyn AudioBackend>;
-type Navigator = Box<dyn NavigatorBackend>;
-type Renderer = Box<dyn RenderBackend>;
-type Input = Box<dyn InputBackend>;
 
-pub struct Player {
+    #[allow(unused)]
+    pub fn try_new<F, E>(
+        arena_parameters: gc_arena::ArenaParameters,
+        f: F,
+    ) -> Result<GcArena<B>, E>
+        where
+            F: for<'gc> FnOnce(gc_arena::MutationContext<'gc, '_>) -> Result<GcRoot<'gc, B>, E>,
+    {
+        unsafe {
+            let context = gc_arena::Context::new(arena_parameters);
+            let root: GcRoot<B> = f(context.mutation_context())?;
+            let root: GcRoot<'static, B> = ::std::mem::transmute(root);
+            Ok(GcArena {
+                context: context,
+                root: ::std::mem::ManuallyDrop::new(root),
+            })
+        }
+    }
+
+
+    #[allow(unused)]
+    #[inline]
+    pub fn mutate<F, R>(&mut self, f: F) -> R
+        where
+            F: for<'gc> FnOnce(gc_arena::MutationContext<'gc, '_>, &GcRoot<'gc, B>) -> R,
+    {
+        unsafe {
+            f(
+                self.context.mutation_context(),
+                ::std::mem::transmute::<&GcRoot<'static, B>, _>(&*self.root),
+            )
+        }
+    }
+
+
+    #[allow(unused)]
+    #[inline]
+    pub fn total_allocated(&self) -> usize {
+        self.context.total_allocated()
+    }
+
+
+    #[allow(unused)]
+    #[inline]
+    pub fn allocation_debt(&self) -> f64 {
+        self.context.allocation_debt()
+    }
+
+
+    #[allow(unused)]
+    #[inline]
+    pub fn collect_debt(&mut self) {
+        unsafe {
+            let debt = self.context.allocation_debt();
+            if debt > 0.0 {
+                self.context.do_collection(&*self.root, debt);
+            }
+        }
+    }
+
+
+    #[allow(unused)]
+    pub fn collect_all(&mut self) {
+        self.context.wake();
+        unsafe {
+            self.context
+                .do_collection(&*self.root, ::std::f64::INFINITY);
+        }
+    }
+}
+impl<B: Backends> Drop for GcArena<B> {
+    fn drop(&mut self) {
+        unsafe {
+            ::std::mem::ManuallyDrop::drop(&mut self.root);
+        }
+    }
+}
+
+// pub trait PlayerUpdater {
+//     fn update<F, R>(&mut self, func: F) -> R
+//         where
+//             F: for<'a, 'gc> FnOnce(&mut Avm1<'gc, B>, &mut UpdateContext<'a, 'gc, '_, B>) -> R;
+// }
+
+pub struct Player<B: Backends> {
     /// The version of the player we're emulating.
     ///
     /// This serves a few purposes, primarily for compatibility:
@@ -105,17 +201,17 @@ pub struct Player {
     is_playing: bool,
     needs_render: bool,
 
-    audio: Audio,
-    renderer: Renderer,
-    pub navigator: Navigator,
-    input: Input,
+    audio: B::Audio,
+    renderer: B::Renderer,
+    pub navigator: B::Navigator,
+    input: B::Input,
     transform_stack: TransformStack,
     view_matrix: Matrix,
     inverse_view_matrix: Matrix,
 
     rng: SmallRng,
 
-    gc_arena: GcArena,
+    gc_arena: GcArena<B>,
     background_color: Color,
 
     frame_rate: f64,
@@ -142,12 +238,12 @@ pub struct Player {
     self_reference: Option<Weak<Mutex<Self>>>,
 }
 
-impl Player {
+impl<B: Backends> Player<B> {
     pub fn new(
-        mut renderer: Renderer,
-        audio: Audio,
-        navigator: Navigator,
-        input: Input,
+        mut renderer: B::Renderer,
+        audio: B::Audio,
+        navigator: B::Navigator,
+        input: B::Input,
         swf_data: Vec<u8>,
     ) -> Result<Arc<Mutex<Self>>, Error> {
         let movie = Arc::new(SwfMovie::from_data(&swf_data)?);
@@ -351,12 +447,12 @@ impl Player {
         let button_event = match event {
             // ASCII characters convert directly to keyPress button events.
             PlayerEvent::TextInput { codepoint }
-                if codepoint as u32 >= 32 && codepoint as u32 <= 126 =>
-            {
-                Some(ButtonEvent::KeyPress {
-                    key_code: ButtonKeyCode::try_from(codepoint as u8).unwrap(),
-                })
-            }
+            if codepoint as u32 >= 32 && codepoint as u32 <= 126 =>
+                {
+                    Some(ButtonEvent::KeyPress {
+                        key_code: ButtonKeyCode::try_from(codepoint as u8).unwrap(),
+                    })
+                }
 
             // Special keys have custom values for keyPress.
             PlayerEvent::KeyDown { key_code } => {
@@ -609,11 +705,11 @@ impl Player {
         self.needs_render = false;
     }
 
-    pub fn audio(&self) -> &Audio {
+    pub fn audio(&self) -> &B::Audio {
         &self.audio
     }
 
-    pub fn audio_mut(&mut self) -> &mut Audio {
+    pub fn audio_mut(&mut self) -> &mut B::Audio {
         &mut self.audio
     }
 
@@ -622,23 +718,23 @@ impl Player {
         self.frame_rate
     }
 
-    pub fn renderer(&self) -> &Renderer {
+    pub fn renderer(&self) -> &B::Renderer {
         &self.renderer
     }
 
-    pub fn renderer_mut(&mut self) -> &mut Renderer {
+    pub fn renderer_mut(&mut self) -> &mut B::Renderer {
         &mut self.renderer
     }
 
-    pub fn input(&self) -> &Input {
+    pub fn input(&self) -> &B::Input {
         &self.input
     }
 
-    pub fn input_mut(&mut self) -> &mut dyn InputBackend {
-        self.input.deref_mut()
+    pub fn input_mut(&mut self) -> &mut B::Input {
+        &mut self.input
     }
 
-    fn run_actions<'gc>(avm: &mut Avm1<'gc>, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn run_actions<'gc>(avm: &mut Avm1<'gc, B>, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         // Note that actions can queue further actions, so a while loop is necessary here.
         while let Some(actions) = context.action_queue.pop_action() {
             // We don't run frame actions if the clip was removed after it queued the action.
@@ -791,8 +887,8 @@ impl Player {
     /// Runs the closure `f` with an `UpdateContext`.
     /// This takes cares of populating the `UpdateContext` struct, avoiding borrow issues.
     fn mutate_with_update_context<F, R>(&mut self, f: F) -> R
-    where
-        F: for<'a, 'gc> FnOnce(&mut Avm1<'gc>, &mut UpdateContext<'a, 'gc, '_>) -> R,
+        where
+            F: for<'a, 'gc> FnOnce(&mut Avm1<'gc, B>, &mut UpdateContext<'a, 'gc, '_, B>) -> R,
     {
         // We have to do this piecewise borrowing of fields before the closure to avoid
         // completely borrowing `self`.
@@ -869,8 +965,8 @@ impl Player {
     fn load_device_font<'gc>(
         gc_context: gc_arena::MutationContext<'gc, '_>,
         data: &[u8],
-        renderer: &mut Renderer,
-    ) -> Result<crate::font::Font<'gc>, Error> {
+        renderer: &mut B::Renderer,
+    ) -> Result<crate::font::Font<'gc, B>, Error> {
         let mut reader = swf::read::Reader::new(data, 8);
         let device_font = crate::font::Font::from_swf_tag(
             gc_context,
@@ -890,7 +986,7 @@ impl Player {
     /// hover state up to date, and running garbage collection.
     pub fn update<F, R>(&mut self, func: F) -> R
     where
-        F: for<'a, 'gc> FnOnce(&mut Avm1<'gc>, &mut UpdateContext<'a, 'gc, '_>) -> R,
+        F: for<'a, 'gc> FnOnce(&mut Avm1<'gc, B>, &mut UpdateContext<'a, 'gc, '_, B>) -> R,
     {
         let rval = self.mutate_with_update_context(|avm, context| {
             let rval = func(avm, context);
@@ -911,9 +1007,9 @@ impl Player {
     }
 }
 
-pub struct DragObject<'gc> {
+pub struct DragObject<'gc, B> {
     /// The display object being dragged.
-    pub display_object: DisplayObject<'gc>,
+    pub display_object: DisplayObject<'gc, B>,
 
     /// The offset from the mouse position to the center of the clip.
     pub offset: (Twips, Twips),
@@ -922,7 +1018,7 @@ pub struct DragObject<'gc> {
     pub constraint: BoundingBox,
 }
 
-unsafe impl<'gc> gc_arena::Collect for DragObject<'gc> {
+unsafe impl<'gc, B: Backends> gc_arena::Collect for DragObject<'gc, B> {
     fn trace(&self, cc: gc_arena::CollectionContext) {
         self.display_object.trace(cc);
     }

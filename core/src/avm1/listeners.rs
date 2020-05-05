@@ -2,30 +2,31 @@ use crate::avm1::return_value::ReturnValue;
 use crate::avm1::{Avm1, Error, Object, ScriptObject, TObject, UpdateContext, Value};
 
 use gc_arena::{Collect, MutationContext};
+use crate::backend::Backends;
 
 #[derive(Clone, Collect, Debug, Copy)]
 #[collect(no_drop)]
-pub struct Listeners<'gc>(Object<'gc>);
+pub struct Listeners<'gc, B: Backends>(Object<'gc, B>);
 
 macro_rules! register_listener {
     ( $gc_context: ident, $object:ident, $listener: ident, $fn_proto: ident, $system_listeners_key: ident ) => {{
-        pub fn add_listener<'gc>(
-            avm: &mut Avm1<'gc>,
-            context: &mut UpdateContext<'_, 'gc, '_>,
-            _this: Object<'gc>,
-            args: &[Value<'gc>],
-        ) -> Result<ReturnValue<'gc>, Error> {
+        pub fn add_listener<'gc, B: Backends>(
+            avm: &mut Avm1<'gc, B>,
+            context: &mut UpdateContext<'_, 'gc, '_, B>,
+            _this: Object<'gc, B>,
+            args: &[Value<'gc, B>],
+        ) -> Result<ReturnValue<'gc, B>, Error> {
             avm.system_listeners
                 .$system_listeners_key
                 .add_listener(context, args)
         }
 
-        pub fn remove_listener<'gc>(
-            avm: &mut Avm1<'gc>,
-            context: &mut UpdateContext<'_, 'gc, '_>,
-            _this: Object<'gc>,
-            args: &[Value<'gc>],
-        ) -> Result<ReturnValue<'gc>, Error> {
+        pub fn remove_listener<'gc, B: Backends>(
+            avm: &mut Avm1<'gc, B>,
+            context: &mut UpdateContext<'_, 'gc, '_, B>,
+            _this: Object<'gc, B>,
+            args: &[Value<'gc, B>],
+        ) -> Result<ReturnValue<'gc, B>, Error> {
             let listener = avm.system_listeners.$system_listeners_key;
             listener.remove_listener(avm, context, args)
         }
@@ -55,16 +56,16 @@ macro_rules! register_listener {
     }};
 }
 
-impl<'gc> Listeners<'gc> {
-    pub fn new(gc_context: MutationContext<'gc, '_>, array_proto: Option<Object<'gc>>) -> Self {
+impl<'gc, B: Backends> Listeners<'gc, B> {
+    pub fn new(gc_context: MutationContext<'gc, '_>, array_proto: Option<Object<'gc, B>>) -> Self {
         Self(ScriptObject::array(gc_context, array_proto).into())
     }
 
     pub fn add_listener(
         &self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        args: &[Value<'gc>],
-    ) -> Result<ReturnValue<'gc>, Error> {
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        args: &[Value<'gc, B>],
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         let listeners = self.0;
         let listener = args.get(0).unwrap_or(&Value::Undefined).to_owned();
         for i in 0..listeners.length() {
@@ -79,10 +80,10 @@ impl<'gc> Listeners<'gc> {
 
     pub fn remove_listener(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        args: &[Value<'gc>],
-    ) -> Result<ReturnValue<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        args: &[Value<'gc, B>],
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         let listeners = self.0;
         let listener = args.get(0).unwrap_or(&Value::Undefined).to_owned();
         for index in 0..listeners.length() {
@@ -110,10 +111,10 @@ impl<'gc> Listeners<'gc> {
 
     pub fn prepare_handlers(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         method: &str,
-    ) -> Vec<(Object<'gc>, Value<'gc>)> {
+    ) -> Vec<(Object<'gc, B>, Value<'gc, B>)> {
         let listeners = self.0;
         let mut handlers = Vec::with_capacity(listeners.length());
 
@@ -131,7 +132,7 @@ impl<'gc> Listeners<'gc> {
         handlers
     }
 
-    pub fn object(&self) -> Object<'gc> {
+    pub fn object(&self) -> Object<'gc, B> {
         self.0
     }
 }
@@ -143,18 +144,18 @@ pub enum SystemListener {
 
 #[derive(Clone, Collect, Debug, Copy)]
 #[collect(no_drop)]
-pub struct SystemListeners<'gc> {
-    pub mouse: Listeners<'gc>,
+pub struct SystemListeners<'gc, B: Backends> {
+    pub mouse: Listeners<'gc, B>,
 }
 
-impl<'gc> SystemListeners<'gc> {
-    pub fn new(gc_context: MutationContext<'gc, '_>, array_proto: Option<Object<'gc>>) -> Self {
+impl<'gc, B: Backends> SystemListeners<'gc, B> {
+    pub fn new(gc_context: MutationContext<'gc, '_>, array_proto: Option<Object<'gc, B>>) -> Self {
         Self {
             mouse: Listeners::new(gc_context, array_proto),
         }
     }
 
-    pub fn get(&self, listener: SystemListener) -> Listeners<'gc> {
+    pub fn get(&self, listener: SystemListener) -> Listeners<'gc, B> {
         match listener {
             SystemListener::Mouse => self.mouse,
         }

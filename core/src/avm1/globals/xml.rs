@@ -12,6 +12,7 @@ use crate::xml::{XMLDocument, XMLNode};
 use enumset::EnumSet;
 use gc_arena::MutationContext;
 use quick_xml::Error as ParseError;
+use crate::backend::Backends;
 
 pub const XML_NO_ERROR: f64 = 0.0;
 #[allow(dead_code)]
@@ -34,17 +35,17 @@ pub const XML_MISMATCHED_END: f64 = -10.0;
 /// not. Those nodes are filtered from all attributes that return XML nodes to
 /// act as if those nodes did not exist. For example, `prevSibling` skips
 /// past incompatible nodes, etc.
-fn is_as2_compatible(node: XMLNode<'_>) -> bool {
+fn is_as2_compatible<B: Backends>(node: XMLNode<'_, B>) -> bool {
     node.is_document_root() || node.is_element() || node.is_text()
 }
 
 /// XMLNode constructor
-pub fn xmlnode_constructor<'gc>(
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_constructor<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let blank_document = XMLDocument::new(ac.gc_context);
 
     match (
@@ -69,12 +70,12 @@ pub fn xmlnode_constructor<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn xmlnode_append_child<'gc>(
-    _avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_append_child<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let (Some(mut xmlnode), Some(Ok(Some(child_xmlnode)))) = (
         this.as_xml_node(),
         args.get(0).map(|n| n.as_object().map(|n| n.as_xml_node())),
@@ -88,12 +89,12 @@ pub fn xmlnode_append_child<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn xmlnode_insert_before<'gc>(
-    _avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_insert_before<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let (Some(mut xmlnode), Some(Ok(Some(child_xmlnode))), Some(Ok(Some(insertpoint_xmlnode)))) = (
         this.as_xml_node(),
         args.get(0).map(|n| n.as_object().map(|n| n.as_xml_node())),
@@ -109,12 +110,12 @@ pub fn xmlnode_insert_before<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn xmlnode_clone_node<'gc>(
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_clone_node<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let (Some(xmlnode), deep) = (
         this.as_xml_node(),
         args.get(0)
@@ -132,12 +133,12 @@ pub fn xmlnode_clone_node<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn xmlnode_get_namespace_for_prefix<'gc>(
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_get_namespace_for_prefix<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let (Some(xmlnode), Some(prefix_string)) = (
         this.as_xml_node(),
         args.get(0).map(|v| v.clone().coerce_to_string(avm, ac)),
@@ -152,12 +153,12 @@ pub fn xmlnode_get_namespace_for_prefix<'gc>(
     }
 }
 
-pub fn xmlnode_get_prefix_for_namespace<'gc>(
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_get_prefix_for_namespace<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let (Some(xmlnode), Some(uri_string)) = (
         this.as_xml_node(),
         args.get(0).map(|v| v.clone().coerce_to_string(avm, ac)),
@@ -172,12 +173,12 @@ pub fn xmlnode_get_prefix_for_namespace<'gc>(
     }
 }
 
-pub fn xmlnode_has_child_nodes<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_has_child_nodes<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(xmlnode) = this.as_xml_node() {
         Ok((xmlnode.children_len() > 0).into())
     } else {
@@ -185,12 +186,12 @@ pub fn xmlnode_has_child_nodes<'gc>(
     }
 }
 
-pub fn xmlnode_remove_node<'gc>(
-    _avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_remove_node<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(node) = this.as_xml_node() {
         if let Ok(Some(mut parent)) = node.parent() {
             if let Err(e) = parent.remove_child(ac.gc_context, node) {
@@ -202,12 +203,12 @@ pub fn xmlnode_remove_node<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn xmlnode_to_string<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_to_string<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(node) = this.as_xml_node() {
         let result = node.into_string(&mut is_as2_compatible);
 
@@ -222,12 +223,12 @@ pub fn xmlnode_to_string<'gc>(
     Ok("".to_string().into())
 }
 
-pub fn xmlnode_local_name<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_local_name<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     Ok(this
         .as_xml_node()
         .and_then(|n| n.tag_name())
@@ -235,12 +236,12 @@ pub fn xmlnode_local_name<'gc>(
         .unwrap_or_else(|| Value::Null.into()))
 }
 
-pub fn xmlnode_node_name<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_node_name<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     Ok(this
         .as_xml_node()
         .and_then(|n| n.tag_name())
@@ -248,12 +249,12 @@ pub fn xmlnode_node_name<'gc>(
         .unwrap_or_else(|| Value::Null.into()))
 }
 
-pub fn xmlnode_node_type<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_node_type<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     Ok(this
         .as_xml_node()
         .map(|n| {
@@ -268,12 +269,12 @@ pub fn xmlnode_node_type<'gc>(
         .unwrap_or_else(|| Value::Undefined.into()))
 }
 
-pub fn xmlnode_node_value<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_node_value<'gc, B>(
+    _avm: &mut Avm1<'gc, B>,
+    _ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     Ok(this
         .as_xml_node()
         .and_then(|n| n.node_value())
@@ -281,12 +282,12 @@ pub fn xmlnode_node_value<'gc>(
         .unwrap_or_else(|| Value::Null.into()))
 }
 
-pub fn xmlnode_prefix<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_prefix<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     Ok(this
         .as_xml_node()
         .and_then(|n| n.tag_name())
@@ -298,12 +299,12 @@ pub fn xmlnode_prefix<'gc>(
         .unwrap_or_else(|| Value::Null.into()))
 }
 
-pub fn xmlnode_child_nodes<'gc>(
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_child_nodes<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(node) = this.as_xml_node() {
         let array = ScriptObject::array(ac.gc_context, Some(avm.prototypes.array));
         if let Some(children) = node.children() {
@@ -331,12 +332,12 @@ pub fn xmlnode_child_nodes<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn xmlnode_first_child<'gc>(
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_first_child<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(node) = this.as_xml_node() {
         if let Some(mut children) = node.children() {
             return Ok(children
@@ -353,12 +354,12 @@ pub fn xmlnode_first_child<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn xmlnode_last_child<'gc>(
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_last_child<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(node) = this.as_xml_node() {
         if let Some(mut children) = node.children() {
             return Ok(children
@@ -375,12 +376,12 @@ pub fn xmlnode_last_child<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn xmlnode_parent_node<'gc>(
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_parent_node<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(node) = this.as_xml_node() {
         return Ok(node
             .parent()
@@ -396,12 +397,12 @@ pub fn xmlnode_parent_node<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn xmlnode_previous_sibling<'gc>(
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_previous_sibling<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(node) = this.as_xml_node() {
         let mut prev = node.prev_sibling().unwrap_or(None);
         while let Some(my_prev) = prev {
@@ -423,12 +424,12 @@ pub fn xmlnode_previous_sibling<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn xmlnode_next_sibling<'gc>(
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_next_sibling<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(node) = this.as_xml_node() {
         let mut next = node.next_sibling().unwrap_or(None);
         while let Some(my_next) = next {
@@ -450,12 +451,12 @@ pub fn xmlnode_next_sibling<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn xmlnode_attributes<'gc>(
-    _avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_attributes<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(mut node) = this.as_xml_node() {
         return Ok(node
             .attribute_script_object(ac.gc_context)
@@ -466,12 +467,12 @@ pub fn xmlnode_attributes<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn xmlnode_namespace_uri<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xmlnode_namespace_uri<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(node) = this.as_xml_node() {
         if let Some(name) = node.tag_name() {
             return Ok(node
@@ -487,11 +488,11 @@ pub fn xmlnode_namespace_uri<'gc>(
 }
 
 /// Construct the prototype for `XMLNode`.
-pub fn create_xmlnode_proto<'gc>(
+pub fn create_xmlnode_proto<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let xmlnode_proto = XMLObject::empty_node(gc_context, Some(proto));
 
     xmlnode_proto.add_property(
@@ -670,12 +671,12 @@ pub fn create_xmlnode_proto<'gc>(
 }
 
 /// XML (document) constructor
-pub fn xml_constructor<'gc>(
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xml_constructor<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     match (
         args.get(0).map(|v| v.clone().coerce_to_string(avm, ac)),
         this.as_xml_node(),
@@ -701,12 +702,12 @@ pub fn xml_constructor<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn xml_create_element<'gc>(
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xml_create_element<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let document = if let Some(node) = this.as_xml_node() {
         node.document()
     } else {
@@ -725,12 +726,12 @@ pub fn xml_create_element<'gc>(
     Ok(object.into())
 }
 
-pub fn xml_create_text_node<'gc>(
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xml_create_text_node<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let document = if let Some(node) = this.as_xml_node() {
         node.document()
     } else {
@@ -749,12 +750,12 @@ pub fn xml_create_text_node<'gc>(
     Ok(object.into())
 }
 
-pub fn xml_parse_xml<'gc>(
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xml_parse_xml<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(mut node) = this.as_xml_node() {
         let xmlstring =
             if let Some(Ok(xmlstring)) = args.get(0).map(|s| s.clone().coerce_to_string(avm, ac)) {
@@ -782,12 +783,12 @@ pub fn xml_parse_xml<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn xml_load<'gc>(
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xml_load<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let url = args.get(0).cloned().unwrap_or(Value::Undefined);
 
     if let Value::Null = url {
@@ -816,12 +817,12 @@ pub fn xml_load<'gc>(
     }
 }
 
-pub fn xml_on_data<'gc>(
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xml_on_data<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let src = args.get(0).cloned().unwrap_or(Value::Undefined);
 
     if let Value::Undefined = src {
@@ -841,12 +842,12 @@ pub fn xml_on_data<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn xml_doc_type_decl<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xml_doc_type_decl<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(node) = this.as_xml_node() {
         if let Some(doctype) = node.document().doctype() {
             let result = doctype.into_string(&mut |_| true);
@@ -863,12 +864,12 @@ pub fn xml_doc_type_decl<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn xml_xml_decl<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xml_xml_decl<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(node) = this.as_xml_node() {
         let result = node.document().xmldecl_string();
 
@@ -882,12 +883,12 @@ pub fn xml_xml_decl<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn xml_id_map<'gc>(
-    _avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xml_id_map<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(node) = this.as_xml_node() {
         return Ok(node.document().idmap_script_object(ac.gc_context).into());
     }
@@ -895,12 +896,12 @@ pub fn xml_id_map<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn xml_status<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn xml_status<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(node) = this.as_xml_node() {
         return match node.document().last_parse_error() {
             None => Ok(XML_NO_ERROR.into()),
@@ -931,11 +932,11 @@ pub fn xml_status<'gc>(
 }
 
 /// Construct the prototype for `XML`.
-pub fn create_xml_proto<'gc>(
+pub fn create_xml_proto<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let xml_proto = XMLObject::empty_node(gc_context, Some(proto));
 
     xml_proto.add_property(

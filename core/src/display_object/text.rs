@@ -6,20 +6,21 @@ use crate::tag_utils::SwfMovie;
 use crate::transform::Transform;
 use gc_arena::{Collect, GcCell};
 use std::sync::Arc;
+use crate::backend::Backends;
 
 #[derive(Clone, Debug, Collect, Copy)]
 #[collect(no_drop)]
-pub struct Text<'gc>(GcCell<'gc, TextData<'gc>>);
+pub struct Text<'gc, B: Backends>(GcCell<'gc, TextData<'gc, B>>);
 
 #[derive(Clone, Debug)]
-pub struct TextData<'gc> {
-    base: DisplayObjectBase<'gc>,
+pub struct TextData<'gc, B: Backends> {
+    base: DisplayObjectBase<'gc, B>,
     static_data: gc_arena::Gc<'gc, TextStatic>,
 }
 
-impl<'gc> Text<'gc> {
+impl<'gc, B: Backends> Text<'gc, B> {
     pub fn from_swf_tag(
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         swf: Arc<SwfMovie>,
         tag: &swf::Text,
     ) -> Self {
@@ -42,7 +43,7 @@ impl<'gc> Text<'gc> {
     }
 }
 
-impl<'gc> TDisplayObject<'gc> for Text<'gc> {
+impl<'gc, B: Backends> TDisplayObject<'gc, B> for Text<'gc, B> {
     impl_display_object!(base);
 
     fn id(&self) -> CharacterId {
@@ -53,11 +54,11 @@ impl<'gc> TDisplayObject<'gc> for Text<'gc> {
         Some(self.0.read().static_data.swf.clone())
     }
 
-    fn run_frame(&mut self, _avm: &mut Avm1<'gc>, _context: &mut UpdateContext) {
+    fn run_frame(&mut self, _avm: &mut Avm1<'gc, B>, _context: &mut UpdateContext<B>) {
         // Noop
     }
 
-    fn render(&self, context: &mut RenderContext) {
+    fn render(&self, context: &mut RenderContext<B>) {
         let tf = self.0.read();
         context.transform_stack.push(&*self.transform());
         context.transform_stack.push(&Transform {
@@ -118,7 +119,7 @@ impl<'gc> TDisplayObject<'gc> for Text<'gc> {
     }
 }
 
-unsafe impl<'gc> gc_arena::Collect for TextData<'gc> {
+unsafe impl<'gc, B: Backends> gc_arena::Collect for TextData<'gc, B> {
     #[inline]
     fn trace(&self, cc: gc_arena::CollectionContext) {
         self.base.trace(cc);

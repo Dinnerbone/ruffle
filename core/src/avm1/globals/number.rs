@@ -8,14 +8,15 @@ use crate::avm1::{Avm1, Error, Object, TObject, Value};
 use crate::context::UpdateContext;
 use enumset::EnumSet;
 use gc_arena::MutationContext;
+use crate::backend::Backends;
 
 /// `Number` constructor/function
-pub fn number<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn number<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let value = if let Some(val) = args.get(0) {
         val.as_number(avm, context)?
     } else {
@@ -31,11 +32,11 @@ pub fn number<'gc>(
     Ok(value.into())
 }
 
-pub fn create_number_object<'gc>(
+pub fn create_number_object<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-    number_proto: Option<Object<'gc>>,
-    fn_proto: Option<Object<'gc>>,
-) -> Object<'gc> {
+    number_proto: Option<Object<'gc, B>>,
+    fn_proto: Option<Object<'gc, B>>,
+) -> Object<'gc, B> {
     let number = FunctionObject::function(
         gc_context,
         Executable::Native(number),
@@ -85,11 +86,11 @@ pub fn create_number_object<'gc>(
 }
 
 /// Creates `Number.prototype`.
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let number_proto = ValueObject::empty_box(gc_context, Some(proto));
     let mut object = number_proto.as_script_object().unwrap();
 
@@ -111,12 +112,12 @@ pub fn create_proto<'gc>(
     number_proto
 }
 
-fn to_string<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn to_string<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     // Boxed value must be a number. No coercion.
     let this = if let Some(vbox) = this.as_value_object() {
         if let Value::Number(n) = vbox.unbox() {
@@ -182,12 +183,12 @@ fn to_string<'gc>(
     }
 }
 
-fn value_of<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+fn value_of<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(vbox) = this.as_value_object() {
         if let Value::Number(n) = vbox.unbox() {
             return Ok(n.into());

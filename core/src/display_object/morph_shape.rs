@@ -5,19 +5,20 @@ use crate::display_object::{DisplayObjectBase, TDisplayObject};
 use crate::prelude::*;
 use gc_arena::{Collect, Gc, GcCell, MutationContext};
 use swf::Twips;
+use crate::backend::Backends;
 
 #[derive(Clone, Debug, Collect, Copy)]
 #[collect(no_drop)]
-pub struct MorphShape<'gc>(GcCell<'gc, MorphShapeData<'gc>>);
+pub struct MorphShape<'gc, B: Backends>(GcCell<'gc, MorphShapeData<'gc, B>>);
 
 #[derive(Clone, Debug)]
-pub struct MorphShapeData<'gc> {
-    base: DisplayObjectBase<'gc>,
+pub struct MorphShapeData<'gc, B: Backends> {
+    base: DisplayObjectBase<'gc, B>,
     static_data: Gc<'gc, MorphShapeStatic>,
     ratio: u16,
 }
 
-impl<'gc> MorphShape<'gc> {
+impl<'gc, B: Backends> MorphShape<'gc, B> {
     pub fn new(
         gc_context: gc_arena::MutationContext<'gc, '_>,
         static_data: MorphShapeStatic,
@@ -41,7 +42,7 @@ impl<'gc> MorphShape<'gc> {
     }
 }
 
-impl<'gc> TDisplayObject<'gc> for MorphShape<'gc> {
+impl<'gc, B: Backends> TDisplayObject<'gc, B> for MorphShape<'gc, B> {
     impl_display_object!(base);
 
     fn id(&self) -> CharacterId {
@@ -52,11 +53,11 @@ impl<'gc> TDisplayObject<'gc> for MorphShape<'gc> {
         Some(*self)
     }
 
-    fn run_frame(&mut self, _avm: &mut Avm1<'gc>, _context: &mut UpdateContext) {
+    fn run_frame(&mut self, _avm: &mut Avm1<'gc, B>, _context: &mut UpdateContext<B>) {
         // Noop
     }
 
-    fn render(&self, context: &mut RenderContext) {
+    fn render(&self, context: &mut RenderContext<B>) {
         context.transform_stack.push(&*self.transform());
 
         if let Some(frame) = self.0.read().static_data.frames.get(&self.ratio()) {
@@ -80,7 +81,7 @@ impl<'gc> TDisplayObject<'gc> for MorphShape<'gc> {
     }
 }
 
-unsafe impl<'gc> gc_arena::Collect for MorphShapeData<'gc> {
+unsafe impl<'gc, B: Backends> gc_arena::Collect for MorphShapeData<'gc, B> {
     #[inline]
     fn trace(&self, cc: gc_arena::CollectionContext) {
         self.base.trace(cc);
@@ -447,7 +448,7 @@ impl MorphShapeStatic {
     }
 }
 
-unsafe impl<'gc> gc_arena::Collect for MorphShapeStatic {
+unsafe impl<'gc, B: Backends> gc_arena::Collect for MorphShapeStatic {
     #[inline]
     fn needs_trace() -> bool {
         false

@@ -3,13 +3,14 @@
 use crate::avm1::return_value::ReturnValue;
 use crate::avm1::{Avm1, Error, Object, ScriptObject, TObject, UpdateContext, Value};
 use gc_arena::MutationContext;
+use crate::backend::Backends;
 
-fn map_defined_to_string<'gc>(
+fn map_defined_to_string<'gc, B: Backends>(
     name: &str,
-    this: Object<'gc>,
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    val: Option<Value<'gc>>,
+    this: Object<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    val: Option<Value<'gc, B>>,
 ) -> Result<(), Error> {
     let val = match val {
         Some(Value::Undefined) => Value::Null,
@@ -23,12 +24,12 @@ fn map_defined_to_string<'gc>(
     Ok(())
 }
 
-fn map_defined_to_number<'gc>(
+fn map_defined_to_number<'gc, B: Backends>(
     name: &str,
-    this: Object<'gc>,
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    val: Option<Value<'gc>>,
+    this: Object<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    val: Option<Value<'gc, B>>,
 ) -> Result<(), Error> {
     let val = match val {
         Some(Value::Undefined) => Value::Null,
@@ -42,12 +43,12 @@ fn map_defined_to_number<'gc>(
     Ok(())
 }
 
-fn map_defined_to_bool<'gc>(
+fn map_defined_to_bool<'gc, B: Backends>(
     name: &str,
-    this: Object<'gc>,
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    val: Option<Value<'gc>>,
+    this: Object<'gc, B>,
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    val: Option<Value<'gc, B>>,
 ) -> Result<(), Error> {
     let val = match val {
         Some(Value::Undefined) => Value::Null,
@@ -62,12 +63,12 @@ fn map_defined_to_bool<'gc>(
 }
 
 /// `TextFormat` constructor
-pub fn constructor<'gc>(
-    avm: &mut Avm1<'gc>,
-    ac: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn constructor<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    ac: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     map_defined_to_string("font", this, avm, ac, args.get(0).cloned())?;
     map_defined_to_number("size", this, avm, ac, args.get(1).cloned())?;
     map_defined_to_number("color", this, avm, ac, args.get(2).cloned())?;
@@ -86,11 +87,11 @@ pub fn constructor<'gc>(
 }
 
 /// `TextFormat.prototype` constructor
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    _fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    _fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let tf_proto = ScriptObject::object(gc_context, Some(proto));
 
     tf_proto.into()

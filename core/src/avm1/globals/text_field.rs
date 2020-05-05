@@ -6,23 +6,24 @@ use crate::avm1::{Avm1, Error, Object, ScriptObject, TObject, UpdateContext, Val
 use crate::display_object::{EditText, TDisplayObject};
 use crate::font::TextFormat;
 use gc_arena::MutationContext;
+use crate::backend::Backends;
 
 /// Implements `TextField`
-pub fn constructor<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn constructor<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     Ok(Value::Undefined.into())
 }
 
-pub fn get_text<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn get_text<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(display_object) = this.as_display_object() {
         if let Some(text_field) = display_object.as_edit_text() {
             return Ok(text_field.text().into());
@@ -31,12 +32,12 @@ pub fn get_text<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn set_text<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn set_text<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(display_object) = this.as_display_object() {
         if let Some(text_field) = display_object.as_edit_text() {
             if let Some(value) = args.get(0) {
@@ -58,14 +59,14 @@ macro_rules! with_text_field {
         $(
             $object.force_set_function(
                 $name,
-                |avm, context: &mut UpdateContext<'_, 'gc, '_>, this, args| -> Result<ReturnValue<'gc>, Error> {
+                |avm, context: &mut UpdateContext<'_, 'gc, '_, B>, this, args| -> Result<ReturnValue<'gc, B>, Error> {
                     if let Some(display_object) = this.as_display_object() {
                         if let Some(text_field) = display_object.as_edit_text() {
                             return $fn(text_field, avm, context, args);
                         }
                     }
                     Ok(Value::Undefined.into())
-                } as crate::avm1::function::NativeFunction<'gc>,
+                } as crate::avm1::function::NativeFunction<'gc, B>,
                 $gc_context,
                 DontDelete | ReadOnly | DontEnum,
                 $fn_proto
@@ -74,12 +75,12 @@ macro_rules! with_text_field {
     }};
 }
 
-pub fn text_width<'gc>(
-    _avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn text_width<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(etext) = this
         .as_display_object()
         .and_then(|dobj| dobj.as_edit_text())
@@ -92,12 +93,12 @@ pub fn text_width<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn text_height<'gc>(
-    _avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn text_height<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(etext) = this
         .as_display_object()
         .and_then(|dobj| dobj.as_edit_text())
@@ -110,12 +111,12 @@ pub fn text_height<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn multiline<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn multiline<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(etext) = this
         .as_display_object()
         .and_then(|dobj| dobj.as_edit_text())
@@ -126,12 +127,12 @@ pub fn multiline<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn set_multiline<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn set_multiline<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let is_multiline = args
         .get(0)
         .cloned()
@@ -148,12 +149,12 @@ pub fn set_multiline<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn word_wrap<'gc>(
-    _avm: &mut Avm1<'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn word_wrap<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    _context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(etext) = this
         .as_display_object()
         .and_then(|dobj| dobj.as_edit_text())
@@ -164,12 +165,12 @@ pub fn word_wrap<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn set_word_wrap<'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn set_word_wrap<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     let is_word_wrap = args
         .get(0)
         .cloned()
@@ -186,11 +187,11 @@ pub fn set_word_wrap<'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let mut object = ScriptObject::object(gc_context, Some(proto));
 
     display_object::define_display_object_proto(gc_context, object, fn_proto);
@@ -199,12 +200,12 @@ pub fn create_proto<'gc>(
         gc_context,
         object,
         Some(fn_proto),
-        "getNewTextFormat" => |text_field: EditText<'gc>, avm: &mut Avm1<'gc>, context: &mut UpdateContext<'_, 'gc, '_>, _args| {
+        "getNewTextFormat" => |text_field: EditText<'gc, B>, avm: &mut Avm1<'gc, B>, context: &mut UpdateContext<'_, 'gc, '_, B>, _args| {
             let tf = text_field.new_text_format();
 
             Ok(tf.as_avm1_object(avm, context)?.into())
         },
-        "setNewTextFormat" => |text_field: EditText<'gc>, avm: &mut Avm1<'gc>, context: &mut UpdateContext<'_, 'gc, '_>, args: &[Value<'gc>]| {
+        "setNewTextFormat" => |text_field: EditText<'gc, B>, avm: &mut Avm1<'gc, B>, context: &mut UpdateContext<'_, 'gc, '_, B>, args: &[Value<'gc, B>]| {
             let tf = args.get(0).cloned().unwrap_or(Value::Undefined);
 
             if let Value::Object(tf) = tf {
@@ -219,7 +220,7 @@ pub fn create_proto<'gc>(
     object.into()
 }
 
-pub fn attach_virtual_properties<'gc>(gc_context: MutationContext<'gc, '_>, object: Object<'gc>) {
+pub fn attach_virtual_properties<'gc, B: Backends>(gc_context: MutationContext<'gc, '_>, object: Object<'gc, B>) {
     object.add_property(
         gc_context,
         "text",

@@ -7,6 +7,7 @@ use crate::avm1::{Avm1, Error, Object, UpdateContext, Value};
 use core::fmt;
 use enumset::{EnumSet, EnumSetType};
 use std::mem::replace;
+use crate::backend::Backends;
 
 /// Attributes of properties in the AVM runtime.
 /// The order is significant and should match the order used by `object::as_set_prop_flags`.
@@ -19,30 +20,30 @@ pub enum Attribute {
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone)]
-pub enum Property<'gc> {
+pub enum Property<'gc, B: Backends> {
     Virtual {
-        get: Executable<'gc>,
-        set: Option<Executable<'gc>>,
+        get: Executable<'gc, B>,
+        set: Option<Executable<'gc, B>>,
         attributes: EnumSet<Attribute>,
     },
     Stored {
-        value: Value<'gc>,
+        value: Value<'gc, B>,
         attributes: EnumSet<Attribute>,
     },
 }
 
-impl<'gc> Property<'gc> {
+impl<'gc, B: Backends> Property<'gc, B> {
     /// Get the value of a property slot.
     ///
     /// This function yields `ReturnValue` because some properties may be
     /// user-defined.
     pub fn get(
         &self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-        base_proto: Option<Object<'gc>>,
-    ) -> Result<ReturnValue<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+        base_proto: Option<Object<'gc, B>>,
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         match self {
             Property::Virtual { get, .. } => get.exec(avm, context, this, base_proto, &[]),
             Property::Stored { value, .. } => Ok(value.to_owned().into()),
@@ -56,12 +57,12 @@ impl<'gc> Property<'gc> {
     /// discarded.
     pub fn set(
         &mut self,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        this: Object<'gc>,
-        base_proto: Option<Object<'gc>>,
-        new_value: impl Into<Value<'gc>>,
-    ) -> Result<ReturnValue<'gc>, Error> {
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+        base_proto: Option<Object<'gc, B>>,
+        new_value: impl Into<Value<'gc, B>>,
+    ) -> Result<ReturnValue<'gc, B>, Error> {
         match self {
             Property::Virtual { set, .. } => {
                 if let Some(function) = set {
@@ -74,7 +75,7 @@ impl<'gc> Property<'gc> {
                 value, attributes, ..
             } => {
                 if !attributes.contains(ReadOnly) {
-                    replace::<Value<'gc>>(value, new_value.into());
+                    replace::<Value<'gc, B>>(value, new_value.into());
                 }
 
                 Ok(Value::Undefined.into())
@@ -133,7 +134,7 @@ impl<'gc> Property<'gc> {
     }
 }
 
-unsafe impl<'gc> gc_arena::Collect for Property<'gc> {
+unsafe impl<'gc, B: Backends> gc_arena::Collect for Property<'gc, B> {
     fn trace(&self, cc: gc_arena::CollectionContext) {
         match self {
             Property::Virtual { get, set, .. } => {
@@ -145,7 +146,7 @@ unsafe impl<'gc> gc_arena::Collect for Property<'gc> {
     }
 }
 
-impl fmt::Debug for Property<'_> {
+impl<B: Backends> fmt::Debug for Property<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Property::Virtual {

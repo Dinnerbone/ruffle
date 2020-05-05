@@ -8,6 +8,7 @@ use enumset::EnumSet;
 use gc_arena::MutationContext;
 use rand::Rng;
 use std::f64;
+use crate::backend::Backends;
 
 mod array;
 pub(crate) mod boolean;
@@ -30,12 +31,12 @@ mod text_format;
 mod xml;
 
 #[allow(non_snake_case, unused_must_use)] //can't use errors yet
-pub fn getURL<'a, 'gc>(
-    avm: &mut Avm1<'gc>,
-    context: &mut UpdateContext<'a, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn getURL<'a, 'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    context: &mut UpdateContext<'a, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     //TODO: Error behavior if no arguments are present
     if let Some(url_val) = args.get(0) {
         let swf_version = avm.current_swf_version();
@@ -59,24 +60,24 @@ pub fn getURL<'a, 'gc>(
     Ok(Value::Undefined.into())
 }
 
-pub fn random<'gc>(
-    _avm: &mut Avm1<'gc>,
-    action_context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn random<'gc, B: Backends>(
+    _avm: &mut Avm1<'gc, B>,
+    action_context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     match args.get(0) {
         Some(Value::Number(max)) => Ok(action_context.rng.gen_range(0.0f64, max).floor().into()),
         _ => Ok(Value::Undefined.into()), //TODO: Shouldn't this be an error condition?
     }
 }
 
-pub fn is_nan<'gc>(
-    avm: &mut Avm1<'gc>,
-    action_context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn is_nan<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    action_context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if let Some(val) = args.get(0) {
         Ok(val.as_number(avm, action_context)?.is_nan().into())
     } else {
@@ -84,12 +85,12 @@ pub fn is_nan<'gc>(
     }
 }
 
-pub fn get_infinity<'gc>(
-    avm: &mut Avm1<'gc>,
-    _action_context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn get_infinity<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    _action_context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if avm.current_swf_version() > 4 {
         Ok(f64::INFINITY.into())
     } else {
@@ -97,12 +98,12 @@ pub fn get_infinity<'gc>(
     }
 }
 
-pub fn get_nan<'gc>(
-    avm: &mut Avm1<'gc>,
-    _action_context: &mut UpdateContext<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+pub fn get_nan<'gc, B: Backends>(
+    avm: &mut Avm1<'gc, B>,
+    _action_context: &mut UpdateContext<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<ReturnValue<'gc, B>, Error> {
     if avm.current_swf_version() > 4 {
         Ok(f64::NAN.into())
     } else {
@@ -114,22 +115,22 @@ pub fn get_nan<'gc>(
 /// whatever the hell happens to `_global`. These are, of course,
 /// user-modifiable.
 #[derive(Clone)]
-pub struct SystemPrototypes<'gc> {
-    pub button: Object<'gc>,
-    pub object: Object<'gc>,
-    pub function: Object<'gc>,
-    pub movie_clip: Object<'gc>,
-    pub sound: Object<'gc>,
-    pub text_field: Object<'gc>,
-    pub text_format: Object<'gc>,
-    pub array: Object<'gc>,
-    pub xml_node: Object<'gc>,
-    pub string: Object<'gc>,
-    pub number: Object<'gc>,
-    pub boolean: Object<'gc>,
+pub struct SystemPrototypes<'gc, B: Backends> {
+    pub button: Object<'gc, B>,
+    pub object: Object<'gc, B>,
+    pub function: Object<'gc, B>,
+    pub movie_clip: Object<'gc, B>,
+    pub sound: Object<'gc, B>,
+    pub text_field: Object<'gc, B>,
+    pub text_format: Object<'gc, B>,
+    pub array: Object<'gc, B>,
+    pub xml_node: Object<'gc, B>,
+    pub string: Object<'gc, B>,
+    pub number: Object<'gc, B>,
+    pub boolean: Object<'gc, B>,
 }
 
-unsafe impl<'gc> gc_arena::Collect for SystemPrototypes<'gc> {
+unsafe impl<'gc, B: Backends> gc_arena::Collect for SystemPrototypes<'gc, B> {
     #[inline]
     fn trace(&self, cc: gc_arena::CollectionContext) {
         self.object.trace(cc);
@@ -148,40 +149,40 @@ unsafe impl<'gc> gc_arena::Collect for SystemPrototypes<'gc> {
 }
 
 /// Initialize default global scope and builtins for an AVM1 instance.
-pub fn create_globals<'gc>(
+pub fn create_globals<'gc, B: Backends>(
     gc_context: MutationContext<'gc, '_>,
-) -> (SystemPrototypes<'gc>, Object<'gc>, SystemListeners<'gc>) {
+) -> (SystemPrototypes<'gc, B>, Object<'gc, B>, SystemListeners<'gc, B>) {
     let object_proto = ScriptObject::object_cell(gc_context, None);
     let function_proto = function::create_proto(gc_context, object_proto);
 
     object::fill_proto(gc_context, object_proto, function_proto);
 
-    let button_proto: Object<'gc> = button::create_proto(gc_context, object_proto, function_proto);
+    let button_proto: Object<'gc, B> = button::create_proto(gc_context, object_proto, function_proto);
 
-    let movie_clip_proto: Object<'gc> =
+    let movie_clip_proto: Object<'gc, B> =
         movie_clip::create_proto(gc_context, object_proto, function_proto);
 
-    let movie_clip_loader_proto: Object<'gc> =
+    let movie_clip_loader_proto: Object<'gc, B> =
         movie_clip_loader::create_proto(gc_context, object_proto, function_proto);
 
-    let sound_proto: Object<'gc> = sound::create_proto(gc_context, object_proto, function_proto);
+    let sound_proto: Object<'gc, B> = sound::create_proto(gc_context, object_proto, function_proto);
 
-    let text_field_proto: Object<'gc> =
+    let text_field_proto: Object<'gc, B> =
         text_field::create_proto(gc_context, object_proto, function_proto);
-    let text_format_proto: Object<'gc> =
+    let text_format_proto: Object<'gc, B> =
         text_format::create_proto(gc_context, object_proto, function_proto);
 
-    let array_proto: Object<'gc> = array::create_proto(gc_context, object_proto, function_proto);
+    let array_proto: Object<'gc, B> = array::create_proto(gc_context, object_proto, function_proto);
 
-    let color_proto: Object<'gc> = color::create_proto(gc_context, object_proto, function_proto);
-    let xmlnode_proto: Object<'gc> =
+    let color_proto: Object<'gc, B> = color::create_proto(gc_context, object_proto, function_proto);
+    let xmlnode_proto: Object<'gc, B> =
         xml::create_xmlnode_proto(gc_context, object_proto, function_proto);
 
-    let xml_proto: Object<'gc> = xml::create_xml_proto(gc_context, xmlnode_proto, function_proto);
+    let xml_proto: Object<'gc, B> = xml::create_xml_proto(gc_context, xmlnode_proto, function_proto);
 
-    let string_proto: Object<'gc> = string::create_proto(gc_context, object_proto, function_proto);
-    let number_proto: Object<'gc> = number::create_proto(gc_context, object_proto, function_proto);
-    let boolean_proto: Object<'gc> =
+    let string_proto: Object<'gc, B> = string::create_proto(gc_context, object_proto, function_proto);
+    let number_proto: Object<'gc, B> = number::create_proto(gc_context, object_proto, function_proto);
+    let boolean_proto: Object<'gc, B> =
         boolean::create_proto(gc_context, object_proto, function_proto);
 
     //TODO: These need to be constructors and should also set `.prototype` on each one
@@ -392,7 +393,7 @@ pub fn create_globals<'gc>(
 mod tests {
     use super::*;
 
-    fn setup<'gc>(_avm: &mut Avm1<'gc>, context: &mut UpdateContext<'_, 'gc, '_>) -> Object<'gc> {
+    fn setup<'gc, B: Backends>(_avm: &mut Avm1<'gc, B>, context: &mut UpdateContext<'_, 'gc, '_, B>) -> Object<'gc, B> {
         create_globals(context.gc_context).1
     }
 

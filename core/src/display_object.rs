@@ -28,10 +28,11 @@ pub use graphic::Graphic;
 pub use morph_shape::{MorphShape, MorphShapeStatic};
 pub use movie_clip::MovieClip;
 pub use text::Text;
+use crate::backend::Backends;
 
 #[derive(Clone, Debug)]
-pub struct DisplayObjectBase<'gc> {
-    parent: Option<DisplayObject<'gc>>,
+pub struct DisplayObjectBase<'gc, B: Backends> {
+    parent: Option<DisplayObject<'gc, B>>,
     place_frame: u16,
     depth: Depth,
     transform: Transform,
@@ -48,19 +49,19 @@ pub struct DisplayObjectBase<'gc> {
 
     /// The first child of this display object in order of execution.
     /// This is differen than render order.
-    first_child: Option<DisplayObject<'gc>>,
+    first_child: Option<DisplayObject<'gc, B>>,
 
     /// The previous sibling of this display object in order of execution.
-    prev_sibling: Option<DisplayObject<'gc>>,
+    prev_sibling: Option<DisplayObject<'gc, B>>,
 
     /// The next sibling of this display object in order of execution.
-    next_sibling: Option<DisplayObject<'gc>>,
+    next_sibling: Option<DisplayObject<'gc, B>>,
 
     /// Bit flags for various display object properites.
     flags: EnumSet<DisplayObjectFlags>,
 }
 
-impl<'gc> Default for DisplayObjectBase<'gc> {
+impl<'gc, B: Backends> Default for DisplayObjectBase<'gc, B> {
     fn default() -> Self {
         Self {
             parent: Default::default(),
@@ -81,7 +82,7 @@ impl<'gc> Default for DisplayObjectBase<'gc> {
     }
 }
 
-unsafe impl<'gc> Collect for DisplayObjectBase<'gc> {
+unsafe impl<'gc, B: Backends> Collect for DisplayObjectBase<'gc, B> {
     #[inline]
     fn trace(&self, cc: gc_arena::CollectionContext) {
         self.parent.trace(cc);
@@ -92,7 +93,7 @@ unsafe impl<'gc> Collect for DisplayObjectBase<'gc> {
 }
 
 #[allow(dead_code)]
-impl<'gc> DisplayObjectBase<'gc> {
+impl<'gc, B: Backends> DisplayObjectBase<'gc, B> {
     /// Reset all properties that would be adjusted by a movie load.
     fn reset_for_movie_load(&mut self) {
         self.first_child = None;
@@ -274,43 +275,43 @@ impl<'gc> DisplayObjectBase<'gc> {
     fn set_clip_depth(&mut self, _context: MutationContext<'gc, '_>, depth: Depth) {
         self.clip_depth = depth;
     }
-    fn parent(&self) -> Option<DisplayObject<'gc>> {
+    fn parent(&self) -> Option<DisplayObject<'gc, B>> {
         self.parent
     }
     fn set_parent(
         &mut self,
         _context: MutationContext<'gc, '_>,
-        parent: Option<DisplayObject<'gc>>,
+        parent: Option<DisplayObject<'gc, B>>,
     ) {
         self.parent = parent;
     }
-    fn first_child(&self) -> Option<DisplayObject<'gc>> {
+    fn first_child(&self) -> Option<DisplayObject<'gc, B>> {
         self.first_child
     }
     fn set_first_child(
         &mut self,
         _context: MutationContext<'gc, '_>,
-        node: Option<DisplayObject<'gc>>,
+        node: Option<DisplayObject<'gc, B>>,
     ) {
         self.first_child = node;
     }
-    fn prev_sibling(&self) -> Option<DisplayObject<'gc>> {
+    fn prev_sibling(&self) -> Option<DisplayObject<'gc, B>> {
         self.prev_sibling
     }
     fn set_prev_sibling(
         &mut self,
         _context: MutationContext<'gc, '_>,
-        node: Option<DisplayObject<'gc>>,
+        node: Option<DisplayObject<'gc, B>>,
     ) {
         self.prev_sibling = node;
     }
-    fn next_sibling(&self) -> Option<DisplayObject<'gc>> {
+    fn next_sibling(&self) -> Option<DisplayObject<'gc, B>> {
         self.next_sibling
     }
     fn set_next_sibling(
         &mut self,
         _context: MutationContext<'gc, '_>,
-        node: Option<DisplayObject<'gc>>,
+        node: Option<DisplayObject<'gc, B>>,
     ) {
         self.next_sibling = node;
     }
@@ -363,17 +364,17 @@ impl<'gc> DisplayObjectBase<'gc> {
 #[enum_trait_object(
     #[derive(Clone, Collect, Debug, Copy)]
     #[collect(no_drop)]
-    pub enum DisplayObject<'gc> {
-        Bitmap(Bitmap<'gc>),
-        Button(Button<'gc>),
-        EditText(EditText<'gc>),
-        Graphic(Graphic<'gc>),
-        MorphShape(MorphShape<'gc>),
-        MovieClip(MovieClip<'gc>),
-        Text(Text<'gc>),
+    pub enum DisplayObject<'gc, B> {
+        Bitmap(Bitmap<'gc, B>),
+        Button(Button<'gc, B>),
+        EditText(EditText<'gc, B>),
+        Graphic(Graphic<'gc, B>),
+        MorphShape(MorphShape<'gc, B>),
+        MovieClip(MovieClip<'gc, B>),
+        Text(Text<'gc, B>),
     }
 )]
-pub trait TDisplayObject<'gc>: 'gc + Collect + Debug + Into<DisplayObject<'gc>> {
+pub trait TDisplayObject<'gc, B>: 'gc + Collect + Debug + Into<DisplayObject<'gc, B>> {
     fn id(&self) -> CharacterId;
     fn depth(&self) -> Depth;
     fn set_depth(&self, gc_context: MutationContext<'gc, '_>, depth: Depth);
@@ -630,37 +631,37 @@ pub trait TDisplayObject<'gc>: 'gc + Collect + Debug + Into<DisplayObject<'gc>> 
 
     fn clip_depth(&self) -> Depth;
     fn set_clip_depth(&mut self, context: MutationContext<'gc, '_>, depth: Depth);
-    fn parent(&self) -> Option<DisplayObject<'gc>>;
-    fn set_parent(&mut self, context: MutationContext<'gc, '_>, parent: Option<DisplayObject<'gc>>);
-    fn first_child(&self) -> Option<DisplayObject<'gc>>;
+    fn parent(&self) -> Option<DisplayObject<'gc, B>>;
+    fn set_parent(&mut self, context: MutationContext<'gc, '_>, parent: Option<DisplayObject<'gc, B>>);
+    fn first_child(&self) -> Option<DisplayObject<'gc, B>>;
     fn set_first_child(
         &mut self,
         context: MutationContext<'gc, '_>,
-        node: Option<DisplayObject<'gc>>,
+        node: Option<DisplayObject<'gc, B>>,
     );
-    fn prev_sibling(&self) -> Option<DisplayObject<'gc>>;
+    fn prev_sibling(&self) -> Option<DisplayObject<'gc, B>>;
     fn set_prev_sibling(
         &mut self,
         context: MutationContext<'gc, '_>,
-        node: Option<DisplayObject<'gc>>,
+        node: Option<DisplayObject<'gc, B>>,
     );
-    fn next_sibling(&self) -> Option<DisplayObject<'gc>>;
+    fn next_sibling(&self) -> Option<DisplayObject<'gc, B>>;
     fn set_next_sibling(
         &mut self,
         context: MutationContext<'gc, '_>,
-        node: Option<DisplayObject<'gc>>,
+        node: Option<DisplayObject<'gc, B>>,
     );
 
     /// Iterates over the children of this display object in execution order.
     /// This is different than render order.
-    fn children(&self) -> ChildIter<'gc> {
+    fn children(&self) -> ChildIter<'gc, B> {
         ChildIter {
             cur_child: self.first_child(),
         }
     }
 
     /// Get a child display object by instance name.
-    fn get_child_by_name(&self, name: &str, case_sensitive: bool) -> Option<DisplayObject<'gc>> {
+    fn get_child_by_name(&self, name: &str, case_sensitive: bool) -> Option<DisplayObject<'gc, B>> {
         // TODO: Make a HashMap from name -> child?
         use crate::string_utils::swf_string_eq_ignore_case;
         if case_sensitive {
@@ -678,9 +679,9 @@ pub trait TDisplayObject<'gc>: 'gc + Collect + Debug + Into<DisplayObject<'gc>> 
     fn get_level_by_path(
         &self,
         name: &str,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         case_sensitive: bool,
-    ) -> Option<DisplayObject<'gc>> {
+    ) -> Option<DisplayObject<'gc, B>> {
         if let Some(slice) = name.get(0..min(name.len(), 6)) {
             let is_level = if case_sensitive {
                 slice == "_level"
@@ -722,7 +723,7 @@ pub trait TDisplayObject<'gc>: 'gc + Collect + Debug + Into<DisplayObject<'gc>> 
     /// so forth.
     fn propagate_button_event(
         &self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         event: ButtonEvent,
     ) -> ButtonEventResult {
         for child in self.children() {
@@ -736,27 +737,27 @@ pub trait TDisplayObject<'gc>: 'gc + Collect + Debug + Into<DisplayObject<'gc>> 
     /// Executes and propagates the given clip event.
     /// Events execute inside-out; the deepest child will react first, followed by its parent, and
     /// so forth.
-    fn propagate_clip_event(&self, context: &mut UpdateContext<'_, 'gc, '_>, event: ClipEvent) {
+    fn propagate_clip_event(&self, context: &mut UpdateContext<'_, 'gc, '_, B>, event: ClipEvent) {
         for child in self.children() {
             child.propagate_clip_event(context, event);
         }
     }
 
-    fn run_frame(&mut self, _avm: &mut Avm1<'gc>, _context: &mut UpdateContext<'_, 'gc, '_>) {}
-    fn render(&self, _context: &mut RenderContext<'_, 'gc>) {}
-    fn unload(&mut self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn run_frame(&mut self, _avm: &mut Avm1<'gc, B>, _context: &mut UpdateContext<'_, 'gc, '_, B>) {}
+    fn render(&self, _context: &mut RenderContext<'_, 'gc, B>) {}
+    fn unload(&mut self, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         self.set_removed(context.gc_context, true);
     }
-    fn as_button(&self) -> Option<Button<'gc>> {
+    fn as_button(&self) -> Option<Button<'gc, B>> {
         None
     }
-    fn as_movie_clip(&self) -> Option<MovieClip<'gc>> {
+    fn as_movie_clip(&self) -> Option<MovieClip<'gc, B>> {
         None
     }
-    fn as_edit_text(&self) -> Option<EditText<'gc>> {
+    fn as_edit_text(&self) -> Option<EditText<'gc, B>> {
         None
     }
-    fn as_morph_shape(&self) -> Option<MorphShape<'gc>> {
+    fn as_morph_shape(&self) -> Option<MorphShape<'gc, B>> {
         None
     }
     fn apply_place_object(
@@ -804,7 +805,7 @@ pub trait TDisplayObject<'gc>: 'gc + Collect + Debug + Into<DisplayObject<'gc>> 
     fn copy_display_properties_from(
         &mut self,
         gc_context: MutationContext<'gc, '_>,
-        other: DisplayObject<'gc>,
+        other: DisplayObject<'gc, B>,
     ) {
         self.set_matrix(gc_context, &*other.matrix());
         self.set_color_transform(gc_context, &*other.color_transform());
@@ -820,7 +821,7 @@ pub trait TDisplayObject<'gc>: 'gc + Collect + Debug + Into<DisplayObject<'gc>> 
         // TODO: More in here eventually.
     }
 
-    fn object(&self) -> Value<'gc> {
+    fn object(&self) -> Value<'gc, B> {
         Value::Undefined // todo: impl for every type and delete this fallback
     }
 
@@ -831,18 +832,18 @@ pub trait TDisplayObject<'gc>: 'gc + Collect + Debug + Into<DisplayObject<'gc>> 
 
     fn mouse_pick(
         &self,
-        _self_node: DisplayObject<'gc>,
+        _self_node: DisplayObject<'gc, B>,
         _pos: (Twips, Twips),
-    ) -> Option<DisplayObject<'gc>> {
+    ) -> Option<DisplayObject<'gc, B>> {
         None
     }
 
     fn post_instantiation(
         &mut self,
-        _avm: &mut Avm1<'gc>,
-        _context: &mut UpdateContext<'_, 'gc, '_>,
-        _display_object: DisplayObject<'gc>,
-        _init_object: Option<Object<'gc>>,
+        _avm: &mut Avm1<'gc, B>,
+        _context: &mut UpdateContext<'_, 'gc, '_, B>,
+        _display_object: DisplayObject<'gc, B>,
+        _init_object: Option<Object<'gc, B>>,
     ) {
     }
 
@@ -858,7 +859,7 @@ pub trait TDisplayObject<'gc>: 'gc + Collect + Debug + Into<DisplayObject<'gc>> 
         self.parent().and_then(|p| p.movie())
     }
 
-    fn instantiate(&self, gc_context: MutationContext<'gc, '_>) -> DisplayObject<'gc>;
+    fn instantiate(&self, gc_context: MutationContext<'gc, '_>) -> DisplayObject<'gc, B>;
     fn as_ptr(&self) -> *const DisplayObjectPtr;
 
     /// Whether this object can be used as a mask.
@@ -873,7 +874,7 @@ pub trait TDisplayObject<'gc>: 'gc + Collect + Debug + Into<DisplayObject<'gc>> 
     /// This function can panic in the rare case that a top-level display
     /// object has not been post-instantiated, or that a top-level display
     /// object does not implement `object`.
-    fn root(&self) -> DisplayObject<'gc> {
+    fn root(&self) -> DisplayObject<'gc, B> {
         let mut parent = self.parent();
 
         while let Some(p) = parent {
@@ -1005,43 +1006,43 @@ macro_rules! impl_display_object {
         ) {
             self.0.write(context).$field.set_clip_depth(context, depth)
         }
-        fn parent(&self) -> Option<crate::display_object::DisplayObject<'gc>> {
+        fn parent(&self) -> Option<crate::display_object::DisplayObject<'gc, B>> {
             self.0.read().$field.parent()
         }
         fn set_parent(
             &mut self,
             context: gc_arena::MutationContext<'gc, '_>,
-            parent: Option<crate::display_object::DisplayObject<'gc>>,
+            parent: Option<crate::display_object::DisplayObject<'gc, B>>,
         ) {
             self.0.write(context).$field.set_parent(context, parent)
         }
-        fn first_child(&self) -> Option<DisplayObject<'gc>> {
+        fn first_child(&self) -> Option<DisplayObject<'gc, B>> {
             self.0.read().$field.first_child()
         }
         fn set_first_child(
             &mut self,
             context: gc_arena::MutationContext<'gc, '_>,
-            node: Option<DisplayObject<'gc>>,
+            node: Option<DisplayObject<'gc, B>>,
         ) {
             self.0.write(context).$field.set_first_child(context, node);
         }
-        fn prev_sibling(&self) -> Option<DisplayObject<'gc>> {
+        fn prev_sibling(&self) -> Option<DisplayObject<'gc, B>> {
             self.0.read().$field.prev_sibling()
         }
         fn set_prev_sibling(
             &mut self,
             context: gc_arena::MutationContext<'gc, '_>,
-            node: Option<DisplayObject<'gc>>,
+            node: Option<DisplayObject<'gc, B>>,
         ) {
             self.0.write(context).$field.set_prev_sibling(context, node);
         }
-        fn next_sibling(&self) -> Option<DisplayObject<'gc>> {
+        fn next_sibling(&self) -> Option<DisplayObject<'gc, B>> {
             self.0.read().$field.next_sibling()
         }
         fn set_next_sibling(
             &mut self,
             context: gc_arena::MutationContext<'gc, '_>,
-            node: Option<DisplayObject<'gc>>,
+            node: Option<DisplayObject<'gc, B>>,
         ) {
             self.0.write(context).$field.set_next_sibling(context, node);
         }
@@ -1076,7 +1077,7 @@ macro_rules! impl_display_object {
         fn instantiate(
             &self,
             gc_context: gc_arena::MutationContext<'gc, '_>,
-        ) -> crate::display_object::DisplayObject<'gc> {
+        ) -> crate::display_object::DisplayObject<'gc, B> {
             Self(gc_arena::GcCell::allocate(
                 gc_context,
                 self.0.read().clone(),
@@ -1092,9 +1093,9 @@ macro_rules! impl_display_object {
 /// Renders the children of a display object, taking masking into account.
 // TODO(Herschel): Move this into an IDisplayObject/IDisplayObjectContainer trait when
 // we figure out inheritance
-pub fn render_children<'gc>(
-    context: &mut RenderContext<'_, 'gc>,
-    children: &std::collections::BTreeMap<Depth, DisplayObject<'gc>>,
+pub fn render_children<'gc, B: Backends>(
+    context: &mut RenderContext<'_, 'gc, B>,
+    children: &std::collections::BTreeMap<Depth, DisplayObject<'gc, B>>,
 ) {
     let mut clip_depth = 0;
     let mut clip_depth_stack = vec![];
@@ -1125,8 +1126,8 @@ pub fn render_children<'gc>(
     }
 }
 
-impl<'gc> DisplayObject<'gc> {
-    pub fn ptr_eq(a: DisplayObject<'gc>, b: DisplayObject<'gc>) -> bool {
+impl<'gc, B: Backends> DisplayObject<'gc, B> {
+    pub fn ptr_eq(a: DisplayObject<'gc, B>, b: DisplayObject<'gc, B>) -> bool {
         a.as_ptr() == b.as_ptr()
     }
 }
@@ -1150,12 +1151,12 @@ enum DisplayObjectFlags {
     TransformedByScript,
 }
 
-pub struct ChildIter<'gc> {
-    cur_child: Option<DisplayObject<'gc>>,
+pub struct ChildIter<'gc, B: Backends> {
+    cur_child: Option<DisplayObject<'gc, B>>,
 }
 
-impl<'gc> Iterator for ChildIter<'gc> {
-    type Item = DisplayObject<'gc>;
+impl<'gc, B: Backends> Iterator for ChildIter<'gc, B> {
+    type Item = DisplayObject<'gc, B>;
     fn next(&mut self) -> Option<Self::Item> {
         let cur = self.cur_child;
         self.cur_child = self

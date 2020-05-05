@@ -8,28 +8,29 @@ use gc_arena::{Collect, GcCell, MutationContext};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
+use crate::backend::Backends;
 
 #[derive(Clone, Debug, Collect, Copy)]
 #[collect(no_drop)]
-pub struct Button<'gc>(GcCell<'gc, ButtonData<'gc>>);
+pub struct Button<'gc, B: Backends>(GcCell<'gc, ButtonData<'gc, B>>);
 
 #[derive(Clone, Debug)]
-pub struct ButtonData<'gc> {
-    base: DisplayObjectBase<'gc>,
+pub struct ButtonData<'gc, B: Backends> {
+    base: DisplayObjectBase<'gc, B>,
     static_data: GcCell<'gc, ButtonStatic>,
     state: ButtonState,
-    hit_area: BTreeMap<Depth, DisplayObject<'gc>>,
-    children: BTreeMap<Depth, DisplayObject<'gc>>,
+    hit_area: BTreeMap<Depth, DisplayObject<'gc, B>>,
+    children: BTreeMap<Depth, DisplayObject<'gc, B>>,
     tracking: ButtonTracking,
-    object: Option<Object<'gc>>,
+    object: Option<Object<'gc, B>>,
     initialized: bool,
 }
 
-impl<'gc> Button<'gc> {
+impl<'gc, B: Backends> Button<'gc, B> {
     pub fn from_swf_tag(
         button: &swf::Button,
         source_movie: &SwfSlice,
-        _library: &crate::library::Library<'gc>,
+        _library: &crate::library::Library<'gc, B>,
         gc_context: gc_arena::MutationContext<'gc, '_>,
     ) -> Self {
         let mut actions = vec![];
@@ -79,8 +80,8 @@ impl<'gc> Button<'gc> {
 
     pub fn handle_button_event(
         &mut self,
-        avm: &mut Avm1<'gc>,
-        context: &mut crate::context::UpdateContext<'_, 'gc, '_>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut crate::context::UpdateContext<'_, 'gc, '_, B>,
         event: ButtonEvent,
     ) {
         self.0
@@ -116,7 +117,7 @@ impl<'gc> Button<'gc> {
     }
 }
 
-impl<'gc> TDisplayObject<'gc> for Button<'gc> {
+impl<'gc, B: Backends> TDisplayObject<'gc, B> for Button<'gc, B> {
     impl_display_object!(base);
 
     fn id(&self) -> CharacterId {
@@ -129,10 +130,10 @@ impl<'gc> TDisplayObject<'gc> for Button<'gc> {
 
     fn post_instantiation(
         &mut self,
-        _avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        display_object: DisplayObject<'gc>,
-        _init_object: Option<Object<'gc>>,
+        _avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        display_object: DisplayObject<'gc, B>,
+        _init_object: Option<Object<'gc, B>>,
     ) {
         let mut mc = self.0.write(context.gc_context);
         if mc.object.is_none() {
@@ -145,13 +146,13 @@ impl<'gc> TDisplayObject<'gc> for Button<'gc> {
         }
     }
 
-    fn run_frame(&mut self, avm: &mut Avm1<'gc>, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn run_frame(&mut self, avm: &mut Avm1<'gc, B>, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         self.0
             .write(context.gc_context)
             .run_frame((*self).into(), avm, context)
     }
 
-    fn render(&self, context: &mut RenderContext<'_, 'gc>) {
+    fn render(&self, context: &mut RenderContext<'_, 'gc, B>) {
         context.transform_stack.push(&*self.transform());
 
         crate::display_object::render_children(context, &self.0.read().children);
@@ -176,9 +177,9 @@ impl<'gc> TDisplayObject<'gc> for Button<'gc> {
 
     fn mouse_pick(
         &self,
-        self_node: DisplayObject<'gc>,
+        self_node: DisplayObject<'gc, B>,
         point: (Twips, Twips),
-    ) -> Option<DisplayObject<'gc>> {
+    ) -> Option<DisplayObject<'gc, B>> {
         // The button is hovered if the mouse is over any child nodes.
         if self.hit_test(point) {
             Some(self_node)
@@ -189,7 +190,7 @@ impl<'gc> TDisplayObject<'gc> for Button<'gc> {
 
     fn propagate_button_event(
         &self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         event: ButtonEvent,
     ) -> ButtonEventResult {
         for child in self.children() {
@@ -207,7 +208,7 @@ impl<'gc> TDisplayObject<'gc> for Button<'gc> {
         }
     }
 
-    fn object(&self) -> Value<'gc> {
+    fn object(&self) -> Value<'gc, B> {
         self.0
             .read()
             .object
@@ -224,12 +225,12 @@ impl<'gc> TDisplayObject<'gc> for Button<'gc> {
     }
 }
 
-impl<'gc> ButtonData<'gc> {
+impl<'gc, B: Backends> ButtonData<'gc, B> {
     fn set_state(
         &mut self,
-        self_display_object: DisplayObject<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut crate::context::UpdateContext<'_, 'gc, '_>,
+        self_display_object: DisplayObject<'gc, B>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut crate::context::UpdateContext<'_, 'gc, '_, B>,
         state: ButtonState,
     ) {
         self.state = state;
@@ -262,9 +263,9 @@ impl<'gc> ButtonData<'gc> {
 
     fn run_frame(
         &mut self,
-        self_display_object: DisplayObject<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        self_display_object: DisplayObject<'gc, B>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
     ) {
         // TODO: Move this to post_instantiation.
         if !self.initialized {
@@ -307,9 +308,9 @@ impl<'gc> ButtonData<'gc> {
 
     fn handle_button_event(
         &mut self,
-        self_display_object: DisplayObject<'gc>,
-        avm: &mut Avm1<'gc>,
-        context: &mut crate::context::UpdateContext<'_, 'gc, '_>,
+        self_display_object: DisplayObject<'gc, B>,
+        avm: &mut Avm1<'gc, B>,
+        context: &mut crate::context::UpdateContext<'_, 'gc, '_, B>,
         event: ButtonEvent,
     ) {
         let cur_state = self.state;
@@ -373,7 +374,7 @@ impl<'gc> ButtonData<'gc> {
 
     fn play_sound(
         &self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         sound: Option<&swf::ButtonSound>,
     ) {
         if let Some((id, sound_info)) = sound {
@@ -388,7 +389,7 @@ impl<'gc> ButtonData<'gc> {
     }
     fn run_actions(
         &mut self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         condition: swf::ButtonActionCondition,
         key_code: Option<ButtonKeyCode>,
     ) -> ButtonEventResult {
@@ -419,7 +420,7 @@ impl<'gc> ButtonData<'gc> {
     }
 }
 
-unsafe impl<'gc> gc_arena::Collect for ButtonData<'gc> {
+unsafe impl<'gc, B: Backends> gc_arena::Collect for ButtonData<'gc, B> {
     #[inline]
     fn trace(&self, cc: gc_arena::CollectionContext) {
         for child in self.children.values() {
