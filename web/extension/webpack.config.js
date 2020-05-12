@@ -8,6 +8,7 @@ module.exports = (env, argv) => {
   let mode = "production";
   if (argv && argv.mode) {
     mode = argv.mode;
+    let foo = 4;
   }
 
   console.log(`Building ${mode}...`);
