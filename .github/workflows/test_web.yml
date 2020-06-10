@@ -44,6 +44,8 @@ jobs:
     - name: Build web
       working-directory: web
       run: |
+        cat ~/.npmrc
+        rm ~/.npmrc
         npm run bootstrap
         npx eslint .
         npm run build
