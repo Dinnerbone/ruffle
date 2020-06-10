@@ -27,7 +27,7 @@
         "ruffle-selfhosted": "file:packages/selfhosted"
     },
     "scripts": {
-        "bootstrap": "npm install && lerna exec npm i",
+        "bootstrap": "npm install --verbose && lerna exec npm i --verbose",
         "build": "lerna run build --stream",
         "buildProduction": "lerna run build --stream -- --mode=production",
         "demo": "lerna run --scope ruffle-demo serve --stream",
