@@ -2,8 +2,9 @@
 
 use js_sys::{Array, ArrayBuffer, Uint8Array};
 use ruffle_core::backend::navigator::{
-    Error, NavigationMethod, NavigatorBackend, OwnedFuture, RequestOptions,
+    NavigationMethod, NavigatorBackend, OwnedFuture, RequestOptions,
 };
+use ruffle_core::loader::LoaderError;
 use std::collections::HashMap;
 use std::time::Duration;
 use wasm_bindgen::JsCast;
@@ -92,7 +93,7 @@ impl NavigatorBackend for WebNavigatorBackend {
         Duration::from_millis(dt as u64)
     }
 
-    fn fetch(&self, url: String, options: RequestOptions) -> OwnedFuture<Vec<u8>, Error> {
+    fn fetch(&self, url: String, options: RequestOptions) -> OwnedFuture<Vec<u8>, LoaderError> {
         Box::pin(async move {
             let mut init = RequestInit::new();
 
@@ -129,7 +130,10 @@ impl NavigatorBackend for WebNavigatorBackend {
             let window = web_sys::window().unwrap();
             let fetchval = JsFuture::from(window.fetch_with_request(&request)).await;
             if fetchval.is_err() {
-                return Err("Could not fetch, got JS Error".into());
+                return Err(LoaderError::NetworkError(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Could not fetch, got JS Error",
+                )));
             }
 
             let resp: Response = fetchval.unwrap().dyn_into().unwrap();
@@ -146,7 +150,7 @@ impl NavigatorBackend for WebNavigatorBackend {
         })
     }
 
-    fn spawn_future(&mut self, future: OwnedFuture<(), Error>) {
+    fn spawn_future(&mut self, future: OwnedFuture<(), LoaderError>) {
         spawn_local(async move {
             if let Err(e) = future.await {
                 log::error!("Asynchronous error occured: {}", e);
