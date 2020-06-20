@@ -43,7 +43,7 @@ pub fn getURL<'a, 'gc>(
     context: &mut UpdateContext<'a, 'gc, '_>,
     _this: Object<'gc>,
     args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+) -> Result<ReturnValue<'gc>, Error<'gc>> {
     //TODO: Error behavior if no arguments are present
     if let Some(url_val) = args.get(0) {
         let url = url_val.coerce_to_string(avm, context)?;
@@ -77,7 +77,7 @@ pub fn random<'gc>(
     action_context: &mut UpdateContext<'_, 'gc, '_>,
     _this: Object<'gc>,
     args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+) -> Result<ReturnValue<'gc>, Error<'gc>> {
     match args.get(0) {
         Some(Value::Number(max)) => Ok(action_context.rng.gen_range(0.0f64, max).floor().into()),
         _ => Ok(Value::Undefined.into()), //TODO: Shouldn't this be an error condition?
@@ -89,7 +89,7 @@ pub fn is_nan<'gc>(
     action_context: &mut UpdateContext<'_, 'gc, '_>,
     _this: Object<'gc>,
     args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+) -> Result<ReturnValue<'gc>, Error<'gc>> {
     if let Some(val) = args.get(0) {
         Ok(val.coerce_to_f64(avm, action_context)?.is_nan().into())
     } else {
@@ -102,7 +102,7 @@ pub fn get_infinity<'gc>(
     _action_context: &mut UpdateContext<'_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+) -> Result<ReturnValue<'gc>, Error<'gc>> {
     if avm.current_swf_version() > 4 {
         Ok(f64::INFINITY.into())
     } else {
@@ -115,7 +115,7 @@ pub fn get_nan<'gc>(
     _action_context: &mut UpdateContext<'_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
-) -> Result<ReturnValue<'gc>, Error> {
+) -> Result<ReturnValue<'gc>, Error<'gc>> {
     if avm.current_swf_version() > 4 {
         Ok(f64::NAN.into())
     } else {
