@@ -174,6 +174,8 @@ swf_tests! {
     (mcl_as_broadcaster, "avm1/mcl_as_broadcaster", 1),
     (uncaught_exception, "avm1/uncaught_exception", 1),
     (uncaught_exception_bubbled, "avm1/uncaught_exception_bubbled", 1),
+    (try_catch_finally, "avm1/try_catch_finally", 1),
+    (try_finally_simple, "avm1/try_finally_simple", 1),
     (loadmovie, "avm1/loadmovie", 2),
     (loadmovienum, "avm1/loadmovienum", 2),
     (loadmovie_method, "avm1/loadmovie_method", 2),
@@ -226,18 +228,18 @@ impl<'a> std::fmt::Debug for PrettyString<'a> {
     }
 }
 
-macro_rules! assert_eq {
-    ($left:expr, $right:expr) => {
-        pretty_assertions::assert_eq!(PrettyString($left.as_ref()), PrettyString($right.as_ref()));
-    };
-    ($left:expr, $right:expr, $message:expr) => {
-        pretty_assertions::assert_eq!(
-            PrettyString($left.as_ref()),
-            PrettyString($right.as_ref()),
-            $message
-        );
-    };
-}
+// macro_rules! assert_eq {
+//     ($left:expr, $right:expr) => {
+//         pretty_assertions::assert_eq!(PrettyString($left.as_ref()), PrettyString($right.as_ref()));
+//     };
+//     ($left:expr, $right:expr, $message:expr) => {
+//         pretty_assertions::assert_eq!(
+//             PrettyString($left.as_ref()),
+//             PrettyString($right.as_ref()),
+//             $message
+//         );
+//     };
+// }
 
 /// Loads an SWF and runs it through the Ruffle core for a number of frames.
 /// Tests that the trace output matches the given expected output.

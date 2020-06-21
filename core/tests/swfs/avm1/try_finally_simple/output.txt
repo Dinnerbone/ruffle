@@ -1,0 +1,10 @@
+// var outer_variable = "test";
+
+// try {
+// trace(outer_variable);
+test
+// } finally {
+// trace(outer_variable);
+test
+}
+// eof

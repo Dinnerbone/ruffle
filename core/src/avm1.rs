@@ -12,7 +12,7 @@ use std::convert::TryInto;
 use url::form_urlencoded;
 
 use swf::avm1::read::Reader;
-use swf::avm1::types::{Action, Function};
+use swf::avm1::types::{Action, Function, TryBlock};
 
 use crate::display_object::{DisplayObject, MovieClip};
 use crate::tag_utils::SwfSlice;
@@ -477,6 +477,13 @@ impl<'gc> Avm1<'gc> {
         if let Some(frame) = self.current_stack_frame() {
             self.stack_frames.pop();
 
+            let finally = frame.read().finally_block();
+
+            if let Some(finally) = finally {
+                self.insert_stack_frame(finally);
+                self.run_current_frame(context, finally);
+            }
+
             let can_return = frame.read().can_return() && !self.stack_frames.is_empty();
             if can_return {
                 frame
@@ -696,6 +703,7 @@ impl<'gc> Avm1<'gc> {
                 } => self.action_wait_for_frame_2(context, num_actions_to_skip, reader),
                 Action::With { actions } => self.action_with(context, actions),
                 Action::Throw => self.action_throw(context),
+                Action::Try(try_block) => self.action_try(context, try_block),
                 _ => self.unknown_op(context, action),
             };
             if let Err(e) = result {
@@ -2870,6 +2878,50 @@ impl<'gc> Avm1<'gc> {
         );
         self.retire_stack_frame(context, Value::Undefined);
         Err(Error::ThrownValue(value))
+    }
+
+    fn action_try(&mut self, context: &mut UpdateContext<'_, 'gc, '_>, try_info: TryBlock) -> Result<(), Error<'gc>> {
+        log::warn!("hello");
+        let try_block = self
+            .current_stack_frame()
+            .unwrap()
+            .read()
+            .data()
+            .to_subslice(try_info.try_actions)
+            .unwrap();
+        let try_scope = Scope::new_closure_scope(
+            self.current_stack_frame().unwrap().read().scope_cell(),
+            context.gc_context,
+        );
+        let mut try_activation = self
+            .current_stack_frame()
+            .unwrap()
+            .read()
+            .to_rescope(try_block, try_scope);
+
+        if let Some(finally_actions) = try_info.finally {
+            let finally_block = self
+                .current_stack_frame()
+                .unwrap()
+                .read()
+                .data()
+                .to_subslice(finally_actions)
+                .unwrap();
+            let finally_scope = Scope::new_closure_scope(
+                self.current_stack_frame().unwrap().read().scope_cell(),
+                context.gc_context,
+            );
+            let finally_activation = self
+                .current_stack_frame()
+                .unwrap()
+                .read()
+                .to_rescope(finally_block, finally_scope);
+            try_activation.set_finally_block(Some(GcCell::allocate(context.gc_context, finally_activation)));
+        }
+
+        self.stack_frames
+            .push(GcCell::allocate(context.gc_context, try_activation));
+        Ok(())
     }
 
     fn action_with(

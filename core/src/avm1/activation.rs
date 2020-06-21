@@ -109,6 +109,10 @@ pub struct Activation<'gc> {
     /// The current target display object of this stack frame.
     /// This can be changed with `tellTarget` (via `ActionSetTarget` and `ActionSetTarget2`).
     target_clip: Option<DisplayObject<'gc>>,
+
+    /// After this execution ends (naturally or exceptionally), this given activation will be
+    /// marked for immediate execution
+    finally_block: Option<GcCell<'gc, Activation<'gc>>>,
 }
 
 unsafe impl<'gc> gc_arena::Collect for Activation<'gc> {
@@ -122,6 +126,7 @@ unsafe impl<'gc> gc_arena::Collect for Activation<'gc> {
         self.local_registers.trace(cc);
         self.base_clip.trace(cc);
         self.target_clip.trace(cc);
+        self.finally_block.trace(cc);
     }
 }
 
@@ -149,6 +154,7 @@ impl<'gc> Activation<'gc> {
             is_function: false,
             local_registers: None,
             is_executing: false,
+            finally_block: None,
         }
     }
 
@@ -175,6 +181,7 @@ impl<'gc> Activation<'gc> {
             is_function: true,
             local_registers: None,
             is_executing: false,
+            finally_block: None,
         }
     }
 
@@ -212,6 +219,7 @@ impl<'gc> Activation<'gc> {
             is_function: false,
             local_registers: None,
             is_executing: false,
+            finally_block: None,
         }
     }
 
@@ -231,6 +239,7 @@ impl<'gc> Activation<'gc> {
             is_function: false,
             local_registers: self.local_registers,
             is_executing: false,
+            finally_block: None,
         }
     }
 
@@ -433,5 +442,15 @@ impl<'gc> Activation<'gc> {
     /// Set the return value.
     pub fn set_return_value(&mut self, value: Value<'gc>) {
         self.return_value = Some(value);
+    }
+
+    /// Gets an Activation that is intended to run after this one ends.
+    pub fn finally_block(&self) -> Option<GcCell<'gc, Activation<'gc>>> {
+        self.finally_block
+    }
+
+    ///SGets an Activation that is intended to run after this one ends.
+    pub fn set_finally_block(&mut self, finally_block: Option<GcCell<'gc, Activation<'gc>>>) {
+        self.finally_block = finally_block
     }
 }
