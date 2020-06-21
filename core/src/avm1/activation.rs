@@ -50,6 +50,21 @@ impl<'gc> RegisterSet<'gc> {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CatchVar {
+    Var(String),
+    Register(u8),
+}
+
+impl From<swf::avm1::types::CatchVar<'_>> for CatchVar {
+    fn from(other: swf::avm1::types::CatchVar<'_>) -> Self {
+        match other {
+            swf::avm1::types::CatchVar::Var(name) => CatchVar::Var(name.to_string()),
+            swf::avm1::types::CatchVar::Register(id) => CatchVar::Register(id),
+        }
+    }
+}
+
 /// Represents a single activation of a given AVM1 function or keyframe.
 pub struct Activation<'gc> {
     /// Represents the SWF version of a given function.
@@ -113,6 +128,10 @@ pub struct Activation<'gc> {
     /// After this execution ends (naturally or exceptionally), this given activation will be
     /// marked for immediate execution
     finally_block: Option<GcCell<'gc, Activation<'gc>>>,
+
+    /// After this execution ends with a `Error::ThrownValue`, this given activation will be
+    /// marked for immediate execution
+    catch_block: Option<(CatchVar, GcCell<'gc, Activation<'gc>>)>,
 }
 
 unsafe impl<'gc> gc_arena::Collect for Activation<'gc> {
@@ -127,6 +146,9 @@ unsafe impl<'gc> gc_arena::Collect for Activation<'gc> {
         self.base_clip.trace(cc);
         self.target_clip.trace(cc);
         self.finally_block.trace(cc);
+        if let Some((_, activation)) = self.catch_block {
+            activation.trace(cc);
+        }
     }
 }
 
@@ -155,6 +177,7 @@ impl<'gc> Activation<'gc> {
             local_registers: None,
             is_executing: false,
             finally_block: None,
+            catch_block: None,
         }
     }
 
@@ -182,6 +205,7 @@ impl<'gc> Activation<'gc> {
             local_registers: None,
             is_executing: false,
             finally_block: None,
+            catch_block: None,
         }
     }
 
@@ -220,6 +244,7 @@ impl<'gc> Activation<'gc> {
             local_registers: None,
             is_executing: false,
             finally_block: None,
+            catch_block: None,
         }
     }
 
@@ -240,6 +265,7 @@ impl<'gc> Activation<'gc> {
             local_registers: self.local_registers,
             is_executing: false,
             finally_block: None,
+            catch_block: None,
         }
     }
 
@@ -449,8 +475,18 @@ impl<'gc> Activation<'gc> {
         self.finally_block
     }
 
-    ///SGets an Activation that is intended to run after this one ends.
+    /// Sets an Activation that is intended to run after this one ends.
     pub fn set_finally_block(&mut self, finally_block: Option<GcCell<'gc, Activation<'gc>>>) {
         self.finally_block = finally_block
+    }
+
+    /// Gets an Activation that is intended to run if this one encounters a `Error::ThrownValue`
+    pub fn catch_block(&self) -> Option<(CatchVar, GcCell<'gc, Activation<'gc>>)> {
+        self.catch_block.clone()
+    }
+
+    /// Sets an Activation that is intended to run if this one encounters a `Error::ThrownValue`
+    pub fn set_catch_block(&mut self, catch_block: Option<(CatchVar, GcCell<'gc, Activation<'gc>>)>) {
+        self.catch_block = catch_block
     }
 }
