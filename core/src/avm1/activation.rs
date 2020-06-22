@@ -486,7 +486,10 @@ impl<'gc> Activation<'gc> {
     }
 
     /// Sets an Activation that is intended to run if this one encounters a `Error::ThrownValue`
-    pub fn set_catch_block(&mut self, catch_block: Option<(CatchVar, GcCell<'gc, Activation<'gc>>)>) {
+    pub fn set_catch_block(
+        &mut self,
+        catch_block: Option<(CatchVar, GcCell<'gc, Activation<'gc>>)>,
+    ) {
         self.catch_block = catch_block
     }
 }

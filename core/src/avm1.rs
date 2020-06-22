@@ -50,7 +50,7 @@ mod tests;
 use crate::avm1::error::Error;
 use crate::avm1::listeners::SystemListener;
 use crate::avm1::value::f64_to_wrapping_u32;
-pub use activation::{CatchVar, Activation};
+pub use activation::{Activation, CatchVar};
 pub use globals::SystemPrototypes;
 pub use object::{Object, ObjectPtr, TObject};
 use scope::Scope;
@@ -473,15 +473,22 @@ impl<'gc> Avm1<'gc> {
         &mut self,
         context: &mut UpdateContext<'_, 'gc, '_>,
         mut return_value: Result<Value<'gc>, Error<'gc>>,
-    ) -> Result<(), Error<'gc>> {
+    ) -> Result<Value<'gc>, Error<'gc>> {
         if let Some(frame) = self.current_stack_frame() {
             self.stack_frames.pop();
+
+            dbg!("before", &return_value);
 
             return_value = if let Err(Error::ThrownValue(error)) = return_value {
                 if let Some((catch_var, catch_activation)) = frame.read().catch_block() {
                     match catch_var {
-                        CatchVar::Var(name) => catch_activation.write(context.gc_context).scope_mut(context.gc_context).define(&name, error.to_owned(), context.gc_context),
-                        CatchVar::Register(register) => catch_activation.write(context.gc_context).set_local_register(register, error.to_owned(), context.gc_context),
+                        CatchVar::Var(name) => catch_activation
+                            .write(context.gc_context)
+                            .scope_mut(context.gc_context)
+                            .define(&name, error.to_owned(), context.gc_context),
+                        CatchVar::Register(register) => catch_activation
+                            .write(context.gc_context)
+                            .set_local_register(register, error.to_owned(), context.gc_context),
                     }
                     self.insert_stack_frame(catch_activation);
                     if let Err(error) = self.run_current_frame(context, catch_activation) {
@@ -495,6 +502,7 @@ impl<'gc> Avm1<'gc> {
             } else {
                 return_value
             };
+            dbg!("after", &return_value);
 
             if let Some(finally) = frame.read().finally_block() {
                 self.insert_stack_frame(finally);
@@ -512,12 +520,12 @@ impl<'gc> Avm1<'gc> {
 
                         self.push(return_value);
                     }
-                    Ok(())
-                },
+                    Ok(return_value)
+                }
                 Err(e) => Err(e),
             }
         } else {
-            Ok(())
+            Ok(Value::Undefined)
         }
     }
 
@@ -740,7 +748,7 @@ impl<'gc> Avm1<'gc> {
                 if e.is_halting() {
                     self.halt();
                 }
-                return Err(e);
+                self.retire_stack_frame(context, Err(e))?;
             }
         } else {
             //The explicit end opcode was encountered so return here
@@ -2902,10 +2910,15 @@ impl<'gc> Avm1<'gc> {
                 .coerce_to_string(self, context)
                 .unwrap_or_else(|_| Cow::Borrowed("undefined"))
         );
-        self.retire_stack_frame(context, Err(Error::ThrownValue(value)))
+        let _ = self.retire_stack_frame(context, Err(Error::ThrownValue(value)))?;
+        Ok(())
     }
 
-    fn action_try(&mut self, context: &mut UpdateContext<'_, 'gc, '_>, try_info: TryBlock) -> Result<(), Error<'gc>> {
+    fn action_try(
+        &mut self,
+        context: &mut UpdateContext<'_, 'gc, '_>,
+        try_info: TryBlock,
+    ) -> Result<(), Error<'gc>> {
         log::warn!("hello");
         let try_block = self
             .current_stack_frame()
@@ -2941,7 +2954,10 @@ impl<'gc> Avm1<'gc> {
                 .unwrap()
                 .read()
                 .to_rescope(finally_block, finally_scope);
-            try_activation.set_finally_block(Some(GcCell::allocate(context.gc_context, finally_activation)));
+            try_activation.set_finally_block(Some(GcCell::allocate(
+                context.gc_context,
+                finally_activation,
+            )));
         }
 
         if let Some((catch_var, catch_actions)) = try_info.catch {
@@ -2961,7 +2977,10 @@ impl<'gc> Avm1<'gc> {
                 .unwrap()
                 .read()
                 .to_rescope(catch_block, catch_scope);
-            try_activation.set_catch_block(Some((catch_var.into(), GcCell::allocate(context.gc_context, catch_activation))));
+            try_activation.set_catch_block(Some((
+                catch_var.into(),
+                GcCell::allocate(context.gc_context, catch_activation),
+            )));
         }
 
         self.stack_frames
