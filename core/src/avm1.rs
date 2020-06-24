@@ -477,54 +477,15 @@ impl<'gc> Avm1<'gc> {
         if let Some(frame) = self.current_stack_frame() {
             self.stack_frames.pop();
 
-            dbg!("before", &return_value);
-
-            if let Err(e) = &return_value {
-                if e.is_halting() {
-                    self.halt();
-                }
-            }
-
-            return_value = if let Err(Error::ThrownValue(error)) = return_value {
-                if let Some((catch_var, catch_activation)) = frame.read().catch_block() {
-                    match catch_var {
-                        CatchVar::Var(name) => catch_activation
-                            .write(context.gc_context)
-                            .scope_mut(context.gc_context)
-                            .define(&name, error.to_owned(), context.gc_context),
-                        CatchVar::Register(register) => catch_activation
-                            .write(context.gc_context)
-                            .set_local_register(register, error.to_owned(), context.gc_context),
-                    }
-                    self.insert_stack_frame(catch_activation);
-                    if let Err(error) = self.run_current_frame(context, catch_activation) {
-                        Err(error)
-                    } else {
-                        Ok(Value::Undefined)
-                    }
-                } else {
-                    Err(Error::ThrownValue(error))
-                }
-            } else {
-                return_value
-            };
-            dbg!("after", &return_value);
-
-            if let Some(finally) = frame.read().finally_block() {
-                self.insert_stack_frame(finally);
-                self.run_current_frame(context, finally)?;
-            }
-
             match return_value {
                 Ok(return_value) => {
                     let can_return = frame.read().can_return() && !self.stack_frames.is_empty();
+                    let return_value = return_value.to_owned();
+                    frame
+                        .write(context.gc_context)
+                        .set_return_value(return_value.clone());
                     if can_return {
-                        let return_value = return_value.to_owned();
-                        frame
-                            .write(context.gc_context)
-                            .set_return_value(return_value.clone());
-
-                        self.push(return_value);
+                        self.push(return_value.clone());
                     }
                     Ok(return_value)
                 }
@@ -2980,10 +2941,39 @@ impl<'gc> Avm1<'gc> {
             )));
         }
 
-        self.stack_frames
-            .push(GcCell::allocate(context.gc_context, try_activation));
+        let try_activation = GcCell::allocate(context.gc_context, try_activation);
 
-        Ok(())
+        self.stack_frames
+            .push(try_activation);
+
+        let mut result = self.run_current_frame(context, try_activation);
+
+        result = if let Err(Error::ThrownValue(error)) = result {
+            if let Some((catch_var, catch_activation)) = try_activation.read().catch_block() {
+                match catch_var {
+                    CatchVar::Var(name) => catch_activation
+                        .write(context.gc_context)
+                        .scope_mut(context.gc_context)
+                        .define(&name, error.to_owned(), context.gc_context),
+                    CatchVar::Register(register) => catch_activation
+                        .write(context.gc_context)
+                        .set_local_register(register, error.to_owned(), context.gc_context),
+                }
+                self.insert_stack_frame(catch_activation);
+                self.run_current_frame(context, catch_activation)
+            } else {
+                Err(Error::ThrownValue(error))
+            }
+        } else {
+            result
+        };
+
+        if let Some(finally) = try_activation.read().finally_block() {
+            self.insert_stack_frame(finally);
+            self.run_current_frame(context, finally)?;
+        }
+
+        result
     }
 
     fn action_with(

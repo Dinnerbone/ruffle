@@ -93,11 +93,9 @@ impl<'gc> ReturnValue<'gc> {
 
         match self {
             Immediate(val) => Ok(val),
-            ResultOf(frame) => match avm.run_current_frame(context, frame) {
-                Ok(_) => Ok(avm.pop()),
-                Err(e) => {
-                    Err(e)
-                }
+            ResultOf(frame) => {
+                avm.run_current_frame(context, frame)?;
+                Ok(avm.pop())
             },
         }
     }
