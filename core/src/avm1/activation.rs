@@ -92,8 +92,8 @@ pub struct Activation<'gc> {
     /// The arguments this function was called by.
     arguments: Option<Object<'gc>>,
 
-    /// The return value of the activation.
-    return_value: Option<Value<'gc>>,
+    /// The explicit return value of the activation.
+    explicit_return_value: Option<Value<'gc>>,
 
     /// Indicates if this activation object represents a function or embedded
     /// block (e.g. ActionWith).
@@ -141,7 +141,7 @@ unsafe impl<'gc> gc_arena::Collect for Activation<'gc> {
         self.constant_pool.trace(cc);
         self.this.trace(cc);
         self.arguments.trace(cc);
-        self.return_value.trace(cc);
+        self.explicit_return_value.trace(cc);
         self.local_registers.trace(cc);
         self.base_clip.trace(cc);
         self.target_clip.trace(cc);
@@ -172,7 +172,7 @@ impl<'gc> Activation<'gc> {
             target_clip: Some(base_clip),
             this,
             arguments,
-            return_value: None,
+            explicit_return_value: None,
             is_function: false,
             local_registers: None,
             is_executing: false,
@@ -200,7 +200,7 @@ impl<'gc> Activation<'gc> {
             target_clip: Some(base_clip),
             this,
             arguments,
-            return_value: None,
+            explicit_return_value: None,
             is_function: true,
             local_registers: None,
             is_executing: false,
@@ -239,7 +239,7 @@ impl<'gc> Activation<'gc> {
             target_clip: Some(base_clip),
             this: globals,
             arguments: None,
-            return_value: None,
+            explicit_return_value: None,
             is_function: false,
             local_registers: None,
             is_executing: false,
@@ -260,7 +260,7 @@ impl<'gc> Activation<'gc> {
             target_clip: self.target_clip,
             this: self.this,
             arguments: self.arguments,
-            return_value: None,
+            explicit_return_value: None,
             is_function: false,
             local_registers: self.local_registers,
             is_executing: false,
@@ -459,15 +459,15 @@ impl<'gc> Activation<'gc> {
     }
 
     /// Retrieve the return value from a completed activation, if the function
-    /// has already returned.
+    /// has already returned and did so explicitly.
     #[allow(dead_code)]
-    pub fn return_value(&self) -> Option<Value<'gc>> {
-        self.return_value.clone()
+    pub fn explicit_return_value(&self) -> Option<Value<'gc>> {
+        self.explicit_return_value.clone()
     }
 
     /// Set the return value.
-    pub fn set_return_value(&mut self, value: Value<'gc>) {
-        self.return_value = Some(value);
+    pub fn set_explicit_return_value(&mut self, value: Value<'gc>) {
+        self.explicit_return_value = Some(value);
     }
 
     /// Gets an Activation that is intended to run after this one ends.

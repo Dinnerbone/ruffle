@@ -472,7 +472,7 @@ impl<'gc> Avm1<'gc> {
     fn retire_stack_frame(
         &mut self,
         context: &mut UpdateContext<'_, 'gc, '_>,
-        mut return_value: Result<Value<'gc>, Error<'gc>>,
+        return_value: Result<Value<'gc>, Error<'gc>>,
     ) -> Result<Value<'gc>, Error<'gc>> {
         if let Some(frame) = self.current_stack_frame() {
             self.stack_frames.pop();
@@ -480,10 +480,6 @@ impl<'gc> Avm1<'gc> {
             match return_value {
                 Ok(return_value) => {
                     let can_return = frame.read().can_return() && !self.stack_frames.is_empty();
-                    let return_value = return_value.to_owned();
-                    frame
-                        .write(context.gc_context)
-                        .set_return_value(return_value.clone());
                     if can_return {
                         self.push(return_value.clone());
                     }
@@ -671,6 +667,9 @@ impl<'gc> Avm1<'gc> {
                 Action::RemoveSprite => self.action_remove_sprite(context),
                 Action::Return => {
                     let return_value = self.pop();
+                    if let Some(frame) = self.current_stack_frame() {
+                        frame.write(context.gc_context).set_explicit_return_value(return_value.clone());
+                    }
                     self.retire_stack_frame(context, Ok(return_value))?;
                     return Ok(());
                 }
@@ -708,7 +707,18 @@ impl<'gc> Avm1<'gc> {
                 } => self.action_wait_for_frame_2(context, num_actions_to_skip, reader),
                 Action::With { actions } => self.action_with(context, actions),
                 Action::Throw => self.action_throw(context),
-                Action::Try(try_block) => self.action_try(context, try_block),
+                Action::Try(try_block) => {
+                    let return_value = self.action_try(context, try_block)?;
+                    if let Some(return_value) = return_value {
+                        if let Some(frame) = self.current_stack_frame() {
+                            frame.write(context.gc_context).set_explicit_return_value(return_value.clone());
+                        }
+                        self.retire_stack_frame(context, Ok(return_value))?;
+                        return Ok(());
+                    } else {
+                        Ok(())
+                    }
+                },
                 _ => self.unknown_op(context, action),
             };
             if let Err(e) = result {
@@ -2877,7 +2887,7 @@ impl<'gc> Avm1<'gc> {
         &mut self,
         context: &mut UpdateContext<'_, 'gc, '_>,
         try_info: TryBlock,
-    ) -> Result<(), Error<'gc>> {
+    ) -> Result<Option<Value<'gc>>, Error<'gc>> {
         let try_block = self
             .current_stack_frame()
             .unwrap()
@@ -2947,8 +2957,10 @@ impl<'gc> Avm1<'gc> {
             .push(try_activation);
 
         let mut result = self.run_current_frame(context, try_activation);
+        let mut return_value = try_activation.read().explicit_return_value();
 
-        result = if let Err(Error::ThrownValue(error)) = result {
+        if let Err(Error::ThrownValue(error)) = &result {
+            let error = error.to_owned();
             if let Some((catch_var, catch_activation)) = try_activation.read().catch_block() {
                 match catch_var {
                     CatchVar::Var(name) => catch_activation
@@ -2960,20 +2972,20 @@ impl<'gc> Avm1<'gc> {
                         .set_local_register(register, error.to_owned(), context.gc_context),
                 }
                 self.insert_stack_frame(catch_activation);
-                self.run_current_frame(context, catch_activation)
-            } else {
-                Err(Error::ThrownValue(error))
+                result = self.run_current_frame(context, catch_activation);
+                return_value = catch_activation.read().explicit_return_value();
             }
-        } else {
-            result
-        };
+        }
 
         if let Some(finally) = try_activation.read().finally_block() {
             self.insert_stack_frame(finally);
             self.run_current_frame(context, finally)?;
         }
 
-        result
+        match result {
+            Ok(_) => Ok(return_value),
+            Err(e) => Err(e),
+        }
     }
 
     fn action_with(
