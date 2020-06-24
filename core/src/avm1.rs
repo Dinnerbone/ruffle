@@ -479,6 +479,12 @@ impl<'gc> Avm1<'gc> {
 
             dbg!("before", &return_value);
 
+            if let Err(e) = &return_value {
+                if e.is_halting() {
+                    self.halt();
+                }
+            }
+
             return_value = if let Err(Error::ThrownValue(error)) = return_value {
                 if let Some((catch_var, catch_activation)) = frame.read().catch_block() {
                     match catch_var {
@@ -702,7 +708,11 @@ impl<'gc> Avm1<'gc> {
                 Action::PushDuplicate => self.action_push_duplicate(context),
                 Action::RandomNumber => self.action_random_number(context),
                 Action::RemoveSprite => self.action_remove_sprite(context),
-                Action::Return => self.action_return(context),
+                Action::Return => {
+                    let return_value = self.pop();
+                    self.retire_stack_frame(context, Ok(return_value))?;
+                    return Ok(());
+                }
                 Action::SetMember => self.action_set_member(context),
                 Action::SetProperty => self.action_set_property(context),
                 Action::SetTarget(target) => self.action_set_target(context, &target),
@@ -742,11 +752,10 @@ impl<'gc> Avm1<'gc> {
             };
             if let Err(e) = result {
                 match &e {
-                    Error::ThrownValue(_) => {}
+                    Error::ThrownValue(_) => {
+                        log::warn!("AVM1 exception");
+                    }
                     e => log::error!("AVM1 error: {}", e),
-                }
-                if e.is_halting() {
-                    self.halt();
                 }
                 self.retire_stack_frame(context, Err(e))?;
             }
@@ -2478,16 +2487,6 @@ impl<'gc> Avm1<'gc> {
         Ok(())
     }
 
-    fn action_return(
-        &mut self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-    ) -> Result<(), Error<'gc>> {
-        let return_value = self.pop();
-        self.retire_stack_frame(context, Ok(return_value))?;
-
-        Ok(())
-    }
-
     fn action_set_member(
         &mut self,
         context: &mut UpdateContext<'_, 'gc, '_>,
@@ -2910,8 +2909,7 @@ impl<'gc> Avm1<'gc> {
                 .coerce_to_string(self, context)
                 .unwrap_or_else(|_| Cow::Borrowed("undefined"))
         );
-        let _ = self.retire_stack_frame(context, Err(Error::ThrownValue(value)))?;
-        Ok(())
+        Err(Error::ThrownValue(value))
     }
 
     fn action_try(
@@ -2919,7 +2917,6 @@ impl<'gc> Avm1<'gc> {
         context: &mut UpdateContext<'_, 'gc, '_>,
         try_info: TryBlock,
     ) -> Result<(), Error<'gc>> {
-        log::warn!("hello");
         let try_block = self
             .current_stack_frame()
             .unwrap()
@@ -2985,6 +2982,7 @@ impl<'gc> Avm1<'gc> {
 
         self.stack_frames
             .push(GcCell::allocate(context.gc_context, try_activation));
+
         Ok(())
     }
 

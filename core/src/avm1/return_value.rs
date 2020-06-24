@@ -96,7 +96,7 @@ impl<'gc> ReturnValue<'gc> {
             ResultOf(frame) => match avm.run_current_frame(context, frame) {
                 Ok(_) => Ok(avm.pop()),
                 Err(e) => {
-                    dbg!(avm.retire_stack_frame(context, Err(e)))
+                    Err(e)
                 }
             },
         }
