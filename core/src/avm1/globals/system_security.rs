@@ -3,14 +3,12 @@ use crate::avm1::error::Error;
 use crate::avm1::function::Executable;
 use crate::avm1::object::Object;
 use crate::avm1::{AvmString, ScriptObject, TObject, Value};
-use crate::context::UpdateContext;
 use enumset::EnumSet;
 use gc_arena::MutationContext;
 use std::convert::Into;
 
 fn allow_domain<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -19,8 +17,7 @@ fn allow_domain<'gc>(
 }
 
 fn allow_insecure_domain<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -29,8 +26,7 @@ fn allow_insecure_domain<'gc>(
 }
 
 fn load_policy_file<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -39,8 +35,7 @@ fn load_policy_file<'gc>(
 }
 
 fn escape_domain<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -49,17 +44,19 @@ fn escape_domain<'gc>(
 }
 
 fn get_sandbox_type<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    Ok(AvmString::new(context.gc_context, context.system.sandbox_type.to_string()).into())
+    Ok(AvmString::new(
+        activation.context.gc_context,
+        activation.context.system.sandbox_type.to_string(),
+    )
+    .into())
 }
 
 fn get_choose_local_swf_path<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -68,8 +65,7 @@ fn get_choose_local_swf_path<'gc>(
 }
 
 fn policy_file_resolver<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {

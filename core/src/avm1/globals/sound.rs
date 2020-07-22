@@ -5,15 +5,14 @@ use crate::avm1::activation::Activation;
 use crate::avm1::error::Error;
 use crate::avm1::function::Executable;
 use crate::avm1::property::Attribute::*;
-use crate::avm1::{Object, SoundObject, TObject, UpdateContext, Value};
+use crate::avm1::{Object, SoundObject, TObject, Value};
 use crate::character::Character;
 use crate::display_object::TDisplayObject;
 use gc_arena::MutationContext;
 
 /// Implements `Sound`
 pub fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     this: Object<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -21,11 +20,11 @@ pub fn constructor<'gc>(
     // `Sound.setTransform`, `Sound.stop`, etc. will affect all sounds owned by this clip.
     let owner = args
         .get(0)
-        .map(|o| o.coerce_to_object(activation, context))
+        .map(|o| o.coerce_to_object(activation))
         .and_then(|o| o.as_display_object());
 
     let sound = this.as_sound_object().unwrap();
-    sound.set_owner(context.gc_context, owner);
+    sound.set_owner(activation.context.gc_context, owner);
 
     Ok(this.into())
 }
@@ -161,30 +160,34 @@ pub fn create_proto<'gc>(
 }
 
 fn attach_sound<'gc>(
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     this: Object<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let name = args.get(0).unwrap_or(&Value::Undefined);
     if let Some(sound_object) = this.as_sound_object() {
-        let name = name.coerce_to_string(activation, context)?;
+        let name = name.coerce_to_string(activation)?;
         let movie = sound_object
             .owner()
-            .or_else(|| context.levels.get(&0).copied())
+            .or_else(|| activation.context.levels.get(&0).copied())
             .and_then(|o| o.movie());
         if let Some(movie) = movie {
-            if let Some(Character::Sound(sound)) = context
+            if let Some(Character::Sound(sound)) = activation
+                .context
                 .library
                 .library_for_movie_mut(movie)
                 .get_character_by_export_name(&name)
             {
-                sound_object.set_sound(context.gc_context, Some(*sound));
+                sound_object.set_sound(activation.context.gc_context, Some(*sound));
                 sound_object.set_duration(
-                    context.gc_context,
-                    context.audio.get_sound_duration(*sound).unwrap_or(0),
+                    activation.context.gc_context,
+                    activation
+                        .context
+                        .audio
+                        .get_sound_duration(*sound)
+                        .unwrap_or(0),
                 );
-                sound_object.set_position(context.gc_context, 0);
+                sound_object.set_position(activation.context.gc_context, 0);
             } else {
                 log::warn!("Sound.attachSound: Sound '{}' not found", name);
             }
@@ -201,8 +204,7 @@ fn attach_sound<'gc>(
 }
 
 fn duration<'gc>(
-    activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -218,8 +220,7 @@ fn duration<'gc>(
 }
 
 fn get_bytes_loaded<'gc>(
-    activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -232,8 +233,7 @@ fn get_bytes_loaded<'gc>(
 }
 
 fn get_bytes_total<'gc>(
-    activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -246,8 +246,7 @@ fn get_bytes_total<'gc>(
 }
 
 fn get_pan<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -256,8 +255,7 @@ fn get_pan<'gc>(
 }
 
 fn get_transform<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -266,8 +264,7 @@ fn get_transform<'gc>(
 }
 
 fn get_volume<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -276,8 +273,7 @@ fn get_volume<'gc>(
 }
 
 fn id3<'gc>(
-    activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -288,8 +284,7 @@ fn id3<'gc>(
 }
 
 fn load_sound<'gc>(
-    activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -300,8 +295,7 @@ fn load_sound<'gc>(
 }
 
 fn position<'gc>(
-    activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -324,8 +318,7 @@ fn position<'gc>(
 }
 
 fn set_pan<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -334,8 +327,7 @@ fn set_pan<'gc>(
 }
 
 fn set_transform<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -344,8 +336,7 @@ fn set_transform<'gc>(
 }
 
 fn set_volume<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -354,19 +345,18 @@ fn set_volume<'gc>(
 }
 
 fn start<'gc>(
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     this: Object<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let start_offset = args
         .get(0)
         .unwrap_or(&Value::Number(0.0))
-        .coerce_to_f64(activation, context)?;
+        .coerce_to_f64(activation)?;
     let loops = args
         .get(1)
         .unwrap_or(&Value::Number(1.0))
-        .coerce_to_f64(activation, context)?;
+        .coerce_to_f64(activation)?;
 
     let loops = if loops >= 1.0 && loops <= f64::from(std::i16::MAX) {
         loops as u16
@@ -377,7 +367,7 @@ fn start<'gc>(
     use swf::{SoundEvent, SoundInfo};
     if let Some(sound_object) = this.as_sound_object() {
         if let Some(sound) = sound_object.sound() {
-            let sound_instance = context.audio.start_sound(
+            let sound_instance = activation.context.audio.start_sound(
                 sound,
                 &SoundInfo {
                     event: SoundEvent::Start,
@@ -392,7 +382,8 @@ fn start<'gc>(
                 },
             );
             if let Ok(sound_instance) = sound_instance {
-                sound_object.set_sound_instance(context.gc_context, Some(sound_instance));
+                sound_object
+                    .set_sound_instance(activation.context.gc_context, Some(sound_instance));
             }
         } else {
             log::warn!("Sound.start: No sound is attached");
@@ -405,27 +396,27 @@ fn start<'gc>(
 }
 
 fn stop<'gc>(
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     this: Object<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let Some(sound) = this.as_sound_object() {
         if let Some(name) = args.get(0) {
             // Usage 1: Stop all instances of a particular sound, using the name parameter.
-            let name = name.coerce_to_string(activation, context)?;
+            let name = name.coerce_to_string(activation)?;
             let movie = sound
                 .owner()
-                .or_else(|| context.levels.get(&0).copied())
+                .or_else(|| activation.context.levels.get(&0).copied())
                 .and_then(|o| o.movie());
             if let Some(movie) = movie {
-                if let Some(Character::Sound(sound)) = context
+                if let Some(Character::Sound(sound)) = activation
+                    .context
                     .library
                     .library_for_movie_mut(movie)
                     .get_character_by_export_name(&name)
                 {
                     // Stop all sounds with the given name.
-                    context.audio.stop_sounds_with_handle(*sound);
+                    activation.context.audio.stop_sounds_with_handle(*sound);
                 } else {
                     log::warn!("Sound.stop: Sound '{}' not found", name);
                 }
@@ -439,11 +430,11 @@ fn stop<'gc>(
             // Usage 2: Stop all sound running within a given clip.
             // TODO: We just stop the last played sound for now.
             if let Some(sound_instance) = sound.sound_instance() {
-                context.audio.stop_sound(sound_instance);
+                activation.context.audio.stop_sound(sound_instance);
             }
         } else {
             // Usage 3: If there is no owner and no name, this call acts like `stopAllSounds()`.
-            context.audio.stop_all_sounds();
+            activation.context.audio.stop_all_sounds();
         }
     } else {
         log::warn!("Sound.stop: this is not a Sound");

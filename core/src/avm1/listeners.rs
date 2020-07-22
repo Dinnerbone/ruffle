@@ -10,8 +10,7 @@ pub struct Listeners<'gc>(Object<'gc>);
 macro_rules! register_listener {
     ( $gc_context: ident, $object:ident, $listener: ident, $fn_proto: ident, $system_listeners_key: ident ) => {{
         pub fn add_listener<'gc>(
-            activation: &mut Activation<'_, 'gc>,
-            context: &mut UpdateContext<'_, 'gc, '_>,
+            activation: &mut Activation<'_, '_, 'gc, '_>,
             _this: Object<'gc>,
             args: &[Value<'gc>],
         ) -> Result<Value<'gc>, Error<'gc>> {
@@ -19,17 +18,16 @@ macro_rules! register_listener {
                 .avm
                 .system_listeners
                 .$system_listeners_key
-                .add_listener(context, args)
+                .add_listener(activation.context, args)
         }
 
         pub fn remove_listener<'gc>(
-            activation: &mut Activation<'_, 'gc>,
-            context: &mut UpdateContext<'_, 'gc, '_>,
+            activation: &mut Activation<'_, '_, 'gc, '_>,
             _this: Object<'gc>,
             args: &[Value<'gc>],
         ) -> Result<Value<'gc>, Error<'gc>> {
             let listener = activation.avm.system_listeners.$system_listeners_key;
-            listener.remove_listener(activation, context, args)
+            listener.remove_listener(activation, args)
         }
 
         $object.define_value(
@@ -81,8 +79,7 @@ impl<'gc> Listeners<'gc> {
 
     pub fn remove_listener(
         &self,
-        activation: &mut Activation<'_, 'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        activation: &mut Activation<'_, '_, 'gc, '_>,
         args: &[Value<'gc>],
     ) -> Result<Value<'gc>, Error<'gc>> {
         let listeners = self.0;
@@ -95,13 +92,13 @@ impl<'gc> Listeners<'gc> {
                     listeners.set_array_element(
                         i,
                         listeners.array_element(i + 1),
-                        context.gc_context,
+                        activation.context.gc_context,
                     );
                 }
 
-                listeners.delete_array_element(new_length, context.gc_context);
-                listeners.delete(activation, context.gc_context, &new_length.to_string());
-                listeners.set_length(context.gc_context, new_length);
+                listeners.delete_array_element(new_length, activation.context.gc_context);
+                listeners.delete(activation, &new_length.to_string());
+                listeners.set_length(activation.context.gc_context, new_length);
 
                 return Ok(true.into());
             }
@@ -112,18 +109,15 @@ impl<'gc> Listeners<'gc> {
 
     pub fn prepare_handlers(
         &self,
-        activation: &mut Activation<'_, 'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        activation: &mut Activation<'_, '_, 'gc, '_>,
         method: &str,
     ) -> Vec<(Object<'gc>, Value<'gc>)> {
         let listeners = self.0;
         let mut handlers = Vec::with_capacity(listeners.length());
 
         for i in 0..listeners.length() {
-            let listener = listeners
-                .array_element(i)
-                .coerce_to_object(activation, context);
-            if let Ok(handler) = listener.get(method, activation, context) {
+            let listener = listeners.array_element(i).coerce_to_object(activation);
+            if let Ok(handler) = listener.get(method, activation) {
                 handlers.push((listener, handler));
             }
         }

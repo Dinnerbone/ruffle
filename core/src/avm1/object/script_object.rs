@@ -2,7 +2,7 @@ use crate::avm1::activation::Activation;
 use crate::avm1::error::Error;
 use crate::avm1::function::{Executable, ExecutionReason, FunctionObject, NativeFunction};
 use crate::avm1::property::{Attribute, Property};
-use crate::avm1::{AvmString, Object, ObjectPtr, TObject, UpdateContext, Value};
+use crate::avm1::{AvmString, Object, ObjectPtr, TObject, Value};
 use crate::property_map::{Entry, PropertyMap};
 use core::fmt;
 use enumset::EnumSet;
@@ -36,8 +36,8 @@ impl<'gc> Watcher<'gc> {
     #[allow(clippy::too_many_arguments)]
     pub fn call(
         &self,
-        activation: &mut Activation<'_, 'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        activation: &mut Activation<'_, '_, 'gc, '_>,
+
         name: &str,
         old_value: Value<'gc>,
         new_value: Value<'gc>,
@@ -45,15 +45,17 @@ impl<'gc> Watcher<'gc> {
         base_proto: Option<Object<'gc>>,
     ) -> Result<Value<'gc>, crate::avm1::error::Error<'gc>> {
         let args = [
-            Value::String(AvmString::new(context.gc_context, name.to_string())),
+            Value::String(AvmString::new(
+                activation.context.gc_context,
+                name.to_string(),
+            )),
             old_value,
             new_value,
             self.user_data.clone(),
         ];
         self.callback.exec(
-            name,
             activation,
-            context,
+            name,
             this,
             base_proto,
             &args,
@@ -243,26 +245,25 @@ impl<'gc> ScriptObject<'gc> {
         &self,
         name: &str,
         mut value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        activation: &mut Activation<'_, '_, 'gc, '_>,
         this: Object<'gc>,
         base_proto: Option<Object<'gc>>,
     ) -> Result<(), Error<'gc>> {
         if name == "__proto__" {
-            self.0.write(context.gc_context).prototype =
-                Some(value.coerce_to_object(activation, context));
+            self.0.write(activation.context.gc_context).prototype =
+                Some(value.coerce_to_object(activation));
         } else if let Ok(index) = name.parse::<usize>() {
-            self.set_array_element(index, value.to_owned(), context.gc_context);
+            self.set_array_element(index, value.to_owned(), activation.context.gc_context);
         } else if !name.is_empty() {
             if name == "length" {
                 let length = value
-                    .coerce_to_f64(activation, context)
+                    .coerce_to_f64(activation)
                     .map(|v| v.abs() as i32)
                     .unwrap_or(0);
                 if length > 0 {
-                    self.set_length(context.gc_context, length as usize);
+                    self.set_length(activation.context.gc_context, length as usize);
                 } else {
-                    self.set_length(context.gc_context, 0);
+                    self.set_length(activation.context.gc_context, 0);
                 }
             }
 
@@ -279,7 +280,7 @@ impl<'gc> ScriptObject<'gc> {
             if is_vacant {
                 let mut proto: Option<Object<'gc>> = Some((*self).into());
                 while let Some(this_proto) = proto {
-                    if this_proto.has_own_virtual(activation, context, name) {
+                    if this_proto.has_own_virtual(activation, name) {
                         break;
                     }
 
@@ -288,13 +289,10 @@ impl<'gc> ScriptObject<'gc> {
 
                 if let Some(this_proto) = proto {
                     worked = true;
-                    if let Some(rval) =
-                        this_proto.call_setter(name, value.clone(), activation, context)
-                    {
+                    if let Some(rval) = this_proto.call_setter(name, value.clone(), activation) {
                         let _ = rval.exec(
-                            "[Setter]",
                             activation,
-                            context,
+                            "[Setter]",
                             this,
                             Some(this_proto),
                             &[value.clone()],
@@ -316,10 +314,9 @@ impl<'gc> ScriptObject<'gc> {
                     .cloned();
                 let mut return_value = Ok(());
                 if let Some(watcher) = watcher {
-                    let old_value = self.get(name, activation, context)?;
+                    let old_value = self.get(name, activation)?;
                     value = match watcher.call(
                         activation,
-                        context,
                         name,
                         old_value,
                         value.clone(),
@@ -337,7 +334,7 @@ impl<'gc> ScriptObject<'gc> {
 
                 let rval = match self
                     .0
-                    .write(context.gc_context)
+                    .write(activation.context.gc_context)
                     .values
                     .entry(name, activation.is_case_sensitive())
                 {
@@ -354,9 +351,8 @@ impl<'gc> ScriptObject<'gc> {
 
                 if let Some(rval) = rval {
                     let _ = rval.exec(
-                        "[Setter]",
                         activation,
-                        context,
+                        "[Setter]",
                         this,
                         base_proto,
                         &[value],
@@ -384,8 +380,7 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
     fn get_local(
         &self,
         name: &str,
-        activation: &mut Activation<'_, 'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        activation: &mut Activation<'_, '_, 'gc, '_>,
         this: Object<'gc>,
     ) -> Result<Value<'gc>, Error<'gc>> {
         if name == "__proto__" {
@@ -409,9 +404,8 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
         if let Some(get) = exec {
             // Errors, even fatal ones, are completely and silently ignored here.
             match get.exec(
-                "[Getter]",
                 activation,
-                context,
+                "[Getter]",
                 this,
                 Some((*self).into()),
                 &[],
@@ -434,14 +428,12 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
         &self,
         name: &str,
         value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        activation: &mut Activation<'_, '_, 'gc, '_>,
     ) -> Result<(), Error<'gc>> {
         self.internal_set(
             name,
             value,
             activation,
-            context,
             (*self).into(),
             Some((*self).into()),
         )
@@ -455,8 +447,7 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
     fn call(
         &self,
         _name: &str,
-        _activation: &mut Activation<'_, 'gc>,
-        _context: &mut UpdateContext<'_, 'gc, '_>,
+        _activation: &mut Activation<'_, '_, 'gc, '_>,
         _this: Object<'gc>,
         _base_proto: Option<Object<'gc>>,
         _args: &[Value<'gc>],
@@ -468,12 +459,11 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
         &self,
         name: &str,
         value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        activation: &mut Activation<'_, '_, 'gc, '_>,
     ) -> Option<Executable<'gc>> {
         match self
             .0
-            .write(context.gc_context)
+            .write(activation.context.gc_context)
             .values
             .get_mut(name, activation.is_case_sensitive())
         {
@@ -485,17 +475,16 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
     #[allow(clippy::new_ret_no_self)]
     fn new(
         &self,
-        _activation: &mut Activation<'_, 'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        activation: &mut Activation<'_, '_, 'gc, '_>,
         this: Object<'gc>,
         _args: &[Value<'gc>],
     ) -> Result<Object<'gc>, Error<'gc>> {
         match self.0.read().array {
             ArrayStorage::Vector(_) => {
-                Ok(ScriptObject::array(context.gc_context, Some(this)).into())
+                Ok(ScriptObject::array(activation.context.gc_context, Some(this)).into())
             }
             ArrayStorage::Properties { .. } => {
-                Ok(ScriptObject::object(context.gc_context, Some(this)).into())
+                Ok(ScriptObject::object(activation.context.gc_context, Some(this)).into())
             }
         }
     }
@@ -503,13 +492,8 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
     /// Delete a named property from the object.
     ///
     /// Returns false if the property cannot be deleted.
-    fn delete(
-        &self,
-        activation: &mut Activation<'_, 'gc>,
-        gc_context: MutationContext<'gc, '_>,
-        name: &str,
-    ) -> bool {
-        let mut object = self.0.write(gc_context);
+    fn delete(&self, activation: &mut Activation<'_, '_, 'gc, '_>, name: &str) -> bool {
+        let mut object = self.0.write(activation.context.gc_context);
         if let Some(prop) = object.values.get(name, activation.is_case_sensitive()) {
             if prop.can_delete() {
                 object.values.remove(name, activation.is_case_sensitive());
@@ -541,7 +525,7 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
 
     fn add_property_with_case(
         &self,
-        activation: &mut Activation<'_, 'gc>,
+        activation: &mut Activation<'_, '_, 'gc, '_>,
         gc_context: MutationContext<'gc, '_>,
         name: &str,
         get: Executable<'gc>,
@@ -561,7 +545,7 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
 
     fn set_watcher(
         &self,
-        activation: &mut Activation<'_, 'gc>,
+        activation: &mut Activation<'_, '_, 'gc, '_>,
         gc_context: MutationContext<'gc, '_>,
         name: Cow<str>,
         callback: Executable<'gc>,
@@ -576,7 +560,7 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
 
     fn remove_watcher(
         &self,
-        activation: &mut Activation<'_, 'gc>,
+        activation: &mut Activation<'_, '_, 'gc, '_>,
         gc_context: MutationContext<'gc, '_>,
         name: Cow<str>,
     ) -> bool {
@@ -634,27 +618,17 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
     }
 
     /// Checks if the object has a given named property.
-    fn has_property(
-        &self,
-        activation: &mut Activation<'_, 'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        name: &str,
-    ) -> bool {
-        self.has_own_property(activation, context, name)
+    fn has_property(&self, activation: &mut Activation<'_, '_, 'gc, '_>, name: &str) -> bool {
+        self.has_own_property(activation, name)
             || self
                 .proto()
                 .as_ref()
-                .map_or(false, |p| p.has_property(activation, context, name))
+                .map_or(false, |p| p.has_property(activation, name))
     }
 
     /// Checks if the object has a given named property on itself (and not,
     /// say, the object's prototype or superclass)
-    fn has_own_property(
-        &self,
-        activation: &mut Activation<'_, 'gc>,
-        _context: &mut UpdateContext<'_, 'gc, '_>,
-        name: &str,
-    ) -> bool {
+    fn has_own_property(&self, activation: &mut Activation<'_, '_, 'gc, '_>, name: &str) -> bool {
         if name == "__proto__" {
             return true;
         }
@@ -664,12 +638,7 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
             .contains_key(name, activation.is_case_sensitive())
     }
 
-    fn has_own_virtual(
-        &self,
-        activation: &mut Activation<'_, 'gc>,
-        _context: &mut UpdateContext<'_, 'gc, '_>,
-        name: &str,
-    ) -> bool {
+    fn has_own_virtual(&self, activation: &mut Activation<'_, '_, 'gc, '_>, name: &str) -> bool {
         if let Some(slot) = self
             .0
             .read()
@@ -683,7 +652,11 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
     }
 
     /// Checks if a named property appears when enumerating the object.
-    fn is_property_enumerable(&self, activation: &mut Activation<'_, 'gc>, name: &str) -> bool {
+    fn is_property_enumerable(
+        &self,
+        activation: &mut Activation<'_, '_, 'gc, '_>,
+        name: &str,
+    ) -> bool {
         if let Some(prop) = self
             .0
             .read()
@@ -697,7 +670,7 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
     }
 
     /// Enumerate the object.
-    fn get_keys(&self, activation: &mut Activation<'_, 'gc>) -> Vec<String> {
+    fn get_keys(&self, activation: &mut Activation<'_, '_, 'gc, '_>) -> Vec<String> {
         let proto_keys = self
             .proto()
             .map_or_else(Vec::new, |p| p.get_keys(activation));
@@ -859,6 +832,7 @@ mod tests {
     use crate::backend::navigator::NullNavigatorBackend;
     use crate::backend::render::NullRenderer;
     use crate::backend::storage::MemoryStorageBackend;
+    use crate::context::UpdateContext;
     use crate::display_object::MovieClip;
     use crate::library::Library;
     use crate::loader::LoadManager;
@@ -871,11 +845,7 @@ mod tests {
 
     fn with_object<F, R>(swf_version: u8, test: F) -> R
     where
-        F: for<'a, 'gc> FnOnce(
-            &mut Activation<'_, 'gc>,
-            &mut UpdateContext<'a, 'gc, '_>,
-            Object<'gc>,
-        ) -> R,
+        F: for<'a, 'gc> FnOnce(&mut Activation<'_, '_, 'gc, '_>, Object<'gc>) -> R,
     {
         rootless_arena(|gc_context| {
             let mut avm = Avm1::new(gc_context, swf_version);
@@ -926,24 +896,26 @@ mod tests {
             let object = ScriptObject::object(gc_context, Some(avm.prototypes().object)).into();
 
             let globals = avm.global_object_cell();
+            let base_clip = *context.levels.get(&0).unwrap();
+            let swf_version = context.swf.version();
             let mut activation = Activation::from_nothing(
                 &mut avm,
+                &mut context,
                 ActivationIdentifier::root("[Test]"),
-                context.swf.version(),
+                swf_version,
                 globals,
-                context.gc_context,
-                *context.levels.get(&0).unwrap(),
+                base_clip,
             );
 
-            test(&mut activation, &mut context, object)
+            test(&mut activation, object)
         })
     }
 
     #[test]
     fn test_get_undefined() {
-        with_object(0, |activation, context, object| {
+        with_object(0, |activation, object| {
             assert_eq!(
-                object.get("not_defined", activation, context).unwrap(),
+                object.get("not_defined", activation).unwrap(),
                 Value::Undefined
             );
         })
@@ -951,57 +923,44 @@ mod tests {
 
     #[test]
     fn test_set_get() {
-        with_object(0, |activation, context, object| {
+        with_object(0, |activation, object| {
             object.as_script_object().unwrap().define_value(
-                context.gc_context,
+                activation.context.gc_context,
                 "forced",
                 "forced".into(),
                 EnumSet::empty(),
             );
-            object
-                .set("natural", "natural".into(), activation, context)
-                .unwrap();
+            object.set("natural", "natural".into(), activation).unwrap();
 
-            assert_eq!(
-                object.get("forced", activation, context).unwrap(),
-                "forced".into()
-            );
-            assert_eq!(
-                object.get("natural", activation, context).unwrap(),
-                "natural".into()
-            );
+            assert_eq!(object.get("forced", activation).unwrap(), "forced".into());
+            assert_eq!(object.get("natural", activation).unwrap(), "natural".into());
         })
     }
 
     #[test]
     fn test_set_readonly() {
-        with_object(0, |activation, context, object| {
+        with_object(0, |activation, object| {
             object.as_script_object().unwrap().define_value(
-                context.gc_context,
+                activation.context.gc_context,
                 "normal",
                 "initial".into(),
                 EnumSet::empty(),
             );
             object.as_script_object().unwrap().define_value(
-                context.gc_context,
+                activation.context.gc_context,
                 "readonly",
                 "initial".into(),
                 ReadOnly.into(),
             );
 
+            object.set("normal", "replaced".into(), activation).unwrap();
             object
-                .set("normal", "replaced".into(), activation, context)
-                .unwrap();
-            object
-                .set("readonly", "replaced".into(), activation, context)
+                .set("readonly", "replaced".into(), activation)
                 .unwrap();
 
+            assert_eq!(object.get("normal", activation).unwrap(), "replaced".into());
             assert_eq!(
-                object.get("normal", activation, context).unwrap(),
-                "replaced".into()
-            );
-            assert_eq!(
-                object.get("readonly", activation, context).unwrap(),
+                object.get("readonly", activation).unwrap(),
                 "initial".into()
             );
         })
@@ -1009,130 +968,95 @@ mod tests {
 
     #[test]
     fn test_deletable_not_readonly() {
-        with_object(0, |activation, context, object| {
+        with_object(0, |activation, object| {
             object.as_script_object().unwrap().define_value(
-                context.gc_context,
+                activation.context.gc_context,
                 "test",
                 "initial".into(),
                 DontDelete.into(),
             );
 
-            assert_eq!(object.delete(activation, context.gc_context, "test"), false);
-            assert_eq!(
-                object.get("test", activation, context).unwrap(),
-                "initial".into()
-            );
+            assert_eq!(object.delete(activation, "test"), false);
+            assert_eq!(object.get("test", activation).unwrap(), "initial".into());
 
             object
                 .as_script_object()
                 .unwrap()
-                .set("test", "replaced".into(), activation, context)
+                .set("test", "replaced".into(), activation)
                 .unwrap();
 
-            assert_eq!(object.delete(activation, context.gc_context, "test"), false);
-            assert_eq!(
-                object.get("test", activation, context).unwrap(),
-                "replaced".into()
-            );
+            assert_eq!(object.delete(activation, "test"), false);
+            assert_eq!(object.get("test", activation).unwrap(), "replaced".into());
         })
     }
 
     #[test]
     fn test_virtual_get() {
-        with_object(0, |activation, context, object| {
-            let getter = Executable::Native(|_avm, _context, _this, _args| Ok("Virtual!".into()));
+        with_object(0, |activation, object| {
+            let getter = Executable::Native(|_avm, _this, _args| Ok("Virtual!".into()));
 
             object.as_script_object().unwrap().add_property(
-                context.gc_context,
+                activation.context.gc_context,
                 "test",
                 getter,
                 None,
                 EnumSet::empty(),
             );
 
-            assert_eq!(
-                object.get("test", activation, context).unwrap(),
-                "Virtual!".into()
-            );
+            assert_eq!(object.get("test", activation).unwrap(), "Virtual!".into());
 
             // This set should do nothing
-            object
-                .set("test", "Ignored!".into(), activation, context)
-                .unwrap();
-            assert_eq!(
-                object.get("test", activation, context).unwrap(),
-                "Virtual!".into()
-            );
+            object.set("test", "Ignored!".into(), activation).unwrap();
+            assert_eq!(object.get("test", activation).unwrap(), "Virtual!".into());
         })
     }
 
     #[test]
     fn test_delete() {
-        with_object(0, |activation, context, object| {
-            let getter = Executable::Native(|_avm, _context, _this, _args| Ok("Virtual!".into()));
+        with_object(0, |activation, object| {
+            let getter = Executable::Native(|_avm, _this, _args| Ok("Virtual!".into()));
 
             object.as_script_object().unwrap().add_property(
-                context.gc_context,
+                activation.context.gc_context,
                 "virtual",
                 getter.clone(),
                 None,
                 EnumSet::empty(),
             );
             object.as_script_object().unwrap().add_property(
-                context.gc_context,
+                activation.context.gc_context,
                 "virtual_un",
                 getter,
                 None,
                 DontDelete.into(),
             );
             object.as_script_object().unwrap().define_value(
-                context.gc_context,
+                activation.context.gc_context,
                 "stored",
                 "Stored!".into(),
                 EnumSet::empty(),
             );
             object.as_script_object().unwrap().define_value(
-                context.gc_context,
+                activation.context.gc_context,
                 "stored_un",
                 "Stored!".into(),
                 DontDelete.into(),
             );
 
-            assert_eq!(
-                object.delete(activation, context.gc_context, "virtual"),
-                true
-            );
-            assert_eq!(
-                object.delete(activation, context.gc_context, "virtual_un"),
-                false
-            );
-            assert_eq!(
-                object.delete(activation, context.gc_context, "stored"),
-                true
-            );
-            assert_eq!(
-                object.delete(activation, context.gc_context, "stored_un"),
-                false
-            );
-            assert_eq!(
-                object.delete(activation, context.gc_context, "non_existent"),
-                false
-            );
+            assert_eq!(object.delete(activation, "virtual"), true);
+            assert_eq!(object.delete(activation, "virtual_un"), false);
+            assert_eq!(object.delete(activation, "stored"), true);
+            assert_eq!(object.delete(activation, "stored_un"), false);
+            assert_eq!(object.delete(activation, "non_existent"), false);
 
+            assert_eq!(object.get("virtual", activation).unwrap(), Value::Undefined);
             assert_eq!(
-                object.get("virtual", activation, context).unwrap(),
-                Value::Undefined
-            );
-            assert_eq!(
-                object.get("virtual_un", activation, context).unwrap(),
+                object.get("virtual_un", activation).unwrap(),
                 "Virtual!".into()
             );
+            assert_eq!(object.get("stored", activation).unwrap(), Value::Undefined);
             assert_eq!(
-                object.get("stored", activation, context).unwrap(),
-                Value::Undefined
-            );
-            assert_eq!(
-                object.get("stored_un", activation, context).unwrap(),
+                object.get("stored_un", activation).unwrap(),
                 "Stored!".into()
             );
         })
@@ -1140,30 +1064,30 @@ mod tests {
 
     #[test]
     fn test_iter_values() {
-        with_object(0, |activation, context, object| {
-            let getter = Executable::Native(|_avm, _context, _this, _args| Ok(Value::Null));
+        with_object(0, |activation, object| {
+            let getter = Executable::Native(|_avm, _this, _args| Ok(Value::Null));
 
             object.as_script_object().unwrap().define_value(
-                context.gc_context,
+                activation.context.gc_context,
                 "stored",
                 Value::Null,
                 EnumSet::empty(),
             );
             object.as_script_object().unwrap().define_value(
-                context.gc_context,
+                activation.context.gc_context,
                 "stored_hidden",
                 Value::Null,
                 DontEnum.into(),
             );
             object.as_script_object().unwrap().add_property(
-                context.gc_context,
+                activation.context.gc_context,
                 "virtual",
                 getter.clone(),
                 None,
                 EnumSet::empty(),
             );
             object.as_script_object().unwrap().add_property(
-                context.gc_context,
+                activation.context.gc_context,
                 "virtual_hidden",
                 getter,
                 None,

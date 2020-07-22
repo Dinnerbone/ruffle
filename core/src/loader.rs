@@ -477,19 +477,18 @@ impl<'gc> Loader<'gc> {
 
                 let mut activation = Activation::from_nothing(
                     avm1,
+                    uc,
                     ActivationIdentifier::root("[Form Loader]"),
                     uc.swf.version(),
                     avm1.global_object_cell(),
-                    uc.gc_context,
                     *uc.levels.get(&0).unwrap(),
                 );
 
                 for (k, v) in form_urlencoded::parse(&data) {
                     that.set(
                         &k,
-                        AvmString::new(uc.gc_context, v.into_owned()).into(),
+                        AvmString::new(activation.context.gc_context, v.into_owned()).into(),
                         &mut activation,
-                        uc,
                     )?;
                 }
 

@@ -5,14 +5,12 @@ use crate::avm1::error::Error;
 use crate::avm1::function::{Executable, FunctionObject};
 use crate::avm1::object::value_object::ValueObject;
 use crate::avm1::{AvmString, Object, TObject, Value};
-use crate::context::UpdateContext;
 use enumset::EnumSet;
 use gc_arena::MutationContext;
 
 /// `Boolean` constructor/function
 pub fn boolean<'gc>(
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     this: Object<'gc>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -25,7 +23,7 @@ pub fn boolean<'gc>(
 
     // If called from a constructor, populate `this`.
     if let Some(mut vbox) = this.as_value_object() {
-        vbox.replace_value(context.gc_context, cons_value);
+        vbox.replace_value(activation.context.gc_context, cons_value);
     }
 
     // If called as a function, return the value.
@@ -74,8 +72,7 @@ pub fn create_proto<'gc>(
 }
 
 pub fn to_string<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -83,7 +80,7 @@ pub fn to_string<'gc>(
         // Must be a bool.
         // Boolean.prototype.toString.call(x) returns undefined for non-bools.
         if let Value::Bool(b) = vbox.unbox() {
-            return Ok(AvmString::new(context.gc_context, b.to_string()).into());
+            return Ok(AvmString::new(activation.context.gc_context, b.to_string()).into());
         }
     }
 
@@ -91,8 +88,7 @@ pub fn to_string<'gc>(
 }
 
 pub fn value_of<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {

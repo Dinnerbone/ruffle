@@ -5,7 +5,7 @@ use crate::avm1::activation::Activation;
 use crate::avm1::error::Error;
 use crate::avm1::function::Executable;
 use crate::avm1::property::Attribute;
-use crate::avm1::{Object, ScriptObject, TObject, UpdateContext, Value};
+use crate::avm1::{Object, ScriptObject, TObject, Value};
 use gc_arena::MutationContext;
 
 pub fn create_stage_object<'gc>(
@@ -76,8 +76,7 @@ pub fn create_stage_object<'gc>(
 }
 
 fn add_listener<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -86,8 +85,7 @@ fn add_listener<'gc>(
 }
 
 fn align<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -96,8 +94,7 @@ fn align<'gc>(
 }
 
 fn set_align<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -106,17 +103,15 @@ fn set_align<'gc>(
 }
 
 fn height<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    Ok(context.stage_size.1.to_pixels().into())
+    Ok(activation.context.stage_size.1.to_pixels().into())
 }
 
 fn remove_listener<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -125,8 +120,7 @@ fn remove_listener<'gc>(
 }
 
 fn scale_mode<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -135,8 +129,7 @@ fn scale_mode<'gc>(
 }
 
 fn set_scale_mode<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -145,8 +138,7 @@ fn set_scale_mode<'gc>(
 }
 
 fn show_menu<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -155,8 +147,7 @@ fn show_menu<'gc>(
 }
 
 fn set_show_menu<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -165,10 +156,9 @@ fn set_show_menu<'gc>(
 }
 
 fn width<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    Ok(context.stage_size.0.to_pixels().into())
+    Ok(activation.context.stage_size.0.to_pixels().into())
 }

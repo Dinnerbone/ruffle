@@ -20,8 +20,7 @@ use swf::{
 
 /// Implements `MovieClip`
 pub fn constructor<'gc>(
-    _activation: &mut Activation<'_, 'gc>,
-    _action_context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
@@ -33,10 +32,10 @@ macro_rules! with_movie_clip {
         $(
             $object.force_set_function(
                 $name,
-                |activation, context: &mut UpdateContext<'_, 'gc, '_>, this, args| -> Result<Value<'gc>, Error<'gc>> {
+                |activation: &mut Activation<'_, '_, 'gc, '_>, this, args| -> Result<Value<'gc>, Error<'gc>> {
                     if let Some(display_object) = this.as_display_object() {
                         if let Some(movie_clip) = display_object.as_movie_clip() {
-                            return $fn(movie_clip, activation, context, args);
+                            return $fn(movie_clip, activation, args);
                         }
                     }
                     Ok(Value::Undefined)
@@ -52,13 +51,12 @@ macro_rules! with_movie_clip {
 #[allow(clippy::comparison_chain)]
 pub fn hit_test<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     if args.len() > 1 {
-        let x = args.get(0).unwrap().coerce_to_f64(activation, context)?;
-        let y = args.get(1).unwrap().coerce_to_f64(activation, context)?;
+        let x = args.get(0).unwrap().coerce_to_f64(activation)?;
+        let y = args.get(1).unwrap().coerce_to_f64(activation)?;
         let shape = args
             .get(2)
             .map(|v| v.as_bool(activation.current_swf_version()))
@@ -78,7 +76,7 @@ pub fn hit_test<'gc>(
         let other = args
             .get(0)
             .unwrap()
-            .coerce_to_object(activation, context)
+            .coerce_to_object(activation)
             .as_display_object();
         if let Some(other) = other {
             return Ok(other
@@ -146,24 +144,15 @@ pub fn create_proto<'gc>(
 
 fn line_style<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let Some(width) = args.get(0) {
-        let width = Twips::from_pixels(
-            width
-                .coerce_to_f64(activation, context)?
-                .min(255.0)
-                .max(0.0),
-        );
+        let width = Twips::from_pixels(width.coerce_to_f64(activation)?.min(255.0).max(0.0));
         let color = if let Some(rgb) = args.get(1) {
-            let rgb = rgb.coerce_to_u32(activation, context)?;
+            let rgb = rgb.coerce_to_u32(activation)?;
             let alpha = if let Some(alpha) = args.get(2) {
-                alpha
-                    .coerce_to_f64(activation, context)?
-                    .min(100.0)
-                    .max(0.0)
+                alpha.coerce_to_f64(activation)?.min(100.0).max(0.0)
             } else {
                 100.0
             } as f32
@@ -178,7 +167,7 @@ fn line_style<'gc>(
             .map_or(false, |v| v.as_bool(activation.current_swf_version()));
         let (allow_scale_x, allow_scale_y) = match args
             .get(4)
-            .and_then(|v| v.coerce_to_string(activation, context).ok())
+            .and_then(|v| v.coerce_to_string(activation).ok())
             .as_deref()
         {
             Some("normal") => (true, true),
@@ -188,7 +177,7 @@ fn line_style<'gc>(
         };
         let cap_style = match args
             .get(5)
-            .and_then(|v| v.coerce_to_string(activation, context).ok())
+            .and_then(|v| v.coerce_to_string(activation).ok())
             .as_deref()
         {
             Some("square") => LineCapStyle::Square,
@@ -197,17 +186,12 @@ fn line_style<'gc>(
         };
         let join_style = match args
             .get(6)
-            .and_then(|v| v.coerce_to_string(activation, context).ok())
+            .and_then(|v| v.coerce_to_string(activation).ok())
             .as_deref()
         {
             Some("miter") => {
                 if let Some(limit) = args.get(7) {
-                    LineJoinStyle::Miter(
-                        limit
-                            .coerce_to_f64(activation, context)?
-                            .max(0.0)
-                            .min(255.0) as f32,
-                    )
+                    LineJoinStyle::Miter(limit.coerce_to_f64(activation)?.max(0.0).min(255.0) as f32)
                 } else {
                     LineJoinStyle::Miter(3.0)
                 }
@@ -216,7 +200,7 @@ fn line_style<'gc>(
             _ => LineJoinStyle::Round,
         };
         movie_clip.set_line_style(
-            context,
+            activation.context,
             Some(LineStyle {
                 width,
                 color,
@@ -231,43 +215,38 @@ fn line_style<'gc>(
             }),
         );
     } else {
-        movie_clip.set_line_style(context, None);
+        movie_clip.set_line_style(activation.context, None);
     }
     Ok(Value::Undefined)
 }
 
 fn begin_fill<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let Some(rgb) = args.get(0) {
-        let rgb = rgb.coerce_to_u32(activation, context)?;
+        let rgb = rgb.coerce_to_u32(activation)?;
         let alpha = if let Some(alpha) = args.get(1) {
-            alpha
-                .coerce_to_f64(activation, context)?
-                .min(100.0)
-                .max(0.0)
+            alpha.coerce_to_f64(activation)?.min(100.0).max(0.0)
         } else {
             100.0
         } as f32
             / 100.0
             * 255.0;
         movie_clip.set_fill_style(
-            context,
+            activation.context,
             Some(FillStyle::Color(Color::from_rgb(rgb, alpha as u8))),
         );
     } else {
-        movie_clip.set_fill_style(context, None);
+        movie_clip.set_fill_style(activation.context, None);
     }
     Ok(Value::Undefined)
 }
 
 fn begin_gradient_fill<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let (Some(method), Some(colors), Some(alphas), Some(ratios), Some(matrix)) = (
@@ -277,11 +256,11 @@ fn begin_gradient_fill<'gc>(
         args.get(3),
         args.get(4),
     ) {
-        let method = method.coerce_to_string(activation, context)?;
-        let colors = colors.coerce_to_object(activation, context).array();
-        let alphas = alphas.coerce_to_object(activation, context).array();
-        let ratios = ratios.coerce_to_object(activation, context).array();
-        let matrix_object = matrix.coerce_to_object(activation, context);
+        let method = method.coerce_to_string(activation)?;
+        let colors = colors.coerce_to_object(activation).array();
+        let alphas = alphas.coerce_to_object(activation).array();
+        let ratios = ratios.coerce_to_object(activation).array();
+        let matrix_object = matrix.coerce_to_object(activation);
         if colors.len() != alphas.len() || colors.len() != ratios.len() {
             log::warn!(
                 "beginGradientFill() received different sized arrays for colors, alphas and ratios"
@@ -290,24 +269,18 @@ fn begin_gradient_fill<'gc>(
         }
         let mut records = Vec::with_capacity(colors.len());
         for i in 0..colors.len() {
-            let ratio = ratios[i]
-                .coerce_to_f64(activation, context)?
-                .min(255.0)
-                .max(0.0);
-            let rgb = colors[i].coerce_to_u32(activation, context)?;
-            let alpha = alphas[i]
-                .coerce_to_f64(activation, context)?
-                .min(100.0)
-                .max(0.0);
+            let ratio = ratios[i].coerce_to_f64(activation)?.min(255.0).max(0.0);
+            let rgb = colors[i].coerce_to_u32(activation)?;
+            let alpha = alphas[i].coerce_to_f64(activation)?.min(100.0).max(0.0);
             records.push(GradientRecord {
                 ratio: ratio as u8,
                 color: Color::from_rgb(rgb, (alpha / 100.0 * 255.0) as u8),
             });
         }
-        let matrix = gradient_object_to_matrix(matrix_object, activation, context)?;
+        let matrix = gradient_object_to_matrix(matrix_object, activation)?;
         let spread = match args
             .get(5)
-            .and_then(|v| v.coerce_to_string(activation, context).ok())
+            .and_then(|v| v.coerce_to_string(activation).ok())
             .as_deref()
         {
             Some("reflect") => GradientSpread::Reflect,
@@ -316,7 +289,7 @@ fn begin_gradient_fill<'gc>(
         };
         let interpolation = match args
             .get(6)
-            .and_then(|v| v.coerce_to_string(activation, context).ok())
+            .and_then(|v| v.coerce_to_string(activation).ok())
             .as_deref()
         {
             Some("linearRGB") => GradientInterpolation::LinearRGB,
@@ -335,7 +308,7 @@ fn begin_gradient_fill<'gc>(
                 if let Some(focal_point) = args.get(7) {
                     FillStyle::FocalGradient {
                         gradient,
-                        focal_point: focal_point.coerce_to_f64(activation, context)? as f32,
+                        focal_point: focal_point.coerce_to_f64(activation)? as f32,
                     }
                 } else {
                     FillStyle::RadialGradient(gradient)
@@ -346,24 +319,23 @@ fn begin_gradient_fill<'gc>(
                 return Ok(Value::Undefined);
             }
         };
-        movie_clip.set_fill_style(context, Some(style));
+        movie_clip.set_fill_style(activation.context, Some(style));
     } else {
-        movie_clip.set_fill_style(context, None);
+        movie_clip.set_fill_style(activation.context, None);
     }
     Ok(Value::Undefined)
 }
 
 fn move_to<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let (Some(x), Some(y)) = (args.get(0), args.get(1)) {
-        let x = x.coerce_to_f64(activation, context)?;
-        let y = y.coerce_to_f64(activation, context)?;
+        let x = x.coerce_to_f64(activation)?;
+        let y = y.coerce_to_f64(activation)?;
         movie_clip.draw_command(
-            context,
+            activation.context,
             DrawCommand::MoveTo {
                 x: Twips::from_pixels(x),
                 y: Twips::from_pixels(y),
@@ -375,15 +347,14 @@ fn move_to<'gc>(
 
 fn line_to<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let (Some(x), Some(y)) = (args.get(0), args.get(1)) {
-        let x = x.coerce_to_f64(activation, context)?;
-        let y = y.coerce_to_f64(activation, context)?;
+        let x = x.coerce_to_f64(activation)?;
+        let y = y.coerce_to_f64(activation)?;
         movie_clip.draw_command(
-            context,
+            activation.context,
             DrawCommand::LineTo {
                 x: Twips::from_pixels(x),
                 y: Twips::from_pixels(y),
@@ -395,19 +366,18 @@ fn line_to<'gc>(
 
 fn curve_to<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let (Some(x1), Some(y1), Some(x2), Some(y2)) =
         (args.get(0), args.get(1), args.get(2), args.get(3))
     {
-        let x1 = x1.coerce_to_f64(activation, context)?;
-        let y1 = y1.coerce_to_f64(activation, context)?;
-        let x2 = x2.coerce_to_f64(activation, context)?;
-        let y2 = y2.coerce_to_f64(activation, context)?;
+        let x1 = x1.coerce_to_f64(activation)?;
+        let y1 = y1.coerce_to_f64(activation)?;
+        let x2 = x2.coerce_to_f64(activation)?;
+        let y2 = y2.coerce_to_f64(activation)?;
         movie_clip.draw_command(
-            context,
+            activation.context,
             DrawCommand::CurveTo {
                 x1: Twips::from_pixels(x1),
                 y1: Twips::from_pixels(y1),
@@ -421,36 +391,33 @@ fn curve_to<'gc>(
 
 fn end_fill<'gc>(
     movie_clip: MovieClip<'gc>,
-    _activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    movie_clip.set_fill_style(context, None);
+    movie_clip.set_fill_style(activation.context, None);
     Ok(Value::Undefined)
 }
 
 fn clear<'gc>(
     movie_clip: MovieClip<'gc>,
-    _activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    movie_clip.clear(context);
+    movie_clip.clear(activation.context);
     Ok(Value::Undefined)
 }
 
 fn attach_movie<'gc>(
     mut movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let (export_name, new_instance_name, depth) = match &args[0..3] {
         [export_name, new_instance_name, depth] => (
-            export_name.coerce_to_string(activation, context)?,
-            new_instance_name.coerce_to_string(activation, context)?,
+            export_name.coerce_to_string(activation)?,
+            new_instance_name.coerce_to_string(activation)?,
             depth
-                .coerce_to_i32(activation, context)?
+                .coerce_to_i32(activation)?
                 .wrapping_add(AVM_DEPTH_BIAS),
         ),
         _ => {
@@ -466,27 +433,31 @@ fn attach_movie<'gc>(
         return Ok(Value::Undefined);
     }
 
-    if let Ok(mut new_clip) = context
+    if let Ok(mut new_clip) = activation
+        .context
         .library
         .library_for_movie(movie_clip.movie().unwrap())
         .ok_or_else(|| "Movie is missing!".into())
-        .and_then(|l| l.instantiate_by_export_name(&export_name, context.gc_context))
+        .and_then(|l| l.instantiate_by_export_name(&export_name, activation.context.gc_context))
     {
         // Set name and attach to parent.
-        new_clip.set_name(context.gc_context, &new_instance_name);
-        movie_clip.add_child_from_avm(context, new_clip, depth);
+        new_clip.set_name(activation.context.gc_context, &new_instance_name);
+        movie_clip.add_child_from_avm(activation.context, new_clip, depth);
         let init_object = if let Some(Value::Object(init_object)) = init_object {
             Some(init_object.to_owned())
         } else {
             None
         };
-        new_clip.post_instantiation(activation.avm, context, new_clip, init_object, true);
-        new_clip.run_frame(activation.avm, context);
+        new_clip.post_instantiation(
+            activation.avm,
+            activation.context,
+            new_clip,
+            init_object,
+            true,
+        );
+        new_clip.run_frame(activation.avm, activation.context);
 
-        Ok(new_clip
-            .object()
-            .coerce_to_object(activation, context)
-            .into())
+        Ok(new_clip.object().coerce_to_object(activation).into())
     } else {
         log::warn!("Unable to attach '{}'", export_name);
         Ok(Value::Undefined)
@@ -495,15 +466,14 @@ fn attach_movie<'gc>(
 
 fn create_empty_movie_clip<'gc>(
     mut movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let (new_instance_name, depth) = match &args[0..2] {
         [new_instance_name, depth] => (
-            new_instance_name.coerce_to_string(activation, context)?,
+            new_instance_name.coerce_to_string(activation)?,
             depth
-                .coerce_to_i32(activation, context)?
+                .coerce_to_i32(activation)?
                 .wrapping_add(AVM_DEPTH_BIAS),
         ),
         _ => {
@@ -517,21 +487,26 @@ fn create_empty_movie_clip<'gc>(
         .movie()
         .or_else(|| activation.base_clip().movie())
         .unwrap();
-    let mut new_clip = MovieClip::new(SwfSlice::empty(swf_movie), context.gc_context);
+    let mut new_clip = MovieClip::new(SwfSlice::empty(swf_movie), activation.context.gc_context);
 
     // Set name and attach to parent.
-    new_clip.set_name(context.gc_context, &new_instance_name);
-    movie_clip.add_child_from_avm(context, new_clip.into(), depth);
-    new_clip.post_instantiation(activation.avm, context, new_clip.into(), None, true);
-    new_clip.run_frame(activation.avm, context);
+    new_clip.set_name(activation.context.gc_context, &new_instance_name);
+    movie_clip.add_child_from_avm(activation.context, new_clip.into(), depth);
+    new_clip.post_instantiation(
+        activation.avm,
+        activation.context,
+        new_clip.into(),
+        None,
+        true,
+    );
+    new_clip.run_frame(activation.avm, activation.context);
 
     Ok(new_clip.object())
 }
 
 fn create_text_field<'gc>(
     mut movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let movie = activation.base_clip().movie().unwrap();
@@ -540,40 +515,40 @@ fn create_text_field<'gc>(
         .get(1)
         .cloned()
         .unwrap_or(Value::Undefined)
-        .coerce_to_f64(activation, context)?;
+        .coerce_to_f64(activation)?;
     let x = args
         .get(2)
         .cloned()
         .unwrap_or(Value::Undefined)
-        .coerce_to_f64(activation, context)?;
+        .coerce_to_f64(activation)?;
     let y = args
         .get(3)
         .cloned()
         .unwrap_or(Value::Undefined)
-        .coerce_to_f64(activation, context)?;
+        .coerce_to_f64(activation)?;
     let width = args
         .get(4)
         .cloned()
         .unwrap_or(Value::Undefined)
-        .coerce_to_f64(activation, context)?;
+        .coerce_to_f64(activation)?;
     let height = args
         .get(5)
         .cloned()
         .unwrap_or(Value::Undefined)
-        .coerce_to_f64(activation, context)?;
+        .coerce_to_f64(activation)?;
 
     let mut text_field: DisplayObject<'gc> =
-        EditText::new(context, movie, x, y, width, height).into();
+        EditText::new(activation.context, movie, x, y, width, height).into();
     text_field.set_name(
-        context.gc_context,
-        &instance_name.coerce_to_string(activation, context)?,
+        activation.context.gc_context,
+        &instance_name.coerce_to_string(activation)?,
     );
     movie_clip.add_child_from_avm(
-        context,
+        activation.context,
         text_field,
         (depth as Depth).wrapping_add(AVM_DEPTH_BIAS),
     );
-    text_field.post_instantiation(activation.avm, context, text_field, None, true);
+    text_field.post_instantiation(activation.avm, activation.context, text_field, None, true);
 
     if activation.current_swf_version() >= 8 {
         //SWF8+ returns the `TextField` instance here
@@ -585,27 +560,23 @@ fn create_text_field<'gc>(
 
 fn duplicate_movie_clip<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     // duplicateMovieClip method uses biased depth compared to CloneSprite
-    duplicate_movie_clip_with_bias(movie_clip, activation, context, args, AVM_DEPTH_BIAS)
+    duplicate_movie_clip_with_bias(movie_clip, activation, args, AVM_DEPTH_BIAS)
 }
 
 pub fn duplicate_movie_clip_with_bias<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
     depth_bias: i32,
 ) -> Result<Value<'gc>, Error<'gc>> {
     let (new_instance_name, depth) = match &args[0..2] {
         [new_instance_name, depth] => (
-            new_instance_name.coerce_to_string(activation, context)?,
-            depth
-                .coerce_to_i32(activation, context)?
-                .wrapping_add(depth_bias),
+            new_instance_name.coerce_to_string(activation)?,
+            depth.coerce_to_i32(activation)?.wrapping_add(depth_bias),
         ),
         _ => {
             log::error!("MovieClip.attachMovie: Too few parameters");
@@ -627,34 +598,41 @@ pub fn duplicate_movie_clip_with_bias<'gc>(
         return Ok(Value::Undefined);
     }
 
-    if let Ok(mut new_clip) = context
+    if let Ok(mut new_clip) = activation
+        .context
         .library
         .library_for_movie(movie_clip.movie().unwrap())
         .ok_or_else(|| "Movie is missing!".into())
-        .and_then(|l| l.instantiate_by_id(movie_clip.id(), context.gc_context))
+        .and_then(|l| l.instantiate_by_id(movie_clip.id(), activation.context.gc_context))
     {
         // Set name and attach to parent.
-        new_clip.set_name(context.gc_context, &new_instance_name);
-        parent.add_child_from_avm(context, new_clip, depth);
+        new_clip.set_name(activation.context.gc_context, &new_instance_name);
+        parent.add_child_from_avm(activation.context, new_clip, depth);
 
         // Copy display properties from previous clip to new clip.
-        new_clip.set_matrix(context.gc_context, &*movie_clip.matrix());
-        new_clip.set_color_transform(context.gc_context, &*movie_clip.color_transform());
-        new_clip
-            .as_movie_clip()
-            .unwrap()
-            .set_clip_actions(context.gc_context, movie_clip.clip_actions().to_vec());
+        new_clip.set_matrix(activation.context.gc_context, &*movie_clip.matrix());
+        new_clip.set_color_transform(
+            activation.context.gc_context,
+            &*movie_clip.color_transform(),
+        );
+        new_clip.as_movie_clip().unwrap().set_clip_actions(
+            activation.context.gc_context,
+            movie_clip.clip_actions().to_vec(),
+        );
         // TODO: Any other properties we should copy...?
         // Definitely not ScriptObject properties.
 
-        let init_object = init_object.map(|v| v.coerce_to_object(activation, context));
-        new_clip.post_instantiation(activation.avm, context, new_clip, init_object, true);
-        new_clip.run_frame(activation.avm, context);
+        let init_object = init_object.map(|v| v.coerce_to_object(activation));
+        new_clip.post_instantiation(
+            activation.avm,
+            activation.context,
+            new_clip,
+            init_object,
+            true,
+        );
+        new_clip.run_frame(activation.avm, activation.context);
 
-        Ok(new_clip
-            .object()
-            .coerce_to_object(activation, context)
-            .into())
+        Ok(new_clip.object().coerce_to_object(activation).into())
     } else {
         log::warn!("Unable to duplicate clip '{}'", movie_clip.name());
         Ok(Value::Undefined)
@@ -663,8 +641,7 @@ pub fn duplicate_movie_clip_with_bias<'gc>(
 
 fn get_bytes_loaded<'gc>(
     _movie_clip: MovieClip<'gc>,
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     // TODO find a correct value
@@ -673,8 +650,7 @@ fn get_bytes_loaded<'gc>(
 
 fn get_bytes_total<'gc>(
     _movie_clip: MovieClip<'gc>,
-    _activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    _activation: &mut Activation<'_, '_, 'gc, '_>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     // TODO find a correct value
@@ -683,8 +659,7 @@ fn get_bytes_total<'gc>(
 
 fn get_next_highest_depth<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    _context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     if activation.current_swf_version() >= 7 {
@@ -703,26 +678,23 @@ fn get_next_highest_depth<'gc>(
 
 fn goto_and_play<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    goto_frame(movie_clip, activation, context, args, false, 0)
+    goto_frame(movie_clip, activation, args, false, 0)
 }
 
 fn goto_and_stop<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    goto_frame(movie_clip, activation, context, args, true, 0)
+    goto_frame(movie_clip, activation, args, true, 0)
 }
 
 pub fn goto_frame<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
     stop: bool,
     scene_offset: u16,
@@ -743,7 +715,7 @@ pub fn goto_frame<'gc>(
             if frame >= 0 {
                 movie_clip.goto_frame(
                     activation.avm,
-                    context,
+                    activation.context,
                     frame.saturating_add(1) as u16,
                     stop,
                 );
@@ -751,10 +723,10 @@ pub fn goto_frame<'gc>(
         }
         val => {
             // Coerce to string and search for a frame label.
-            let frame_label = val.coerce_to_string(activation, context)?;
+            let frame_label = val.coerce_to_string(activation)?;
             if let Some(mut frame) = movie_clip.frame_label_to_number(&frame_label) {
                 frame = frame.wrapping_add(scene_offset);
-                movie_clip.goto_frame(activation.avm, context, frame, stop);
+                movie_clip.goto_frame(activation.avm, activation.context, frame, stop);
             }
         }
     }
@@ -763,42 +735,38 @@ pub fn goto_frame<'gc>(
 
 fn next_frame<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    movie_clip.next_frame(activation.avm, context);
+    movie_clip.next_frame(activation.avm, activation.context);
     Ok(Value::Undefined)
 }
 
 fn play<'gc>(
     movie_clip: MovieClip<'gc>,
-    _activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    movie_clip.play(context);
+    movie_clip.play(activation.context);
     Ok(Value::Undefined)
 }
 
 fn prev_frame<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    movie_clip.prev_frame(activation.avm, context);
+    movie_clip.prev_frame(activation.avm, activation.context);
     Ok(Value::Undefined)
 }
 
 fn remove_movie_clip<'gc>(
     movie_clip: MovieClip<'gc>,
-    _activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     // removeMovieClip method uses biased depth compared to RemoveSprite
-    remove_movie_clip_with_bias(movie_clip, context, AVM_DEPTH_BIAS)
+    remove_movie_clip_with_bias(movie_clip, activation.context, AVM_DEPTH_BIAS)
 }
 
 pub fn remove_movie_clip_with_bias<'gc>(
@@ -826,39 +794,35 @@ pub fn remove_movie_clip_with_bias<'gc>(
 
 fn start_drag<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    crate::avm1::start_drag(movie_clip.into(), activation, context, args);
+    crate::avm1::start_drag(movie_clip.into(), activation, args);
     Ok(Value::Undefined)
 }
 
 fn stop<'gc>(
     movie_clip: MovieClip<'gc>,
-    _activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    movie_clip.stop(context);
+    movie_clip.stop(activation.context);
     Ok(Value::Undefined)
 }
 
 fn stop_drag<'gc>(
     _movie_clip: MovieClip<'gc>,
-    _activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     // It doesn't matter which clip we call this on; it simply stops any active drag.
-    *context.drag_object = None;
+    *activation.context.drag_object = None;
     Ok(Value::Undefined)
 }
 
 fn swap_depths<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let arg = args.get(0).cloned().unwrap_or(Value::Undefined);
@@ -872,9 +836,7 @@ fn swap_depths<'gc>(
     let mut depth = None;
     if let Value::Number(n) = arg {
         depth = Some(crate::avm1::value::f64_to_wrapping_i32(n).wrapping_add(AVM_DEPTH_BIAS));
-    } else if let Some(target) =
-        activation.resolve_target_display_object(context, movie_clip.into(), arg)?
-    {
+    } else if let Some(target) = activation.resolve_target_display_object(movie_clip.into(), arg)? {
         if let Some(target_parent) = target.parent() {
             if DisplayObject::ptr_eq(target_parent, parent.into()) {
                 depth = Some(target.depth())
@@ -893,7 +855,7 @@ fn swap_depths<'gc>(
         }
 
         if depth != movie_clip.depth() {
-            parent.swap_child_to_depth(context, movie_clip.into(), depth);
+            parent.swap_child_to_depth(activation.context, movie_clip.into(), depth);
         }
     }
 
@@ -902,31 +864,29 @@ fn swap_depths<'gc>(
 
 fn to_string<'gc>(
     movie_clip: MovieClip<'gc>,
-    _activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    Ok(AvmString::new(context.gc_context, movie_clip.path()).into())
+    Ok(AvmString::new(activation.context.gc_context, movie_clip.path()).into())
 }
 
 fn local_to_global<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let Value::Object(point) = args.get(0).unwrap_or(&Value::Undefined) {
         // localToGlobal does no coercion; it fails if the properties are not numbers.
         // It does not search the prototype chain.
         if let (Value::Number(x), Value::Number(y)) = (
-            point.get_local("x", activation, context, *point)?,
-            point.get_local("y", activation, context, *point)?,
+            point.get_local("x", activation, *point)?,
+            point.get_local("y", activation, *point)?,
         ) {
             let x = Twips::from_pixels(x);
             let y = Twips::from_pixels(y);
             let (out_x, out_y) = movie_clip.local_to_global((x, y));
-            point.set("x", out_x.to_pixels().into(), activation, context)?;
-            point.set("y", out_y.to_pixels().into(), activation, context)?;
+            point.set("x", out_x.to_pixels().into(), activation)?;
+            point.set("y", out_y.to_pixels().into(), activation)?;
         } else {
             log::warn!("MovieClip.localToGlobal: Invalid x and y properties");
         }
@@ -939,19 +899,17 @@ fn local_to_global<'gc>(
 
 fn get_bounds<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let target = match args.get(0) {
         Some(Value::String(s)) if s.is_empty() => None,
         Some(Value::Object(o)) if o.as_display_object().is_some() => o.as_display_object(),
         Some(val) => {
-            let path = val.coerce_to_string(activation, context)?;
+            let path = val.coerce_to_string(activation)?;
             activation.resolve_target_display_object(
-                context,
                 movie_clip.into(),
-                AvmString::new(context.gc_context, path.to_string()).into(),
+                AvmString::new(activation.context.gc_context, path.to_string()).into(),
             )?
         }
         None => Some(movie_clip.into()),
@@ -973,31 +931,14 @@ fn get_bounds<'gc>(
             bounds.transform(&bounds_transform)
         };
 
-        let out = ScriptObject::object(context.gc_context, Some(activation.avm.prototypes.object));
-        out.set(
-            "xMin",
-            out_bounds.x_min.to_pixels().into(),
-            activation,
-            context,
-        )?;
-        out.set(
-            "yMin",
-            out_bounds.y_min.to_pixels().into(),
-            activation,
-            context,
-        )?;
-        out.set(
-            "xMax",
-            out_bounds.x_max.to_pixels().into(),
-            activation,
-            context,
-        )?;
-        out.set(
-            "yMax",
-            out_bounds.y_max.to_pixels().into(),
-            activation,
-            context,
-        )?;
+        let out = ScriptObject::object(
+            activation.context.gc_context,
+            Some(activation.avm.prototypes.object),
+        );
+        out.set("xMin", out_bounds.x_min.to_pixels().into(), activation)?;
+        out.set("yMin", out_bounds.y_min.to_pixels().into(), activation)?;
+        out.set("xMax", out_bounds.x_max.to_pixels().into(), activation)?;
+        out.set("yMax", out_bounds.y_max.to_pixels().into(), activation)?;
         Ok(out.into())
     } else {
         Ok(Value::Undefined)
@@ -1006,34 +947,33 @@ fn get_bounds<'gc>(
 
 fn get_rect<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     // TODO: This should get the bounds ignoring strokes. Always equal to or smaller than getBounds.
     // Just defer to getBounds for now. Will have to store edge_bounds vs. shape_bounds in Graphic.
-    get_bounds(movie_clip, activation, context, args)
+    get_bounds(movie_clip, activation, args)
 }
 
 #[allow(unused_must_use)] //can't use errors yet
 pub fn get_url<'a, 'gc>(
     _movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'a, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
+
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     use crate::avm1::fscommand;
 
     //TODO: Error behavior if no arguments are present
     if let Some(url_val) = args.get(0) {
-        let url = url_val.coerce_to_string(activation, context)?;
+        let url = url_val.coerce_to_string(activation)?;
         if let Some(fscommand) = fscommand::parse(&url) {
-            fscommand::handle(fscommand, activation, context);
+            fscommand::handle(fscommand, activation);
             return Ok(Value::Undefined);
         }
 
         let window = if let Some(window) = args.get(1) {
-            Some(window.coerce_to_string(activation, context)?.to_string())
+            Some(window.coerce_to_string(activation)?.to_string())
         } else {
             None
         };
@@ -1042,9 +982,10 @@ pub fn get_url<'a, 'gc>(
             Some(Value::String(s)) if *s == "POST" => Some(NavigationMethod::POST),
             _ => None,
         };
-        let vars_method = method.map(|m| (m, activation.locals_into_form_values(context)));
+        let vars_method = method.map(|m| (m, activation.locals_into_form_values()));
 
-        context
+        activation
+            .context
             .navigator
             .navigate_to_url(url.to_string(), window, vars_method);
     }
@@ -1054,22 +995,21 @@ pub fn get_url<'a, 'gc>(
 
 fn global_to_local<'gc>(
     movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     if let Value::Object(point) = args.get(0).unwrap_or(&Value::Undefined) {
         // globalToLocal does no coercion; it fails if the properties are not numbers.
         // It does not search the prototype chain.
         if let (Value::Number(x), Value::Number(y)) = (
-            point.get_local("x", activation, context, *point)?,
-            point.get_local("y", activation, context, *point)?,
+            point.get_local("x", activation, *point)?,
+            point.get_local("y", activation, *point)?,
         ) {
             let x = Twips::from_pixels(x);
             let y = Twips::from_pixels(y);
             let (out_x, out_y) = movie_clip.global_to_local((x, y));
-            point.set("x", out_x.to_pixels().into(), activation, context)?;
-            point.set("y", out_y.to_pixels().into(), activation, context)?;
+            point.set("x", out_x.to_pixels().into(), activation)?;
+            point.set("y", out_y.to_pixels().into(), activation)?;
         } else {
             log::warn!("MovieClip.globalToLocal: Invalid x and y properties");
         }
@@ -1082,59 +1022,57 @@ fn global_to_local<'gc>(
 
 fn load_movie<'gc>(
     target: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let url_val = args.get(0).cloned().unwrap_or(Value::Undefined);
-    let url = url_val.coerce_to_string(activation, context)?;
+    let url = url_val.coerce_to_string(activation)?;
     let method = args.get(1).cloned().unwrap_or(Value::Undefined);
-    let method = NavigationMethod::from_method_str(&method.coerce_to_string(activation, context)?);
-    let (url, opts) = activation.locals_into_request_options(context, Cow::Borrowed(&url), method);
-    let fetch = context.navigator.fetch(&url, opts);
-    let process = context.load_manager.load_movie_into_clip(
-        context.player.clone().unwrap(),
+    let method = NavigationMethod::from_method_str(&method.coerce_to_string(activation)?);
+    let (url, opts) = activation.locals_into_request_options(Cow::Borrowed(&url), method);
+    let fetch = activation.context.navigator.fetch(&url, opts);
+    let process = activation.context.load_manager.load_movie_into_clip(
+        activation.context.player.clone().unwrap(),
         DisplayObject::MovieClip(target),
         fetch,
         None,
     );
 
-    context.navigator.spawn_future(process);
+    activation.context.navigator.spawn_future(process);
 
     Ok(Value::Undefined)
 }
 
 fn load_variables<'gc>(
     target: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
     let url_val = args.get(0).cloned().unwrap_or(Value::Undefined);
-    let url = url_val.coerce_to_string(activation, context)?;
+    let url = url_val.coerce_to_string(activation)?;
     let method = args.get(1).cloned().unwrap_or(Value::Undefined);
-    let method = NavigationMethod::from_method_str(&method.coerce_to_string(activation, context)?);
-    let (url, opts) = activation.locals_into_request_options(context, Cow::Borrowed(&url), method);
-    let fetch = context.navigator.fetch(&url, opts);
-    let target = target.object().coerce_to_object(activation, context);
-    let process =
-        context
-            .load_manager
-            .load_form_into_object(context.player.clone().unwrap(), target, fetch);
+    let method = NavigationMethod::from_method_str(&method.coerce_to_string(activation)?);
+    let (url, opts) = activation.locals_into_request_options(Cow::Borrowed(&url), method);
+    let fetch = activation.context.navigator.fetch(&url, opts);
+    let target = target.object().coerce_to_object(activation);
+    let process = activation.context.load_manager.load_form_into_object(
+        activation.context.player.clone().unwrap(),
+        target,
+        fetch,
+    );
 
-    context.navigator.spawn_future(process);
+    activation.context.navigator.spawn_future(process);
 
     Ok(Value::Undefined)
 }
 
 fn unload_movie<'gc>(
     mut target: MovieClip<'gc>,
-    _activation: &mut Activation<'_, 'gc>,
-    context: &mut UpdateContext<'_, 'gc, '_>,
+    activation: &mut Activation<'_, '_, 'gc, '_>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    target.unload(context);
-    target.replace_with_movie(context.gc_context, None);
+    target.unload(activation.context);
+    target.replace_with_movie(activation.context.gc_context, None);
 
     Ok(Value::Undefined)
 }

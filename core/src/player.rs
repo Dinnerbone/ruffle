@@ -291,21 +291,18 @@ impl Player {
 
             let mut activation = Activation::from_nothing(
                 avm1,
+                context,
                 ActivationIdentifier::root("[Version Setter]"),
                 context.swf.version(),
                 avm1.global_object_cell(),
-                context.gc_context,
                 *context.levels.get(&0).unwrap(),
             );
-            let object = root.object().coerce_to_object(&mut activation, context);
+            let object = root.object().coerce_to_object(&mut activation);
+            let version_string = activation.context.system.get_version_string(activation.avm);
             object.define_value(
-                context.gc_context,
+                activation.context.gc_context,
                 "$version",
-                AvmString::new(
-                    context.gc_context,
-                    context.system.get_version_string(&mut activation),
-                )
-                .into(),
+                AvmString::new(activation.context.gc_context, version_string).into(),
                 EnumSet::empty(),
             );
         });
@@ -419,10 +416,10 @@ impl Player {
 
                     let mut activation = Activation::from_nothing(
                         avm1,
+                        context,
                         ActivationIdentifier::root("[Variable Dumper]"),
                         context.swf.version(),
                         avm1.global_object_cell(),
-                        context.gc_context,
                         *context.levels.get(&0).unwrap(),
                     );
 
@@ -431,19 +428,15 @@ impl Player {
                         "_global",
                         &activation.avm.global_object_cell(),
                         &mut activation,
-                        context,
                     );
-                    let levels = context.levels.clone();
+                    let levels = activation.context.levels.clone();
                     for (level, display_object) in levels {
-                        let object = display_object
-                            .object()
-                            .coerce_to_object(&mut activation, context);
+                        let object = display_object.object().coerce_to_object(&mut activation);
                         dumper.print_variables(
                             &format!("Level #{}:", level),
                             &format!("_level{}", level),
                             &object,
                             &mut activation,
-                            context,
                         );
                     }
                     log::info!("Variable dump:\n{}", dumper.output());
@@ -789,36 +782,28 @@ impl Player {
                 } => {
                     let mut activation = Activation::from_nothing(
                         avm1,
+                        context,
                         ActivationIdentifier::root("[Construct]"),
                         context.swf.version(),
                         avm1.global_object_cell(),
-                        context.gc_context,
                         *context.levels.get(&0).unwrap(),
                     );
                     if let Ok(prototype) = constructor
-                        .get("prototype", &mut activation, context)
-                        .map(|v| v.coerce_to_object(&mut activation, context))
+                        .get("prototype", &mut activation)
+                        .map(|v| v.coerce_to_object(&mut activation))
                     {
                         if let Value::Object(object) = actions.clip.object() {
-                            object.set_proto(context.gc_context, Some(prototype));
+                            object.set_proto(activation.context.gc_context, Some(prototype));
                             for event in events {
                                 let _ = activation.run_child_frame_for_action(
                                     "[Actions]",
                                     actions.clip,
-                                    context.swf.header().version,
+                                    activation.context.swf.header().version,
                                     event,
-                                    context,
                                 );
                             }
 
-                            let _ = constructor.call(
-                                "[ctor]",
-                                &mut activation,
-                                context,
-                                object,
-                                None,
-                                &[],
-                            );
+                            let _ = constructor.call("[ctor]", &mut activation, object, None, &[]);
                         }
                     }
                 }
@@ -1046,10 +1031,10 @@ impl Player {
     /// hover state up to date, and running garbage collection.
     pub fn update<F, R>(&mut self, func: F) -> R
     where
-        F: for<'a, 'gc> FnOnce(
+        F: for<'a, 'gc, 'gc_context> FnOnce(
             &mut Avm1<'gc>,
             &mut Avm2<'gc>,
-            &mut UpdateContext<'a, 'gc, '_>,
+            &mut UpdateContext<'a, 'gc, 'gc_context>,
         ) -> R,
     {
         let rval = self.mutate_with_update_context(|avm1, avm2, context| {
@@ -1074,16 +1059,15 @@ impl Player {
         self.update(|avm1, _avm2, context| {
             let mut activation = Activation::from_nothing(
                 avm1,
+                context,
                 ActivationIdentifier::root("[Flush]"),
                 context.swf.version(),
                 avm1.global_object_cell(),
-                context.gc_context,
                 *context.levels.get(&0).unwrap(),
             );
-            let shared_objects = context.shared_objects.clone();
+            let shared_objects = activation.context.shared_objects.clone();
             for so in shared_objects.values() {
-                let _ =
-                    crate::avm1::globals::shared_object::flush(&mut activation, context, *so, &[]);
+                let _ = crate::avm1::globals::shared_object::flush(&mut activation, *so, &[]);
             }
         });
     }
