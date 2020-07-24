@@ -1,0 +1,12 @@
+// target_clip
+_level0.target.custom_clip
+
+// target_clip instanceof CustomClip
+true
+
+// original_clip
+undefined
+
+// original_clip instanceof CustomClip
+false
+
