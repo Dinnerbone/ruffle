@@ -55,6 +55,7 @@ pub struct WgpuRenderBackend<T: RenderTarget> {
     current_frame: Option<(T::Frame, wgpu::CommandEncoder)>,
     register_encoder: wgpu::CommandEncoder,
     meshes: Vec<Mesh>,
+    mesh_count: usize,
     viewport_width: f32,
     viewport_height: f32,
     view_matrix: [[f32; 4]; 4],
@@ -247,6 +248,7 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
             quad_vbo,
             quad_ibo,
             quad_tex_transforms,
+            mesh_count: 0,
         })
     }
 
@@ -641,6 +643,7 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
         bitmap: Bitmap,
         debug_str: &str,
     ) -> Result<BitmapInfo, Error> {
+        return Err("".into());
         let extent = wgpu::Extent3d {
             width: bitmap.width,
             height: bitmap.height,
@@ -761,6 +764,11 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
     }
 
     fn register_shape(&mut self, shape: DistilledShape) -> ShapeHandle {
+        self.mesh_count += 1;
+        if self.mesh_count != 117 && self.mesh_count != 120 {
+            return ShapeHandle(10000);
+        }
+        // dbg!(&shape);
         let handle = ShapeHandle(self.meshes.len());
         let mesh = self.register_shape_internal(shape);
         self.meshes.push(mesh);
@@ -773,6 +781,8 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
     }
 
     fn register_glyph_shape(&mut self, glyph: &Glyph) -> ShapeHandle {
+        self.mesh_count += 1;
+        return ShapeHandle(10000);
         let shape = ruffle_core::shape_utils::swf_glyph_to_shape(glyph);
         let handle = ShapeHandle(self.meshes.len());
         let mesh = self.register_shape_internal((&shape).into());
@@ -871,6 +881,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
     }
 
     fn render_bitmap(&mut self, bitmap: BitmapHandle, transform: &Transform) {
+        return;
         if let Some((_id, texture)) = self.textures.get(bitmap.0) {
             let (frame_output, encoder) =
                 if let Some((frame_output, encoder)) = &mut self.current_frame {
@@ -1027,6 +1038,13 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
     }
 
     fn render_shape(&mut self, shape: ShapeHandle, transform: &Transform) {
+        if shape.0 >= 1000 {
+            return;
+        }
+        // dbg!(shape);
+        // if shape.0 != 117 && shape.0 != 120 {
+        //     return;
+        // }
         let (frame_output, encoder) = if let Some((frame_output, encoder)) = &mut self.current_frame
         {
             (frame_output, encoder)
@@ -1155,6 +1173,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
     }
 
     fn draw_rect(&mut self, color: Color, matrix: &Matrix) {
+        return;
         let (frame_output, encoder) = if let Some((frame_output, encoder)) = &mut self.current_frame
         {
             (frame_output, encoder)
