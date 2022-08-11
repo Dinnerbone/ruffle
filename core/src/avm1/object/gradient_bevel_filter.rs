@@ -4,18 +4,19 @@ use crate::impl_custom_object;
 use gc_arena::{Collect, GcCell, MutationContext};
 
 use crate::avm1::object::bevel_filter::BevelFilterType;
+use ruffle_types::backend::Backend;
 use std::fmt;
 
 /// A GradientBevelFilter
 #[derive(Clone, Copy, Collect)]
 #[collect(no_drop)]
-pub struct GradientBevelFilterObject<'gc>(GcCell<'gc, GradientBevelFilterData<'gc>>);
+pub struct GradientBevelFilterObject<'gc, B: Backend>(GcCell<'gc, GradientBevelFilterData<'gc, B>>);
 
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct GradientBevelFilterData<'gc> {
+pub struct GradientBevelFilterData<'gc, B: Backend> {
     /// The underlying script object.
-    base: ScriptObject<'gc>,
+    base: ScriptObject<'gc, B>,
 
     alphas: Vec<f64>,
     angle: f64,
@@ -30,7 +31,7 @@ pub struct GradientBevelFilterData<'gc> {
     type_: BevelFilterType,
 }
 
-impl fmt::Debug for GradientBevelFilterObject<'_> {
+impl<B: Backend> fmt::Debug for GradientBevelFilterObject<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let this = self.0.read();
         f.debug_struct("GradientBevelFilter")
@@ -49,7 +50,7 @@ impl fmt::Debug for GradientBevelFilterObject<'_> {
     }
 }
 
-impl<'gc> GradientBevelFilterObject<'gc> {
+impl<'gc, B: Backend> GradientBevelFilterObject<'gc, B> {
     add_field_accessors!(
         [angle, f64, set => set_angle, get => angle],
         [blur_x, f64, set => set_blur_x, get => blur_x],
@@ -76,7 +77,10 @@ impl<'gc> GradientBevelFilterObject<'gc> {
         self.0.read().ratios.clone()
     }
 
-    pub fn empty_object(gc_context: MutationContext<'gc, '_>, proto: Option<Object<'gc>>) -> Self {
+    pub fn empty_object(
+        gc_context: MutationContext<'gc, '_>,
+        proto: Option<Object<'gc, B>>,
+    ) -> Self {
         GradientBevelFilterObject(GcCell::allocate(
             gc_context,
             GradientBevelFilterData {
@@ -97,8 +101,10 @@ impl<'gc> GradientBevelFilterObject<'gc> {
     }
 }
 
-impl<'gc> TObject<'gc> for GradientBevelFilterObject<'gc> {
-    impl_custom_object!(base {
+impl<'gc, B: Backend> TObject<'gc> for GradientBevelFilterObject<'gc, B> {
+    type B = B;
+
+    impl_custom_object!(B, base {
         bare_object(as_gradient_bevel_filter_object -> GradientBevelFilterObject::empty_object);
     });
 }

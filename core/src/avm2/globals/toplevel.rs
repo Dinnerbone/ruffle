@@ -4,13 +4,14 @@ use crate::avm2::activation::Activation;
 use crate::avm2::object::Object;
 use crate::avm2::value::Value;
 use crate::avm2::Error;
+use ruffle_types::backend::Backend;
 use ruffle_types::string::{AvmString, WStr, WString};
 
-pub fn trace<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn trace<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     match args {
         [] => activation.context.avm_trace(""),
         [arg] => {
@@ -30,11 +31,11 @@ pub fn trace<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn is_finite<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn is_finite<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(val) = args.get(0) {
         Ok(val.coerce_to_number(activation)?.is_finite().into())
     } else {
@@ -42,11 +43,11 @@ pub fn is_finite<'gc>(
     }
 }
 
-pub fn is_nan<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn is_nan<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(val) = args.get(0) {
         Ok(val.coerce_to_number(activation)?.is_nan().into())
     } else {
@@ -54,11 +55,11 @@ pub fn is_nan<'gc>(
     }
 }
 
-pub fn parse_int<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn parse_int<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let string = match args.get(0).unwrap_or(&Value::Undefined) {
         Value::Undefined => "null".into(),
         value => value.coerce_to_string(activation)?,
@@ -73,11 +74,11 @@ pub fn parse_int<'gc>(
     Ok(result.into())
 }
 
-pub fn parse_float<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn parse_float<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(value) = args.get(0) {
         let string = value.coerce_to_string(activation)?;
         let swf_version = activation.context.swf.version();
@@ -89,11 +90,11 @@ pub fn parse_float<'gc>(
     Ok(f64::NAN.into())
 }
 
-pub fn escape<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn escape<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let value = match args.first() {
         None => return Ok("undefined".into()),
         Some(Value::Undefined) => return Ok("null".into()),

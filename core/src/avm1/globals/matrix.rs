@@ -7,29 +7,15 @@ use crate::avm1::globals::point::{point_to_object, value_to_point};
 use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{Object, ScriptObject, TObject, Value};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 use ruffle_types::matrix::Matrix;
 use ruffle_types::string::AvmString;
 use swf::Twips;
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "toString" => method(to_string);
-    "identity" => method(identity);
-    "clone" => method(clone);
-    "scale" => method(scale);
-    "rotate" => method(rotate);
-    "translate" => method(translate);
-    "concat" => method(concat);
-    "invert" => method(invert);
-    "createBox" => method(create_box);
-    "createGradientBox" => method(create_gradient_box);
-    "transformPoint" => method(transform_point);
-    "deltaTransformPoint" => method(delta_transform_point);
-};
-
-pub fn value_to_matrix<'gc>(
-    value: Value<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Matrix, Error<'gc>> {
+pub fn value_to_matrix<'gc, B: Backend>(
+    value: Value<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Matrix, Error<'gc, B>> {
     let a = value
         .coerce_to_object(activation)
         .get("a", activation)?
@@ -62,10 +48,10 @@ pub fn value_to_matrix<'gc>(
     Ok(Matrix { a, b, c, d, tx, ty })
 }
 
-pub fn gradient_object_to_matrix<'gc>(
-    object: Object<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Matrix, Error<'gc>> {
+pub fn gradient_object_to_matrix<'gc, B: Backend>(
+    object: Object<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Matrix, Error<'gc, B>> {
     if &object
         .get("matrixType", activation)?
         .coerce_to_string(activation)?
@@ -89,10 +75,10 @@ pub fn gradient_object_to_matrix<'gc>(
     }
 }
 
-pub fn object_to_matrix<'gc>(
-    object: Object<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Matrix, Error<'gc>> {
+pub fn object_to_matrix<'gc, B: Backend>(
+    object: Object<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Matrix, Error<'gc, B>> {
     let a = object.get("a", activation)?.coerce_to_f64(activation)? as f32;
     let b = object.get("b", activation)?.coerce_to_f64(activation)? as f32;
     let c = object.get("c", activation)?.coerce_to_f64(activation)? as f32;
@@ -106,10 +92,10 @@ pub fn object_to_matrix<'gc>(
 /// Returns a `Matrix` with the properties from `object`.
 ///
 /// Returns the identity matrix if any of the `a`, `b`, `c`, `d`, or `tx` properties do not exist.
-pub fn object_to_matrix_or_default<'gc>(
-    object: Object<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Matrix, Error<'gc>> {
+pub fn object_to_matrix_or_default<'gc, B: Backend>(
+    object: Object<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Matrix, Error<'gc, B>> {
     // These lookups do not search the prototype chain and ignore virtual properties.
     let a = object
         .get_local_stored("a", activation)
@@ -142,10 +128,10 @@ pub fn object_to_matrix_or_default<'gc>(
     Ok(Matrix { a, b, c, d, tx, ty })
 }
 
-pub fn matrix_to_object<'gc>(
+pub fn matrix_to_object<'gc, B: Backend>(
     matrix: Matrix,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Value<'gc>, Error<'gc>> {
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let args = [
         matrix.a.into(),
         matrix.b.into(),
@@ -159,11 +145,11 @@ pub fn matrix_to_object<'gc>(
     Ok(object)
 }
 
-pub fn apply_matrix_to_object<'gc>(
+pub fn apply_matrix_to_object<'gc, B: Backend>(
     matrix: Matrix,
-    object: Object<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<(), Error<'gc>> {
+    object: Object<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<(), Error<'gc, B>> {
     object.set("a", matrix.a.into(), activation)?;
     object.set("b", matrix.b.into(), activation)?;
     object.set("c", matrix.c.into(), activation)?;
@@ -173,11 +159,11 @@ pub fn apply_matrix_to_object<'gc>(
     Ok(())
 }
 
-fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if args.is_empty() {
         apply_matrix_to_object(Matrix::IDENTITY, this, activation)?;
     } else {
@@ -204,20 +190,20 @@ fn constructor<'gc>(
     Ok(this.into())
 }
 
-fn identity<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn identity<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     apply_matrix_to_object(Matrix::IDENTITY, this, activation)?;
     Ok(Value::Undefined)
 }
 
-fn clone<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn clone<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let args = [
         this.get("a", activation)?,
         this.get("b", activation)?,
@@ -231,11 +217,11 @@ fn clone<'gc>(
     Ok(cloned)
 }
 
-fn scale<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn scale<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let scale_x = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -251,11 +237,11 @@ fn scale<'gc>(
     Ok(Value::Undefined)
 }
 
-fn rotate<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn rotate<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let angle = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -267,11 +253,11 @@ fn rotate<'gc>(
     Ok(Value::Undefined)
 }
 
-fn translate<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn translate<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let translate_x = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -290,11 +276,11 @@ fn translate<'gc>(
     Ok(Value::Undefined)
 }
 
-fn concat<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn concat<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let mut matrix = object_to_matrix(this, activation)?;
     let other = value_to_matrix(*args.get(0).unwrap_or(&Value::Undefined), activation)?;
     matrix = other * matrix;
@@ -303,11 +289,11 @@ fn concat<'gc>(
     Ok(Value::Undefined)
 }
 
-fn invert<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn invert<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let mut matrix = object_to_matrix(this, activation)?;
     matrix.invert();
     apply_matrix_to_object(matrix, this, activation)?;
@@ -315,11 +301,11 @@ fn invert<'gc>(
     Ok(Value::Undefined)
 }
 
-fn create_box<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn create_box<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let scale_x = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -356,11 +342,11 @@ fn create_box<'gc>(
     Ok(Value::Undefined)
 }
 
-fn create_gradient_box<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn create_gradient_box<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let width = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -397,11 +383,11 @@ fn create_gradient_box<'gc>(
     Ok(Value::Undefined)
 }
 
-fn transform_point<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn transform_point<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let matrix = object_to_matrix(this, activation)?;
     let point = value_to_point(
         args.get(0).unwrap_or(&Value::Undefined).to_owned(),
@@ -414,11 +400,11 @@ fn transform_point<'gc>(
     Ok(object)
 }
 
-fn delta_transform_point<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn delta_transform_point<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let matrix = object_to_matrix(this, activation)?;
     let point = value_to_point(
         args.get(0).unwrap_or(&Value::Undefined).to_owned(),
@@ -431,11 +417,11 @@ fn delta_transform_point<'gc>(
     Ok(object)
 }
 
-fn to_string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn to_string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let a = this.get("a", activation)?;
     let b = this.get("b", activation)?;
     let c = this.get("c", activation)?;
@@ -458,11 +444,11 @@ fn to_string<'gc>(
     .into())
 }
 
-pub fn create_matrix_object<'gc>(
+pub fn create_matrix_object<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    matrix_proto: Object<'gc>,
-    fn_proto: Option<Object<'gc>>,
-) -> Object<'gc> {
+    matrix_proto: Object<'gc, B>,
+    fn_proto: Option<Object<'gc, B>>,
+) -> Object<'gc, B> {
     FunctionObject::constructor(
         gc_context,
         Executable::Native(constructor),
@@ -472,12 +458,28 @@ pub fn create_matrix_object<'gc>(
     )
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let object = ScriptObject::object(gc_context, Some(proto));
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "toString" => method(to_string);
+        "identity" => method(identity);
+        "clone" => method(clone);
+        "scale" => method(scale);
+        "rotate" => method(rotate);
+        "translate" => method(translate);
+        "concat" => method(concat);
+        "invert" => method(invert);
+        "createBox" => method(create_box);
+        "createGradientBox" => method(create_gradient_box);
+        "transformPoint" => method(transform_point);
+        "deltaTransformPoint" => method(delta_transform_point);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     object.into()
 }

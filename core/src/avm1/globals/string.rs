@@ -8,34 +8,15 @@ use crate::avm1::property::Attribute;
 use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{ArrayObject, Object, TObject, Value};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 use ruffle_types::string::{utils as string_utils, AvmString, WString};
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "toString" => method(to_string_value_of; DONT_ENUM | DONT_DELETE);
-    "valueOf" => method(to_string_value_of; DONT_ENUM | DONT_DELETE);
-    "charAt" => method(char_at; DONT_ENUM | DONT_DELETE);
-    "charCodeAt" => method(char_code_at; DONT_ENUM | DONT_DELETE);
-    "concat" => method(concat; DONT_ENUM | DONT_DELETE);
-    "indexOf" => method(index_of; DONT_ENUM | DONT_DELETE);
-    "lastIndexOf" => method(last_index_of; DONT_ENUM | DONT_DELETE);
-    "slice" => method(slice; DONT_ENUM | DONT_DELETE);
-    "split" => method(split; DONT_ENUM | DONT_DELETE);
-    "substr" => method(substr; DONT_ENUM | DONT_DELETE);
-    "substring" => method(substring; DONT_ENUM | DONT_DELETE);
-    "toLowerCase" => method(to_lower_case; DONT_ENUM | DONT_DELETE);
-    "toUpperCase" => method(to_upper_case; DONT_ENUM | DONT_DELETE);
-};
-
-const OBJECT_DECLS: &[Declaration] = declare_properties! {
-    "fromCharCode" => method(from_char_code; DONT_ENUM | DONT_DELETE);
-};
-
 /// `String` constructor
-pub fn string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let value = match args.get(0).cloned() {
         Some(Value::String(s)) => s,
         Some(v) => v.coerce_to_string(activation)?,
@@ -57,11 +38,11 @@ pub fn string<'gc>(
 }
 
 /// `String` function
-pub fn string_function<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn string_function<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let value = match args.get(0).cloned() {
         Some(Value::String(s)) => s,
         Some(v) => v.coerce_to_string(activation)?,
@@ -71,11 +52,11 @@ pub fn string_function<'gc>(
     Ok(value.into())
 }
 
-pub fn create_string_object<'gc>(
+pub fn create_string_object<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    string_proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    string_proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let string = FunctionObject::constructor(
         gc_context,
         Executable::Native(string),
@@ -84,27 +65,49 @@ pub fn create_string_object<'gc>(
         string_proto,
     );
     let object = string.as_script_object().unwrap();
+
+    let OBJECT_DECLS: &[Declaration<B>] = declare_properties! {
+        "fromCharCode" => method(from_char_code; DONT_ENUM | DONT_DELETE);
+    };
     define_properties_on(OBJECT_DECLS, gc_context, object, fn_proto);
+
     string
 }
 
 /// Creates `String.prototype`.
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let string_proto = ValueObject::empty_box(gc_context, Some(proto));
     let object = string_proto.as_script_object().unwrap();
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "toString" => method(to_string_value_of; DONT_ENUM | DONT_DELETE);
+        "valueOf" => method(to_string_value_of; DONT_ENUM | DONT_DELETE);
+        "charAt" => method(char_at; DONT_ENUM | DONT_DELETE);
+        "charCodeAt" => method(char_code_at; DONT_ENUM | DONT_DELETE);
+        "concat" => method(concat; DONT_ENUM | DONT_DELETE);
+        "indexOf" => method(index_of; DONT_ENUM | DONT_DELETE);
+        "lastIndexOf" => method(last_index_of; DONT_ENUM | DONT_DELETE);
+        "slice" => method(slice; DONT_ENUM | DONT_DELETE);
+        "split" => method(split; DONT_ENUM | DONT_DELETE);
+        "substr" => method(substr; DONT_ENUM | DONT_DELETE);
+        "substring" => method(substring; DONT_ENUM | DONT_DELETE);
+        "toLowerCase" => method(to_lower_case; DONT_ENUM | DONT_DELETE);
+        "toUpperCase" => method(to_upper_case; DONT_ENUM | DONT_DELETE);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     string_proto
 }
 
-fn char_at<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn char_at<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let this_val = Value::from(this);
     let string = this_val.coerce_to_string(activation)?;
     let i = args
@@ -122,11 +125,11 @@ fn char_at<'gc>(
     Ok(ret.into())
 }
 
-fn char_code_at<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn char_code_at<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let this_val = Value::from(this);
     let this = this_val.coerce_to_string(activation)?;
     let i = args
@@ -141,11 +144,11 @@ fn char_code_at<'gc>(
     Ok(ret.into())
 }
 
-fn concat<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn concat<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let mut ret: WString = Value::from(this)
         .coerce_to_string(activation)?
         .as_wstr()
@@ -157,11 +160,11 @@ fn concat<'gc>(
     Ok(AvmString::new(activation.context.gc_context, ret).into())
 }
 
-fn from_char_code<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn from_char_code<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let mut out = WString::with_capacity(args.len(), false);
     for arg in args {
         let i = arg.coerce_to_u16(activation)?;
@@ -174,11 +177,11 @@ fn from_char_code<'gc>(
     Ok(AvmString::new(activation.context.gc_context, out).into())
 }
 
-fn index_of<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn index_of<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let this = Value::from(this).coerce_to_string(activation)?;
     let pattern = match args.get(0) {
         None => return Ok(Value::Undefined),
@@ -196,11 +199,11 @@ fn index_of<'gc>(
         .unwrap_or_else(|| Ok((-1).into())) // Out of range or not found
 }
 
-fn last_index_of<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn last_index_of<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let this = Value::from(this).coerce_to_string(activation)?;
     let pattern = match args.get(0) {
         None => return Ok(Value::Undefined),
@@ -222,11 +225,11 @@ fn last_index_of<'gc>(
         .unwrap_or_else(|| Ok((-1).into())) // Not found
 }
 
-fn slice<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn slice<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if args.is_empty() {
         // No args returns undefined immediately.
         return Ok(Value::Undefined);
@@ -252,11 +255,11 @@ fn slice<'gc>(
     }
 }
 
-fn split<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn split<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let this = Value::from(this).coerce_to_string(activation)?;
     let delimiter = args
         .get(0)
@@ -290,11 +293,11 @@ fn split<'gc>(
     }
 }
 
-fn substr<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn substr<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if args.is_empty() {
         return Ok(Value::Undefined);
     }
@@ -322,11 +325,11 @@ fn substr<'gc>(
     }
 }
 
-fn substring<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn substring<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if args.is_empty() {
         return Ok(Value::Undefined);
     }
@@ -348,11 +351,11 @@ fn substring<'gc>(
     Ok(AvmString::new(activation.context.gc_context, ret).into())
 }
 
-fn to_lower_case<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn to_lower_case<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let this_val = Value::from(this);
     let this = this_val.coerce_to_string(activation)?;
     Ok(AvmString::new(
@@ -365,11 +368,11 @@ fn to_lower_case<'gc>(
 }
 
 /// `String.toString` / `String.valueOf` impl
-pub fn to_string_value_of<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn to_string_value_of<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(vbox) = this.as_value_object() {
         if let Value::String(s) = vbox.unbox() {
             return Ok(s.into());
@@ -382,11 +385,11 @@ pub fn to_string_value_of<'gc>(
     Ok(Value::Undefined)
 }
 
-fn to_upper_case<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn to_upper_case<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let this_val = Value::from(this);
     let this = this_val.coerce_to_string(activation)?;
     Ok(AvmString::new(

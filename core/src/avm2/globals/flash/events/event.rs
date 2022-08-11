@@ -4,14 +4,15 @@ use crate::avm2::activation::Activation;
 use crate::avm2::object::{Object, TObject};
 use crate::avm2::value::Value;
 use crate::avm2::Error;
+use ruffle_types::backend::Backend;
 
 pub use crate::avm2::object::event_allocator;
 
-pub fn init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let this = this.unwrap();
     let mut evt = this.as_event_mut(activation.context.gc_context).unwrap();
     evt.set_event_type(
@@ -36,11 +37,11 @@ pub fn init<'gc>(
 }
 
 /// Implements `bubbles` property's getter
-pub fn get_bubbles<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn get_bubbles<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(evt) = this.unwrap().as_event() {
         return Ok(evt.is_bubbling().into());
     }
@@ -49,11 +50,11 @@ pub fn get_bubbles<'gc>(
 }
 
 /// Implements `cancelable` property's getter
-pub fn get_cancelable<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn get_cancelable<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(evt) = this.unwrap().as_event() {
         return Ok(evt.is_cancelable().into());
     }
@@ -62,11 +63,11 @@ pub fn get_cancelable<'gc>(
 }
 
 /// Implements `type` property's getter
-pub fn get_type<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn get_type<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(evt) = this.unwrap().as_event() {
         return Ok(evt.event_type().into());
     }
@@ -75,11 +76,11 @@ pub fn get_type<'gc>(
 }
 
 /// Implements `target` property's getter
-pub fn get_target<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn get_target<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(evt) = this.unwrap().as_event() {
         return Ok(evt.target().map(|o| o.into()).unwrap_or(Value::Null));
     }
@@ -88,11 +89,11 @@ pub fn get_target<'gc>(
 }
 
 /// Implements `currentTarget` property's getter
-pub fn get_current_target<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn get_current_target<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(evt) = this.unwrap().as_event() {
         return Ok(evt
             .current_target()
@@ -104,11 +105,11 @@ pub fn get_current_target<'gc>(
 }
 
 /// Implements `eventPhase` property's getter
-pub fn get_event_phase<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn get_event_phase<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(evt) = this.unwrap().as_event() {
         let event_phase = evt.phase() as u32;
         return Ok(event_phase.into());
@@ -118,11 +119,11 @@ pub fn get_event_phase<'gc>(
 }
 
 /// Implements `isDefaultPrevented`
-pub fn is_default_prevented<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn is_default_prevented<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(evt) = this.unwrap().as_event() {
         return Ok(evt.is_cancelled().into());
     }
@@ -131,11 +132,11 @@ pub fn is_default_prevented<'gc>(
 }
 
 /// Implements `preventDefault`
-pub fn prevent_default<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn prevent_default<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mut evt) = this.unwrap().as_event_mut(activation.context.gc_context) {
         evt.cancel();
     }
@@ -144,11 +145,11 @@ pub fn prevent_default<'gc>(
 }
 
 /// Implements `stopPropagation`
-pub fn stop_propagation<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn stop_propagation<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mut evt) = this.unwrap().as_event_mut(activation.context.gc_context) {
         evt.stop_propagation();
     }
@@ -157,11 +158,11 @@ pub fn stop_propagation<'gc>(
 }
 
 /// Implements `stopImmediatePropagation`
-pub fn stop_immediate_propagation<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn stop_immediate_propagation<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mut evt) = this.unwrap().as_event_mut(activation.context.gc_context) {
         evt.stop_immediate_propagation();
     }

@@ -4,6 +4,7 @@ use crate::impl_custom_object;
 use gc_arena::{Collect, GcCell, MutationContext};
 use ruffle_types::string::WStr;
 
+use ruffle_types::backend::Backend;
 use std::fmt;
 
 #[derive(Copy, Clone, Debug, Collect)]
@@ -40,13 +41,13 @@ impl From<BevelFilterType> for &'static WStr {
 /// A BevelFilter
 #[derive(Clone, Copy, Collect)]
 #[collect(no_drop)]
-pub struct BevelFilterObject<'gc>(GcCell<'gc, BevelFilterData<'gc>>);
+pub struct BevelFilterObject<'gc, B: Backend>(GcCell<'gc, BevelFilterData<'gc, B>>);
 
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct BevelFilterData<'gc> {
+pub struct BevelFilterData<'gc, B: Backend> {
     /// The underlying script object.
-    base: ScriptObject<'gc>,
+    base: ScriptObject<'gc, B>,
 
     angle: f64,
     blur_x: f64,
@@ -62,7 +63,7 @@ pub struct BevelFilterData<'gc> {
     type_: BevelFilterType,
 }
 
-impl fmt::Debug for BevelFilterObject<'_> {
+impl<B: Backend> fmt::Debug for BevelFilterObject<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let this = self.0.read();
         f.debug_struct("BevelFilter")
@@ -81,7 +82,7 @@ impl fmt::Debug for BevelFilterObject<'_> {
     }
 }
 
-impl<'gc> BevelFilterObject<'gc> {
+impl<'gc, B: Backend> BevelFilterObject<'gc, B> {
     add_field_accessors!(
         [set_angle, angle, angle, f64],
         [set_blur_x, blur_x, blur_x, f64],
@@ -97,7 +98,10 @@ impl<'gc> BevelFilterObject<'gc> {
         [set_type, get_type, type_, BevelFilterType],
     );
 
-    pub fn empty_object(gc_context: MutationContext<'gc, '_>, proto: Option<Object<'gc>>) -> Self {
+    pub fn empty_object(
+        gc_context: MutationContext<'gc, '_>,
+        proto: Option<Object<'gc, B>>,
+    ) -> Self {
         BevelFilterObject(GcCell::allocate(
             gc_context,
             BevelFilterData {
@@ -119,8 +123,10 @@ impl<'gc> BevelFilterObject<'gc> {
     }
 }
 
-impl<'gc> TObject<'gc> for BevelFilterObject<'gc> {
-    impl_custom_object!(base {
+impl<'gc, B: Backend> TObject<'gc> for BevelFilterObject<'gc, B> {
+    type B = B;
+
+    impl_custom_object!(B, base {
         bare_object(as_bevel_filter_object -> BevelFilterObject::empty_object);
     });
 }

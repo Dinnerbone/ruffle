@@ -6,6 +6,7 @@ use crate::font::{EvalParameters, Font};
 use crate::html::dimensions::{BoxBounds, Position, Size};
 use crate::html::text_format::{FormatSpans, TextFormat, TextSpan};
 use gc_arena::Collect;
+use ruffle_types::backend::Backend;
 use ruffle_types::shape_utils::DrawCommand;
 use ruffle_types::string::{utils as string_utils, WStr};
 use ruffle_types::tag_utils::SwfMovie;
@@ -217,9 +218,9 @@ impl<'a, 'gc> LayoutContext<'a, 'gc> {
     /// The `final_line_of_para` parameter should be flagged if this the final
     /// line in the paragraph or layout operation (e.g. it wasn't caused by an
     /// automatic newline and no more text is to be expected).
-    fn fixup_line(
+    fn fixup_line<B: Backend>(
         &mut self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         only_line: bool,
         final_line_of_para: bool,
     ) {
@@ -322,7 +323,7 @@ impl<'a, 'gc> LayoutContext<'a, 'gc> {
     ///
     /// This function will also adjust any layout boxes on the current line to
     /// their correct alignment and indentation.
-    fn explicit_newline(&mut self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn explicit_newline<B: Backend>(&mut self, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         self.fixup_line(context, false, true);
 
         self.cursor.set_x(Twips::from_pixels(0.0));
@@ -340,7 +341,7 @@ impl<'a, 'gc> LayoutContext<'a, 'gc> {
     ///
     /// This function will also adjust any layout boxes on the current line to
     /// their correct alignment and indentation.
-    fn newline(&mut self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn newline<B: Backend>(&mut self, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         self.fixup_line(context, false, false);
 
         self.cursor.set_x(Twips::from_pixels(0.0));
@@ -389,9 +390,9 @@ impl<'a, 'gc> LayoutContext<'a, 'gc> {
         }
     }
 
-    fn resolve_font(
+    fn resolve_font<B: Backend>(
         &mut self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         span: &TextSpan,
         is_device_font: bool,
     ) -> Option<Font<'gc>> {
@@ -455,7 +456,11 @@ impl<'a, 'gc> LayoutContext<'a, 'gc> {
     /// The bullet will always be placed at the start of the current line. It
     /// should be appended after line fixup has completed, but before the text
     /// cursor is moved down.
-    fn append_bullet(&mut self, context: &mut UpdateContext<'_, 'gc, '_>, span: &TextSpan) {
+    fn append_bullet<B: Backend>(
+        &mut self,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        span: &TextSpan,
+    ) {
         let library = context.library.library_for_movie_mut(self.movie.clone());
 
         if let Some(bullet_font) = library
@@ -534,9 +539,9 @@ impl<'a, 'gc> LayoutContext<'a, 'gc> {
     }
 
     /// Destroy the layout context, returning the newly constructed layout list.
-    fn end_layout(
+    fn end_layout<B: Backend>(
         mut self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
     ) -> (Vec<LayoutBox<'gc>>, BoxBounds<Twips>) {
         self.fixup_line(context, !self.has_line_break, true);
 
@@ -667,9 +672,9 @@ impl<'gc> LayoutBox<'gc> {
     ///
     /// The returned bounds will include both the text bounds itself, as well
     /// as left and right margins on any of the lines.
-    pub fn lower_from_text_spans(
+    pub fn lower_from_text_spans<B: Backend>(
         fs: &FormatSpans,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         movie: Arc<SwfMovie>,
         bounds: Twips,
         is_word_wrap: bool,

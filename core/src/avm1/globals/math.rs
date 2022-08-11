@@ -5,6 +5,7 @@ use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{ScriptObject, Value};
 use gc_arena::MutationContext;
 use rand::Rng;
+use ruffle_types::backend::Backend;
 use std::f64::consts;
 
 macro_rules! wrap_std {
@@ -19,40 +20,11 @@ macro_rules! wrap_std {
     };
 }
 
-const OBJECT_DECLS: &[Declaration] = declare_properties! {
-    "E" => float(consts::E; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "LN10" => float(consts::LN_10; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "LN2" => float(consts::LN_2; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "LOG10E" => float(consts::LOG10_E; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "LOG2E" => float(consts::LOG2_E; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "PI" => float(consts::PI; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "SQRT1_2" => float(consts::FRAC_1_SQRT_2; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "SQRT2" => float(consts::SQRT_2; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "abs" => method(wrap_std!(f64::abs); DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "acos" => method(wrap_std!(f64::acos); DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "asin" => method(wrap_std!(f64::asin); DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "atan" => method(wrap_std!(f64::atan); DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "ceil" => method(wrap_std!(f64::ceil); DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "cos" => method(wrap_std!(f64::cos); DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "exp" => method(wrap_std!(f64::exp); DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "floor" => method(wrap_std!(f64::floor); DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "sin" => method(wrap_std!(f64::sin); DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "sqrt" => method(wrap_std!(f64::sqrt); DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "tan" => method(wrap_std!(f64::tan); DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "log" => method(wrap_std!(f64::ln); DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "atan2" => method(atan2; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "pow" => method(pow; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "max" => method(max; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "min" => method(min; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "random" => method(random; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "round" => method(round; DONT_ENUM | DONT_DELETE | READ_ONLY);
-};
-
-fn atan2<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn atan2<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(y) = args.get(0) {
         if let Some(x) = args.get(1) {
             return Ok(y
@@ -66,11 +38,11 @@ fn atan2<'gc>(
     Ok(f64::NAN.into())
 }
 
-fn pow<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn pow<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(y) = args.get(0) {
         if let Some(x) = args.get(1) {
             let x = x.coerce_to_f64(activation)?;
@@ -83,11 +55,11 @@ fn pow<'gc>(
     Ok(f64::NAN.into())
 }
 
-fn round<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn round<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(x) = args.get(0) {
         let x = x.coerce_to_f64(activation)?;
         // Note that Flash Math.round always rounds toward infinity,
@@ -98,11 +70,11 @@ fn round<'gc>(
     Ok(f64::NAN.into())
 }
 
-fn max<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn max<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let result = if let Some(a) = args.get(0) {
         let a = a.coerce_to_f64(activation)?;
         if let Some(b) = args.get(1) {
@@ -123,11 +95,11 @@ fn max<'gc>(
     Ok(result.into())
 }
 
-fn min<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn min<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let result = if let Some(a) = args.get(0) {
         let a = a.coerce_to_f64(activation)?;
         if let Some(b) = args.get(1) {
@@ -148,21 +120,51 @@ fn min<'gc>(
     Ok(result.into())
 }
 
-pub fn random<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn random<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(activation.context.rng.gen_range(0.0f64..1.0f64).into())
 }
 
-pub fn create<'gc>(
+pub fn create<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Option<Object<'gc>>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Option<Object<'gc, B>>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let math = ScriptObject::object(gc_context, proto);
+
+    let OBJECT_DECLS: &[Declaration<B>] = declare_properties! {
+        "E" => float(consts::E; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "LN10" => float(consts::LN_10; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "LN2" => float(consts::LN_2; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "LOG10E" => float(consts::LOG10_E; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "LOG2E" => float(consts::LOG2_E; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "PI" => float(consts::PI; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "SQRT1_2" => float(consts::FRAC_1_SQRT_2; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "SQRT2" => float(consts::SQRT_2; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "abs" => method(wrap_std!(f64::abs); DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "acos" => method(wrap_std!(f64::acos); DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "asin" => method(wrap_std!(f64::asin); DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "atan" => method(wrap_std!(f64::atan); DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "ceil" => method(wrap_std!(f64::ceil); DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "cos" => method(wrap_std!(f64::cos); DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "exp" => method(wrap_std!(f64::exp); DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "floor" => method(wrap_std!(f64::floor); DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "sin" => method(wrap_std!(f64::sin); DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "sqrt" => method(wrap_std!(f64::sqrt); DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "tan" => method(wrap_std!(f64::tan); DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "log" => method(wrap_std!(f64::ln); DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "atan2" => method(atan2; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "pow" => method(pow; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "max" => method(max; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "min" => method(min; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "random" => method(random; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "round" => method(round; DONT_ENUM | DONT_DELETE | READ_ONLY);
+    };
     define_properties_on(OBJECT_DECLS, gc_context, math, fn_proto);
+
     math.into()
 }
 
@@ -170,8 +172,9 @@ pub fn create<'gc>(
 mod tests {
     use super::*;
     use crate::avm1::test_utils::with_avm;
+    use ruffle_types::backend::Backend;
 
-    fn setup<'gc>(activation: &mut Activation<'_, 'gc, '_>) -> Object<'gc> {
+    fn setup<'gc, B: Backend>(activation: &mut Activation<'_, 'gc, '_, B>) -> Object<'gc, B> {
         create(
             activation.context.gc_context,
             Some(activation.context.avm1.prototypes().object),

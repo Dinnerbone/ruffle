@@ -16,6 +16,7 @@ use crate::avm2::Error;
 use crate::avm2::TranslationUnit;
 use fnv::FnvHashMap;
 use gc_arena::{Collect, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 use std::cell::{BorrowError, Ref, RefMut};
 use std::hash::{Hash, Hasher};
@@ -23,45 +24,45 @@ use std::hash::{Hash, Hasher};
 /// An Object which can be called to execute its function code.
 #[derive(Collect, Debug, Clone, Copy)]
 #[collect(no_drop)]
-pub struct ClassObject<'gc>(GcCell<'gc, ClassObjectData<'gc>>);
+pub struct ClassObject<'gc, B: Backend>(GcCell<'gc, ClassObjectData<'gc, B>>);
 
 #[derive(Collect, Debug, Clone)]
 #[collect(no_drop)]
-pub struct ClassObjectData<'gc> {
+pub struct ClassObjectData<'gc, B: Backend> {
     /// Base script object
-    base: ScriptObjectData<'gc>,
+    base: ScriptObjectData<'gc, B>,
 
     /// The class associated with this class object.
-    class: GcCell<'gc, Class<'gc>>,
+    class: GcCell<'gc, Class<'gc, B>>,
 
     /// The associated prototype.
     /// Should always be non-None after initialization.
-    prototype: Option<Object<'gc>>,
+    prototype: Option<Object<'gc, B>>,
 
     /// The captured scope that all class traits will use.
-    class_scope: ScopeChain<'gc>,
+    class_scope: ScopeChain<'gc, B>,
 
     /// The captured scope that all instance traits will use.
-    instance_scope: ScopeChain<'gc>,
+    instance_scope: ScopeChain<'gc, B>,
 
     /// The base class of this one.
     ///
     /// If `None`, this class has no parent. In practice, this is only used for
     /// interfaces (at least by the AS3 compiler in Animate CC 2020.)
-    superclass_object: Option<ClassObject<'gc>>,
+    superclass_object: Option<ClassObject<'gc, B>>,
 
     /// The instance allocator for this class.
-    instance_allocator: Allocator,
+    instance_allocator: Allocator<B>,
 
     /// The instance constructor function
-    constructor: Method<'gc>,
+    constructor: Method<'gc, B>,
 
     /// The native instance constructor function
-    native_constructor: Method<'gc>,
+    native_constructor: Method<'gc, B>,
 
     /// The customization point for `Class(args...)` without `new`
     /// If None, a simple coercion is done.
-    call_handler: Option<Method<'gc>>,
+    call_handler: Option<Method<'gc, B>>,
 
     /// The parameters of this specialized class.
     ///
@@ -69,7 +70,7 @@ pub struct ClassObjectData<'gc> {
     ///
     /// An individual parameter of `None` signifies the parameter `*`, which is
     /// represented in AVM2 as `null` with regards to type application.
-    params: Option<Option<ClassObject<'gc>>>,
+    params: Option<Option<ClassObject<'gc, B>>>,
 
     /// List of all applications of this class.
     ///
@@ -79,19 +80,19 @@ pub struct ClassObjectData<'gc> {
     /// as `None` here. AVM2 considers both applications to be separate
     /// classes, though we consider the parameter to be the class `Object` when
     /// we get a param of `null`.
-    applications: FnvHashMap<Option<ClassObject<'gc>>, ClassObject<'gc>>,
+    applications: FnvHashMap<Option<ClassObject<'gc, B>>, ClassObject<'gc, B>>,
 
     /// Interfaces implemented by this class.
-    interfaces: Vec<ClassObject<'gc>>,
+    interfaces: Vec<ClassObject<'gc, B>>,
 
     /// VTable used for instances of this class.
-    instance_vtable: VTable<'gc>,
+    instance_vtable: VTable<'gc, B>,
 
     /// VTable used for a ScriptObject of this class object.
-    class_vtable: VTable<'gc>,
+    class_vtable: VTable<'gc, B>,
 }
 
-impl<'gc> ClassObject<'gc> {
+impl<'gc, B: Backend> ClassObject<'gc, B> {
     /// Allocate the prototype for this class.
     ///
     /// This function is not used during the initialization of "early classes",
@@ -99,9 +100,9 @@ impl<'gc> ClassObject<'gc> {
     /// prototypes are weaved together separately.
     fn allocate_prototype(
         self,
-        activation: &mut Activation<'_, 'gc, '_>,
-        superclass_object: Option<ClassObject<'gc>>,
-    ) -> Result<Object<'gc>, Error> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        superclass_object: Option<ClassObject<'gc, B>>,
+    ) -> Result<Object<'gc, B>, Error> {
         let proto = activation
             .avm2()
             .classes()
@@ -125,9 +126,9 @@ impl<'gc> ClassObject<'gc> {
     /// in the VM. This corresponds to no base class, and in practice appears
     /// to be limited to interfaces.
     pub fn from_class(
-        activation: &mut Activation<'_, 'gc, '_>,
-        class: GcCell<'gc, Class<'gc>>,
-        superclass_object: Option<ClassObject<'gc>>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        class: GcCell<'gc, Class<'gc, B>>,
+        superclass_object: Option<ClassObject<'gc, B>>,
     ) -> Result<Self, Error> {
         let class_object = Self::from_class_partial(activation, class, superclass_object)?;
         let class_proto = class_object.allocate_prototype(activation, superclass_object)?;
@@ -154,9 +155,9 @@ impl<'gc> ClassObject<'gc> {
     /// further manipulation of the class once it's dependent types have been
     /// allocated.
     pub fn from_class_partial(
-        activation: &mut Activation<'_, 'gc, '_>,
-        class: GcCell<'gc, Class<'gc>>,
-        superclass_object: Option<ClassObject<'gc>>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        class: GcCell<'gc, Class<'gc, B>>,
+        superclass_object: Option<ClassObject<'gc, B>>,
     ) -> Result<Self, Error> {
         let scope = activation.create_scopechain();
         if let Some(base_class) = superclass_object.map(|b| b.inner_class_definition()) {
@@ -236,7 +237,7 @@ impl<'gc> ClassObject<'gc> {
     /// errors will be raised at this time.
     pub fn into_finished_class(
         mut self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<Self, Error> {
         let class = self.inner_class_definition();
         self.instance_of().ok_or(
@@ -269,7 +270,7 @@ impl<'gc> ClassObject<'gc> {
         Ok(self)
     }
 
-    fn install_class_vtable_and_slots(&mut self, activation: &mut Activation<'_, 'gc, '_>) {
+    fn install_class_vtable_and_slots(&mut self, activation: &mut Activation<'_, 'gc, '_, B>) {
         self.set_vtable(activation.context.gc_context, self.class_vtable());
         self.base_mut(activation.context.gc_context)
             .install_instance_slots();
@@ -278,8 +279,8 @@ impl<'gc> ClassObject<'gc> {
     /// Link this class to a prototype.
     pub fn link_prototype(
         self,
-        activation: &mut Activation<'_, 'gc, '_>,
-        class_proto: Object<'gc>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        class_proto: Object<'gc, B>,
     ) -> Result<(), Error> {
         self.0.write(activation.context.gc_context).prototype = Some(class_proto);
         class_proto.set_property_local(
@@ -301,7 +302,7 @@ impl<'gc> ClassObject<'gc> {
     /// This should be done after all instance traits has been resolved, as
     /// instance traits will be resolved to their corresponding methods at this
     /// time.
-    pub fn link_interfaces(self, activation: &mut Activation<'_, 'gc, '_>) -> Result<(), Error> {
+    pub fn link_interfaces(self, activation: &mut Activation<'_, 'gc, '_, B>) -> Result<(), Error> {
         let mut write = self.0.write(activation.context.gc_context);
         let class = write.class;
         let scope = write.class_scope;
@@ -374,9 +375,9 @@ impl<'gc> ClassObject<'gc> {
     /// and type object from the `Avm2` instance.
     pub fn link_type(
         self,
-        activation: &mut Activation<'_, 'gc, '_>,
-        proto: Object<'gc>,
-        instance_of: ClassObject<'gc>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        proto: Object<'gc, B>,
+        instance_of: ClassObject<'gc, B>,
     ) {
         let instance_vtable = instance_of.instance_vtable();
 
@@ -389,9 +390,9 @@ impl<'gc> ClassObject<'gc> {
     /// Run the class's initializer method.
     pub fn run_class_initializer(
         self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
-        let object: Object<'gc> = self.into();
+        let object: Object<'gc, B> = self.into();
 
         let scope = self.0.read().class_scope;
         let class = self.0.read().class;
@@ -426,8 +427,8 @@ impl<'gc> ClassObject<'gc> {
     /// To test if a class *instance* is of a given type, see is_of_type.
     pub fn has_class_in_chain(
         self,
-        test_class: ClassObject<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        test_class: ClassObject<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<bool, Error> {
         let mut my_class = Some(self);
 
@@ -469,10 +470,10 @@ impl<'gc> ClassObject<'gc> {
     /// Call the instance initializer.
     pub fn call_init(
         self,
-        receiver: Option<Object<'gc>>,
-        arguments: &[Value<'gc>],
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        receiver: Option<Object<'gc, B>>,
+        arguments: &[Value<'gc, B>],
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         let scope = self.0.read().instance_scope;
         let constructor =
             Executable::from_method(self.0.read().constructor.clone(), scope, None, Some(self));
@@ -487,10 +488,10 @@ impl<'gc> ClassObject<'gc> {
     /// classes that cannot be constructed but can be supercalled).
     pub fn call_native_init(
         self,
-        receiver: Option<Object<'gc>>,
-        arguments: &[Value<'gc>],
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        receiver: Option<Object<'gc, B>>,
+        arguments: &[Value<'gc, B>],
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         let scope = self.0.read().instance_scope;
         let constructor = Executable::from_method(
             self.0.read().native_constructor.clone(),
@@ -529,10 +530,10 @@ impl<'gc> ClassObject<'gc> {
     pub fn call_super(
         self,
         multiname: &Multiname<'gc>,
-        reciever: Object<'gc>,
-        arguments: &[Value<'gc>],
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        reciever: Object<'gc, B>,
+        arguments: &[Value<'gc, B>],
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         let property = self.instance_vtable().get_trait(multiname);
         if property.is_none() {
             return Err(format!(
@@ -589,9 +590,9 @@ impl<'gc> ClassObject<'gc> {
     pub fn get_super(
         self,
         multiname: &Multiname<'gc>,
-        reciever: Object<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        reciever: Object<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         let property = self.instance_vtable().get_trait(multiname);
         if property.is_none() {
             return Err(format!(
@@ -652,9 +653,9 @@ impl<'gc> ClassObject<'gc> {
     pub fn set_super(
         self,
         multiname: &Multiname<'gc>,
-        value: Value<'gc>,
-        mut reciever: Object<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        value: Value<'gc, B>,
+        mut reciever: Object<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         let property = self.instance_vtable().get_trait(multiname);
         if property.is_none() {
@@ -690,7 +691,7 @@ impl<'gc> ClassObject<'gc> {
         }
     }
 
-    pub fn translation_unit(self) -> Option<TranslationUnit<'gc>> {
+    pub fn translation_unit(self) -> Option<TranslationUnit<'gc, B>> {
         if let Method::Bytecode(bc) = self.0.read().constructor {
             Some(bc.txunit)
         } else {
@@ -698,11 +699,11 @@ impl<'gc> ClassObject<'gc> {
         }
     }
 
-    pub fn instance_vtable(self) -> VTable<'gc> {
+    pub fn instance_vtable(self) -> VTable<'gc, B> {
         self.0.read().instance_vtable
     }
 
-    pub fn class_vtable(self) -> VTable<'gc> {
+    pub fn class_vtable(self) -> VTable<'gc, B> {
         self.0.read().class_vtable
     }
 
@@ -711,49 +712,51 @@ impl<'gc> ClassObject<'gc> {
     /// in contexts where panicking would be extremely undesirable,
     /// and there's a fallback if we cannot obtain the `Class`
     /// (such as `Debug` impls),
-    pub fn try_inner_class_definition(&self) -> Result<GcCell<'gc, Class<'gc>>, BorrowError> {
+    pub fn try_inner_class_definition(&self) -> Result<GcCell<'gc, Class<'gc, B>>, BorrowError> {
         self.0.try_read().map(|c| c.class)
     }
 
-    pub fn inner_class_definition(self) -> GcCell<'gc, Class<'gc>> {
+    pub fn inner_class_definition(self) -> GcCell<'gc, Class<'gc, B>> {
         self.0.read().class
     }
 
-    pub fn prototype(self) -> Object<'gc> {
+    pub fn prototype(self) -> Object<'gc, B> {
         self.0.read().prototype.unwrap()
     }
 
-    pub fn interfaces(self) -> Vec<ClassObject<'gc>> {
+    pub fn interfaces(self) -> Vec<ClassObject<'gc, B>> {
         self.0.read().interfaces.clone()
     }
 
-    pub fn class_scope(self) -> ScopeChain<'gc> {
+    pub fn class_scope(self) -> ScopeChain<'gc, B> {
         self.0.read().class_scope
     }
 
-    pub fn instance_scope(self) -> ScopeChain<'gc> {
+    pub fn instance_scope(self) -> ScopeChain<'gc, B> {
         self.0.read().instance_scope
     }
 
-    pub fn superclass_object(self) -> Option<ClassObject<'gc>> {
+    pub fn superclass_object(self) -> Option<ClassObject<'gc, B>> {
         self.0.read().superclass_object
     }
 
-    pub fn as_class_params(self) -> Option<Option<ClassObject<'gc>>> {
+    pub fn as_class_params(self) -> Option<Option<ClassObject<'gc, B>>> {
         self.0.read().params
     }
 
-    fn instance_allocator(self) -> Option<AllocatorFn> {
+    fn instance_allocator(self) -> Option<AllocatorFn<B>> {
         Some(self.0.read().instance_allocator.0)
     }
 }
 
-impl<'gc> TObject<'gc> for ClassObject<'gc> {
-    fn base(&self) -> Ref<ScriptObjectData<'gc>> {
+impl<'gc, B: Backend> TObject<'gc> for ClassObject<'gc, B> {
+    type B = B;
+
+    fn base(&self) -> Ref<ScriptObjectData<'gc, B>> {
         Ref::map(self.0.read(), |read| &read.base)
     }
 
-    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc>> {
+    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc, B>> {
         RefMut::map(self.0.write(mc), |write| &mut write.base)
     }
 
@@ -761,7 +764,7 @@ impl<'gc> TObject<'gc> for ClassObject<'gc> {
         self.0.as_ptr() as *const ObjectPtr
     }
 
-    fn to_string(&self, mc: MutationContext<'gc, '_>) -> Result<Value<'gc>, Error> {
+    fn to_string(&self, mc: MutationContext<'gc, '_>) -> Result<Value<'gc, B>, Error> {
         Ok(AvmString::new_utf8(
             mc,
             format!("[class {}]", self.0.read().class.read().name().local_name()),
@@ -769,20 +772,20 @@ impl<'gc> TObject<'gc> for ClassObject<'gc> {
         .into())
     }
 
-    fn to_locale_string(&self, mc: MutationContext<'gc, '_>) -> Result<Value<'gc>, Error> {
+    fn to_locale_string(&self, mc: MutationContext<'gc, '_>) -> Result<Value<'gc, B>, Error> {
         self.to_string(mc)
     }
 
-    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc>, Error> {
+    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc, B>, Error> {
         Ok(Value::Object(Object::from(*self)))
     }
 
     fn call(
         self,
-        receiver: Option<Object<'gc>>,
-        arguments: &[Value<'gc>],
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        receiver: Option<Object<'gc, B>>,
+        arguments: &[Value<'gc, B>],
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         if let Some(call_handler) = self.0.read().call_handler.clone() {
             let scope = self.0.read().class_scope;
             let func = Executable::from_method(call_handler, scope, None, Some(self));
@@ -799,9 +802,9 @@ impl<'gc> TObject<'gc> for ClassObject<'gc> {
 
     fn construct(
         self,
-        activation: &mut Activation<'_, 'gc, '_>,
-        arguments: &[Value<'gc>],
-    ) -> Result<Object<'gc>, Error> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        arguments: &[Value<'gc, B>],
+    ) -> Result<Object<'gc, B>, Error> {
         let instance_allocator = self.0.read().instance_allocator.0;
 
         let mut instance = instance_allocator(self, activation)?;
@@ -819,7 +822,7 @@ impl<'gc> TObject<'gc> for ClassObject<'gc> {
         read.base.has_own_dynamic_property(name) || self.class_vtable().has_trait(name)
     }
 
-    fn as_class_object(&self) -> Option<ClassObject<'gc>> {
+    fn as_class_object(&self) -> Option<ClassObject<'gc, B>> {
         Some(*self)
     }
 
@@ -837,9 +840,9 @@ impl<'gc> TObject<'gc> for ClassObject<'gc> {
 
     fn apply(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
-        nullable_params: &[Value<'gc>],
-    ) -> Result<ClassObject<'gc>, Error> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        nullable_params: &[Value<'gc, B>],
+    ) -> Result<ClassObject<'gc, B>, Error> {
         let self_class = self.inner_class_definition();
 
         if !self_class.read().is_generic() {
@@ -958,15 +961,15 @@ impl<'gc> TObject<'gc> for ClassObject<'gc> {
     }
 }
 
-impl<'gc> PartialEq for ClassObject<'gc> {
+impl<'gc, B: Backend> PartialEq for ClassObject<'gc, B> {
     fn eq(&self, other: &Self) -> bool {
         Object::ptr_eq(*self, *other)
     }
 }
 
-impl<'gc> Eq for ClassObject<'gc> {}
+impl<'gc, B: Backend> Eq for ClassObject<'gc, B> {}
 
-impl<'gc> Hash for ClassObject<'gc> {
+impl<'gc, B: Backend> Hash for ClassObject<'gc, B> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.as_ptr().hash(state);
     }

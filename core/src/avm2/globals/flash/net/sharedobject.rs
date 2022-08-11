@@ -6,12 +6,13 @@ use crate::avm2::object::TObject;
 use crate::avm2::traits::Trait;
 use crate::avm2::{Activation, Error, Namespace, Object, QName, Value};
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 
-fn instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mut this) = this {
         activation.super_init(this, &[])?;
 
@@ -31,19 +32,19 @@ fn instance_init<'gc>(
     Ok(Value::Undefined)
 }
 
-fn class_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn class_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok(Value::Undefined)
 }
 
-fn get_local<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn get_local<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     log::warn!("SharedObject.getLocal not implemented");
     let class = activation.context.avm2.classes().sharedobject;
     let new_shared_object = class.construct(activation, &[])?;
@@ -51,17 +52,17 @@ fn get_local<'gc>(
     Ok(new_shared_object.into())
 }
 
-fn flush<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn flush<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     log::warn!("SharedObject.flush not implemented");
     Ok(Value::Undefined)
 }
 
 /// Construct `SharedObject`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::package("flash.net"), "SharedObject"),
         Some(QName::new(Namespace::package("flash.events"), "EventDispatcher").into()),
@@ -79,10 +80,10 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
         None,
     ));
 
-    const PUBLIC_CLASS_METHODS: &[(&str, NativeMethodImpl)] = &[("getLocal", get_local)];
-    write.define_public_builtin_class_methods(mc, PUBLIC_CLASS_METHODS);
+    let public_class_methods: &[(&str, NativeMethodImpl<B>)] = &[("getLocal", get_local)];
+    write.define_public_builtin_class_methods(mc, public_class_methods);
 
-    const PUBLIC_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] = &[("flush", flush)];
-    write.define_public_builtin_instance_methods(mc, PUBLIC_INSTANCE_METHODS);
+    let public_instance_methods: &[(&str, NativeMethodImpl<B>)] = &[("flush", flush)];
+    write.define_public_builtin_instance_methods(mc, public_instance_methods);
     class
 }

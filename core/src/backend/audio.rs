@@ -18,12 +18,13 @@ pub use mixer::*;
 use ruffle_types::backend::audio::{
     AudioBackend, SoundHandle, SoundInstanceHandle, SoundTransform,
 };
+use ruffle_types::backend::Backend;
 
 #[derive(Collect)]
 #[collect(no_drop)]
-pub struct AudioManager<'gc> {
+pub struct AudioManager<'gc, B: Backend> {
     /// The list of actively playing sounds.
-    sounds: Vec<SoundInstance<'gc>>,
+    sounds: Vec<SoundInstance<'gc, B>>,
 
     /// The global sound transform applied to all sounds.
     global_sound_transform: display_object::SoundTransform,
@@ -39,7 +40,7 @@ pub struct AudioManager<'gc> {
     transforms_dirty: bool,
 }
 
-impl<'gc> AudioManager<'gc> {
+impl<'gc, B: Backend> AudioManager<'gc, B> {
     /// The maximum number of sound instances that can play at once.
     pub const MAX_SOUNDS: usize = 32;
 
@@ -68,8 +69,8 @@ impl<'gc> AudioManager<'gc> {
         &mut self,
         audio: &mut dyn AudioBackend,
         gc_context: gc_arena::MutationContext<'gc, '_>,
-        action_queue: &mut crate::context::ActionQueue<'gc>,
-        root: DisplayObject<'gc>,
+        action_queue: &mut crate::context::ActionQueue<'gc, B>,
+        root: DisplayObject<'gc, B>,
     ) {
         // Update the position of sounds, and remove any completed sounds.
         self.sounds.retain(|sound| {
@@ -130,8 +131,8 @@ impl<'gc> AudioManager<'gc> {
         audio: &mut dyn AudioBackend,
         sound: SoundHandle,
         settings: &swf::SoundInfo,
-        display_object: Option<DisplayObject<'gc>>,
-        avm1_object: Option<SoundObject<'gc>>,
+        display_object: Option<DisplayObject<'gc, B>>,
+        avm1_object: Option<SoundObject<'gc, B>>,
     ) -> Option<SoundInstanceHandle> {
         if self.sounds.len() < Self::MAX_SOUNDS {
             let handle = audio.start_sound(sound, settings).ok()?;
@@ -155,7 +156,7 @@ impl<'gc> AudioManager<'gc> {
     pub fn attach_avm2_sound_channel(
         &mut self,
         instance: SoundInstanceHandle,
-        avm2_object: SoundChannelObject<'gc>,
+        avm2_object: SoundChannelObject<'gc, B>,
     ) {
         if let Some(i) = self
             .sounds
@@ -193,7 +194,7 @@ impl<'gc> AudioManager<'gc> {
     pub fn stop_sounds_with_display_object(
         &mut self,
         audio: &mut dyn AudioBackend,
-        display_object: DisplayObject<'gc>,
+        display_object: DisplayObject<'gc, B>,
     ) {
         self.sounds.retain(move |sound| {
             if let Some(other) = sound.display_object {
@@ -223,7 +224,7 @@ impl<'gc> AudioManager<'gc> {
         &mut self,
         audio: &mut dyn AudioBackend,
         stream_handle: Option<SoundHandle>,
-        movie_clip: MovieClip<'gc>,
+        movie_clip: MovieClip<'gc, B>,
         clip_frame: u16,
         data: ruffle_types::tag_utils::SwfSlice,
         stream_info: &swf::SoundStreamHead,
@@ -359,7 +360,7 @@ impl<'gc> AudioManager<'gc> {
         self.transforms_dirty = true;
     }
 
-    fn transform_for_sound(&self, sound: &SoundInstance<'gc>) -> SoundTransform {
+    fn transform_for_sound(&self, sound: &SoundInstance<'gc, B>) -> SoundTransform {
         let mut transform = sound.transform.clone();
         let mut parent = sound.display_object;
         while let Some(display_object) = parent {
@@ -386,7 +387,7 @@ impl<'gc> AudioManager<'gc> {
     }
 }
 
-impl<'gc> Default for AudioManager<'gc> {
+impl<'gc, B: Backend> Default for AudioManager<'gc, B> {
     fn default() -> Self {
         Self::new()
     }
@@ -394,7 +395,7 @@ impl<'gc> Default for AudioManager<'gc> {
 
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct SoundInstance<'gc> {
+pub struct SoundInstance<'gc, B: Backend> {
     /// The handle to the sound instance in the audio backend.
     #[collect(require_static)]
     instance: SoundInstanceHandle,
@@ -406,7 +407,7 @@ pub struct SoundInstance<'gc> {
 
     /// The display object that this sound is playing in, if any.
     /// Used for volume mixing and `Sound.stop()`.
-    display_object: Option<DisplayObject<'gc>>,
+    display_object: Option<DisplayObject<'gc, B>>,
 
     /// The local sound transform of this sound.
     ///
@@ -416,10 +417,10 @@ pub struct SoundInstance<'gc> {
     transform: display_object::SoundTransform,
 
     /// The AVM1 `Sound` object associated with this sound, if any.
-    avm1_object: Option<SoundObject<'gc>>,
+    avm1_object: Option<SoundObject<'gc, B>>,
 
     /// The AVM2 `SoundChannel` object associated with this sound, if any.
-    avm2_object: Option<SoundChannelObject<'gc>>,
+    avm2_object: Option<SoundChannelObject<'gc, B>>,
 
     stream_start_frame: Option<u16>,
 }

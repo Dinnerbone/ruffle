@@ -6,25 +6,14 @@ use crate::avm1::object::displacement_map_filter::DisplacementMapFilterObject;
 use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{Object, TObject, Value};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 use ruffle_types::string::{AvmString, WStr};
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "alpha" => property(alpha, set_alpha);
-    "color" => property(color, set_color);
-    "componentX" => property(component_x, set_component_x);
-    "componentY" => property(component_y, set_component_y);
-    "mapBitmap" => property(map_bitmap, set_map_bitmap);
-    "mapPoint" => property(map_point, set_map_point);
-    "mode" => property(mode, set_mode);
-    "scaleX" => property(scale_x, set_scale_x);
-    "scaleY" => property(scale_y, set_scale_y);
-};
-
-pub fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     set_map_bitmap(activation, this, args.get(0..1).unwrap_or_default())?;
     set_map_point(activation, this, args.get(1..2).unwrap_or_default())?;
     set_component_x(activation, this, args.get(2..3).unwrap_or_default())?;
@@ -38,11 +27,11 @@ pub fn constructor<'gc>(
     Ok(this.into())
 }
 
-pub fn alpha<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn alpha<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_displacement_map_filter_object() {
         return Ok(filter.alpha().into());
     }
@@ -50,11 +39,11 @@ pub fn alpha<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_alpha<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_alpha<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let alpha = args
         .get(0)
         .unwrap_or(&0.into())
@@ -68,11 +57,11 @@ pub fn set_alpha<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn color<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn color<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_displacement_map_filter_object() {
         return Ok(object.color().into());
     }
@@ -80,11 +69,11 @@ pub fn color<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_color<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_color<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let color = args
         .get(0)
         .unwrap_or(&0x000000.into())
@@ -97,11 +86,11 @@ pub fn set_color<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn component_x<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn component_x<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_displacement_map_filter_object() {
         return Ok(object.component_x().into());
     }
@@ -109,11 +98,11 @@ pub fn component_x<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_component_x<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_component_x<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let component = args.get(0).unwrap_or(&0.into()).coerce_to_i32(activation)?;
 
     if let Some(object) = this.as_displacement_map_filter_object() {
@@ -123,11 +112,11 @@ pub fn set_component_x<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn component_y<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn component_y<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_displacement_map_filter_object() {
         return Ok(object.component_y().into());
     }
@@ -135,11 +124,11 @@ pub fn component_y<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_component_y<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_component_y<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let component = args.get(0).unwrap_or(&0.into()).coerce_to_i32(activation)?;
 
     if let Some(object) = this.as_displacement_map_filter_object() {
@@ -149,11 +138,11 @@ pub fn set_component_y<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn map_bitmap<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn map_bitmap<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_displacement_map_filter_object() {
         if let Some(map_bitmap) = object.map_bitmap() {
             return Ok(map_bitmap.into());
@@ -163,11 +152,11 @@ pub fn map_bitmap<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_map_bitmap<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_map_bitmap<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let bitmap = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -182,11 +171,11 @@ pub fn set_map_bitmap<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn map_point<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn map_point<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_displacement_map_filter_object() {
         let (x, y) = object.map_point();
 
@@ -198,11 +187,11 @@ pub fn map_point<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_map_point<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_map_point<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let obj = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -218,11 +207,11 @@ pub fn set_map_point<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn mode<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn mode<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_displacement_map_filter_object() {
         let mode: &WStr = object.mode().into();
         return Ok(AvmString::from(mode).into());
@@ -231,11 +220,11 @@ pub fn mode<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_mode<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_mode<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let mode = args
         .get(0)
         .unwrap_or(&"wrap".into())
@@ -248,11 +237,11 @@ pub fn set_mode<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn scale_x<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn scale_x<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_displacement_map_filter_object() {
         return Ok(object.scale_x().into());
     }
@@ -260,11 +249,11 @@ pub fn scale_x<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_scale_x<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_scale_x<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let scale = args.get(0).unwrap_or(&0.into()).coerce_to_f64(activation)?;
 
     if let Some(object) = this.as_displacement_map_filter_object() {
@@ -274,11 +263,11 @@ pub fn set_scale_x<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn scale_y<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn scale_y<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_displacement_map_filter_object() {
         return Ok(object.scale_y().into());
     }
@@ -286,11 +275,11 @@ pub fn scale_y<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_scale_y<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_scale_y<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let scale = args.get(0).unwrap_or(&0.into()).coerce_to_f64(activation)?;
 
     if let Some(object) = this.as_displacement_map_filter_object() {
@@ -300,13 +289,26 @@ pub fn set_scale_y<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let filter = DisplacementMapFilterObject::empty_object(gc_context, Some(proto));
     let object = filter.as_script_object().unwrap();
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "alpha" => property(alpha, set_alpha);
+        "color" => property(color, set_color);
+        "componentX" => property(component_x, set_component_x);
+        "componentY" => property(component_y, set_component_y);
+        "mapBitmap" => property(map_bitmap, set_map_bitmap);
+        "mapPoint" => property(map_point, set_map_point);
+        "mode" => property(mode, set_mode);
+        "scaleX" => property(scale_x, set_scale_x);
+        "scaleY" => property(scale_y, set_scale_y);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     filter.into()
 }

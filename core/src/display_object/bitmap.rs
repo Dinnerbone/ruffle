@@ -10,6 +10,7 @@ use crate::display_object::{DisplayObjectBase, DisplayObjectPtr, TDisplayObject}
 use crate::prelude::*;
 use gc_arena::{Collect, Gc, GcCell, MutationContext};
 use ruffle_types::backend::render::BitmapHandle;
+use ruffle_types::backend::Backend;
 use ruffle_types::vminterface::AvmType;
 use ruffle_types::vminterface::Instantiator;
 use std::cell::{Ref, RefMut};
@@ -23,16 +24,16 @@ use std::cell::{Ref, RefMut};
 /// It can also be created in ActionScript using the `Bitmap` class.
 #[derive(Clone, Debug, Collect, Copy)]
 #[collect(no_drop)]
-pub struct Bitmap<'gc>(GcCell<'gc, BitmapData<'gc>>);
+pub struct Bitmap<'gc, B: Backend>(GcCell<'gc, BitmapData<'gc, B>>);
 
 #[derive(Clone, Debug, Collect)]
 #[collect(no_drop)]
-pub struct BitmapData<'gc> {
-    base: DisplayObjectBase<'gc>,
+pub struct BitmapData<'gc, B: Backend> {
+    base: DisplayObjectBase<'gc, B>,
     static_data: Gc<'gc, BitmapStatic>,
 
     /// The current bitmap data object.
-    bitmap_data: Option<GcCell<'gc, crate::bitmap::bitmap_data::BitmapData<'gc>>>,
+    bitmap_data: Option<GcCell<'gc, crate::bitmap::bitmap_data::BitmapData<'gc, B>>>,
 
     /// The current bitmap handle.
     ///
@@ -49,7 +50,7 @@ pub struct BitmapData<'gc> {
     ///
     /// AVM1 code cannot directly reference `Bitmap`s, so this does not support
     /// storing an AVM1 object.
-    avm2_object: Option<Avm2Object<'gc>>,
+    avm2_object: Option<Avm2Object<'gc, B>>,
 
     /// The AVM2 class for the BitmapData associated with this object.
     ///
@@ -59,10 +60,10 @@ pub struct BitmapData<'gc> {
     ///
     /// This association is unusual relative to other things that use AS3
     /// linkage, where the symbol class usually directly represents the symbol.
-    avm2_bitmapdata_class: Option<Avm2ClassObject<'gc>>,
+    avm2_bitmapdata_class: Option<Avm2ClassObject<'gc, B>>,
 }
 
-impl<'gc> Bitmap<'gc> {
+impl<'gc, B: Backend> Bitmap<'gc, B> {
     /// Create a `Bitmap` with dynamic bitmap data.
     ///
     /// If `bitmap_data` is provided, the associated `bitmap_handle` must match
@@ -71,12 +72,12 @@ impl<'gc> Bitmap<'gc> {
     /// list. If no data is provided then you are free to add whatever handle
     /// you like.
     pub fn new_with_bitmap_data(
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         id: CharacterId,
         bitmap_handle: Option<BitmapHandle>,
         width: u16,
         height: u16,
-        bitmap_data: Option<GcCell<'gc, crate::bitmap::bitmap_data::BitmapData<'gc>>>,
+        bitmap_data: Option<GcCell<'gc, crate::bitmap::bitmap_data::BitmapData<'gc, B>>>,
         smoothing: bool,
     ) -> Self {
         //NOTE: We do *not* solicit a handle from the `bitmap_data` at this
@@ -98,7 +99,7 @@ impl<'gc> Bitmap<'gc> {
 
     /// Create a `Bitmap` with static bitmap data only.
     pub fn new(
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         id: CharacterId,
         bitmap_handle: BitmapHandle,
         width: u16,
@@ -129,7 +130,9 @@ impl<'gc> Bitmap<'gc> {
     }
 
     /// Retrieve the bitmap data associated with this `Bitmap`.
-    pub fn bitmap_data(self) -> Option<GcCell<'gc, crate::bitmap::bitmap_data::BitmapData<'gc>>> {
+    pub fn bitmap_data(
+        self,
+    ) -> Option<GcCell<'gc, crate::bitmap::bitmap_data::BitmapData<'gc, B>>> {
         self.0.read().bitmap_data
     }
 
@@ -143,8 +146,8 @@ impl<'gc> Bitmap<'gc> {
     /// if that has not already been done.
     pub fn set_bitmap_data(
         self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        bitmap_data: Option<GcCell<'gc, crate::bitmap::bitmap_data::BitmapData<'gc>>>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        bitmap_data: Option<GcCell<'gc, crate::bitmap::bitmap_data::BitmapData<'gc, B>>>,
     ) {
         if let Some(bitmap_data) = bitmap_data {
             let bitmap_handle = bitmap_data
@@ -165,14 +168,14 @@ impl<'gc> Bitmap<'gc> {
         }
     }
 
-    pub fn avm2_bitmapdata_class(self) -> Option<Avm2ClassObject<'gc>> {
+    pub fn avm2_bitmapdata_class(self) -> Option<Avm2ClassObject<'gc, B>> {
         self.0.read().avm2_bitmapdata_class
     }
 
     pub fn set_avm2_bitmapdata_class(
         self,
         mc: MutationContext<'gc, '_>,
-        class: Avm2ClassObject<'gc>,
+        class: Avm2ClassObject<'gc, B>,
     ) {
         self.0.write(mc).avm2_bitmapdata_class = Some(class);
     }
@@ -186,16 +189,21 @@ impl<'gc> Bitmap<'gc> {
     }
 }
 
-impl<'gc> TDisplayObject<'gc> for Bitmap<'gc> {
-    fn base(&self) -> Ref<DisplayObjectBase<'gc>> {
+impl<'gc, B: Backend> TDisplayObject<'gc> for Bitmap<'gc, B> {
+    type B = B;
+
+    fn base(&self) -> Ref<DisplayObjectBase<'gc, B>> {
         Ref::map(self.0.read(), |r| &r.base)
     }
 
-    fn base_mut<'a>(&'a self, mc: MutationContext<'gc, '_>) -> RefMut<'a, DisplayObjectBase<'gc>> {
+    fn base_mut<'a>(
+        &'a self,
+        mc: MutationContext<'gc, '_>,
+    ) -> RefMut<'a, DisplayObjectBase<'gc, B>> {
         RefMut::map(self.0.write(mc), |w| &mut w.base)
     }
 
-    fn instantiate(&self, gc_context: MutationContext<'gc, '_>) -> DisplayObject<'gc> {
+    fn instantiate(&self, gc_context: MutationContext<'gc, '_>) -> DisplayObject<'gc, B> {
         Self(GcCell::allocate(gc_context, self.0.read().clone())).into()
     }
 
@@ -219,8 +227,8 @@ impl<'gc> TDisplayObject<'gc> for Bitmap<'gc> {
 
     fn post_instantiation(
         &self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        _init_object: Option<avm1::Object<'gc>>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        _init_object: Option<avm1::Object<'gc, B>>,
         _instantiated_by: Instantiator,
         run_frame: bool,
     ) {
@@ -248,7 +256,7 @@ impl<'gc> TDisplayObject<'gc> for Bitmap<'gc> {
         }
     }
 
-    fn run_frame(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn run_frame(&self, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         if let (Some(bitmap_data), Some(bitmap_handle)) =
             (&self.0.read().bitmap_data, self.0.read().bitmap_handle)
         {
@@ -266,7 +274,7 @@ impl<'gc> TDisplayObject<'gc> for Bitmap<'gc> {
         }
     }
 
-    fn render_self(&self, context: &mut RenderContext) {
+    fn render_self(&self, context: &mut RenderContext<B>) {
         if !self.world_bounds().intersects(&context.stage.view_bounds()) {
             // Off-screen; culled
             return;
@@ -282,7 +290,7 @@ impl<'gc> TDisplayObject<'gc> for Bitmap<'gc> {
         }
     }
 
-    fn object2(&self) -> Avm2Value<'gc> {
+    fn object2(&self) -> Avm2Value<'gc, B> {
         self.0
             .read()
             .avm2_object
@@ -290,7 +298,7 @@ impl<'gc> TDisplayObject<'gc> for Bitmap<'gc> {
             .unwrap_or(Avm2Value::Undefined)
     }
 
-    fn as_bitmap(self) -> Option<Bitmap<'gc>> {
+    fn as_bitmap(self) -> Option<Bitmap<'gc, B>> {
         Some(self)
     }
 }

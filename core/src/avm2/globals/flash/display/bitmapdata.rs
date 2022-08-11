@@ -11,13 +11,14 @@ use crate::bitmap::bitmap_data::BitmapData;
 use crate::bitmap::is_size_valid;
 use crate::character::Character;
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 
 /// Implements `flash.display.BitmapData`'s instance constructor.
-pub fn instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         activation.super_init(this, &[])?;
 
@@ -112,20 +113,20 @@ pub fn instance_init<'gc>(
 }
 
 /// Implements `flash.display.BitmapData`'s class constructor.
-pub fn class_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn class_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok(Value::Undefined)
 }
 
 /// Implements `BitmapData.width`'s getter.
-pub fn width<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn width<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(bitmap_data) = this.and_then(|t| t.as_bitmap_data()) {
         return Ok((bitmap_data.read().width() as i32).into());
     }
@@ -134,11 +135,11 @@ pub fn width<'gc>(
 }
 
 /// Implements `BitmapData.height`'s getter.
-pub fn height<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn height<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(bitmap_data) = this.and_then(|t| t.as_bitmap_data()) {
         return Ok((bitmap_data.read().height() as i32).into());
     }
@@ -147,11 +148,11 @@ pub fn height<'gc>(
 }
 
 /// Implements `BitmapData.transparent`'s getter.
-pub fn transparent<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn transparent<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(bitmap_data) = this.and_then(|t| t.as_bitmap_data()) {
         return Ok(bitmap_data.read().transparency().into());
     }
@@ -160,11 +161,11 @@ pub fn transparent<'gc>(
 }
 
 /// Implements `BitmapData.scroll`.
-pub fn scroll<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn scroll<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(bitmap_data) = this.and_then(|t| t.as_bitmap_data()) {
         let x = args
             .get(0)
@@ -184,11 +185,11 @@ pub fn scroll<'gc>(
 }
 
 /// Implements `BitmapData.copyPixels`.
-pub fn copy_pixels<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn copy_pixels<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(bitmap_data) = this.and_then(|t| t.as_bitmap_data()) {
         let source_bitmap = args
             .get(0)
@@ -258,11 +259,11 @@ pub fn copy_pixels<'gc>(
 }
 
 /// Implements `BitmapData.getPixel`.
-pub fn get_pixel<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn get_pixel<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(bitmap_data) = this.and_then(|t| t.as_bitmap_data()) {
         let x = args
             .get(0)
@@ -278,17 +279,17 @@ pub fn get_pixel<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn lock<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn lock<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     log::warn!("BitmapData.lock - not yet implemented");
     Ok(Value::Undefined)
 }
 
 /// Construct `BitmapData`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::package("flash.display"), "BitmapData"),
         Some(QName::new(Namespace::package(""), "Object").into()),
@@ -304,25 +305,25 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
 
     write.implements(QName::new(Namespace::package("flash.display"), "IBitmapDrawable").into());
 
-    const PUBLIC_INSTANCE_PROPERTIES: &[(
+    let public_instance_properties: &[(
         &str,
-        Option<NativeMethodImpl>,
-        Option<NativeMethodImpl>,
+        Option<NativeMethodImpl<B>>,
+        Option<NativeMethodImpl<B>>,
     )] = &[
         ("width", Some(width), None),
         ("height", Some(height), None),
         ("transparent", Some(transparent), None),
     ];
-    write.define_public_builtin_instance_properties(mc, PUBLIC_INSTANCE_PROPERTIES);
+    write.define_public_builtin_instance_properties(mc, public_instance_properties);
 
-    const PUBLIC_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] = &[
+    let public_instance_methods: &[(&str, NativeMethodImpl<B>)] = &[
         ("getPixel", get_pixel),
         ("scroll", scroll),
         ("lock", lock),
         ("unlock", lock), // sic, it's a noop (TODO)
         ("copyPixels", copy_pixels),
     ];
-    write.define_public_builtin_instance_methods(mc, PUBLIC_INSTANCE_METHODS);
+    write.define_public_builtin_instance_methods(mc, public_instance_methods);
 
     class
 }

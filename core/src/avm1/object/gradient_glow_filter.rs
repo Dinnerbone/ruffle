@@ -4,18 +4,19 @@ use crate::impl_custom_object;
 use gc_arena::{Collect, GcCell, MutationContext};
 
 use crate::avm1::object::bevel_filter::BevelFilterType;
+use ruffle_types::backend::Backend;
 use std::fmt;
 
 /// A GradientGlowFilter
 #[derive(Clone, Copy, Collect)]
 #[collect(no_drop)]
-pub struct GradientGlowFilterObject<'gc>(GcCell<'gc, GradientGlowFilterData<'gc>>);
+pub struct GradientGlowFilterObject<'gc, B: Backend>(GcCell<'gc, GradientGlowFilterData<'gc, B>>);
 
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct GradientGlowFilterData<'gc> {
+pub struct GradientGlowFilterData<'gc, B: Backend> {
     /// The underlying script object.
-    base: ScriptObject<'gc>,
+    base: ScriptObject<'gc, B>,
 
     alphas: Vec<f64>,
     angle: f64,
@@ -30,7 +31,7 @@ pub struct GradientGlowFilterData<'gc> {
     type_: BevelFilterType,
 }
 
-impl fmt::Debug for GradientGlowFilterObject<'_> {
+impl<B: Backend> fmt::Debug for GradientGlowFilterObject<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let this = self.0.read();
         f.debug_struct("GradientGlowFilter")
@@ -49,7 +50,7 @@ impl fmt::Debug for GradientGlowFilterObject<'_> {
     }
 }
 
-impl<'gc> GradientGlowFilterObject<'gc> {
+impl<'gc, B: Backend> GradientGlowFilterObject<'gc, B> {
     add_field_accessors!(
         [angle, f64, set => set_angle, get => angle],
         [blur_x, f64, set => set_blur_x, get => blur_x],
@@ -76,7 +77,10 @@ impl<'gc> GradientGlowFilterObject<'gc> {
         self.0.read().ratios.clone()
     }
 
-    pub fn empty_object(gc_context: MutationContext<'gc, '_>, proto: Option<Object<'gc>>) -> Self {
+    pub fn empty_object(
+        gc_context: MutationContext<'gc, '_>,
+        proto: Option<Object<'gc, B>>,
+    ) -> Self {
         GradientGlowFilterObject(GcCell::allocate(
             gc_context,
             GradientGlowFilterData {
@@ -97,8 +101,10 @@ impl<'gc> GradientGlowFilterObject<'gc> {
     }
 }
 
-impl<'gc> TObject<'gc> for GradientGlowFilterObject<'gc> {
-    impl_custom_object!(base {
+impl<'gc, B: Backend> TObject<'gc> for GradientGlowFilterObject<'gc, B> {
+    type B = B;
+
+    impl_custom_object!(B, base {
         bare_object(as_gradient_glow_filter_object -> GradientGlowFilterObject::empty_object);
     });
 }

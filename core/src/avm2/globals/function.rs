@@ -9,13 +9,14 @@ use crate::avm2::object::{FunctionObject, Object, TObject};
 use crate::avm2::value::Value;
 use crate::avm2::Error;
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 
 /// Implements `Function`'s instance initializer.
-pub fn instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         activation.super_init(this, &[])?;
     }
@@ -24,11 +25,11 @@ pub fn instance_init<'gc>(
 }
 
 /// Implements `Function`'s class initializer.
-pub fn class_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn class_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let scope = activation.create_scopechain();
         let this_class = this.as_class_object().unwrap();
@@ -73,11 +74,11 @@ pub fn class_init<'gc>(
 }
 
 /// Implements `Function.prototype.call`
-fn call<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    func: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn call<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    func: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let this = args
         .get(0)
         .and_then(|v| v.coerce_to_object(activation).ok())
@@ -95,11 +96,11 @@ fn call<'gc>(
 }
 
 /// Implements `Function.prototype.apply`
-fn apply<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    func: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn apply<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    func: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let this = args
         .get(0)
         .and_then(|v| v.coerce_to_object(activation).ok())
@@ -108,7 +109,7 @@ fn apply<'gc>(
     if let Some(func) = func {
         let arg_array = args.get(1).cloned().unwrap_or(Value::Undefined).as_object();
         let resolved_args = if let Some(arg_array) = arg_array {
-            let arg_storage: Vec<Option<Value<'gc>>> = arg_array
+            let arg_storage: Vec<Option<Value<'gc, B>>> = arg_array
                 .as_array_storage()
                 .map(|a| a.iter().collect())
                 .ok_or_else(|| {
@@ -131,11 +132,11 @@ fn apply<'gc>(
     }
 }
 
-fn prototype<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn prototype<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(function) = this.as_function_object() {
             if let Some(proto) = function.prototype() {
@@ -148,11 +149,11 @@ fn prototype<'gc>(
     Ok(Value::Undefined)
 }
 
-fn set_prototype<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn set_prototype<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(function) = this.as_function_object() {
             let new_proto = args
@@ -167,7 +168,9 @@ fn set_prototype<'gc>(
 }
 
 /// Construct `Function`'s class.
-pub fn create_class<'gc>(gc_context: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(
+    gc_context: MutationContext<'gc, '_>,
+) -> GcCell<'gc, Class<'gc, B>> {
     let function_class = Class::new(
         QName::new(Namespace::public(), "Function"),
         Some(QName::new(Namespace::public(), "Object").into()),
@@ -179,15 +182,15 @@ pub fn create_class<'gc>(gc_context: MutationContext<'gc, '_>) -> GcCell<'gc, Cl
     let mut write = function_class.write(gc_context);
 
     // Fixed traits (in AS3 namespace)
-    const AS3_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] = &[("call", call), ("apply", apply)];
-    write.define_as3_builtin_instance_methods(gc_context, AS3_INSTANCE_METHODS);
+    let as3_instance_methods: &[(&str, NativeMethodImpl<B>)] = &[("call", call), ("apply", apply)];
+    write.define_as3_builtin_instance_methods(gc_context, as3_instance_methods);
 
-    const PUBLIC_INSTANCE_PROPERTIES: &[(
+    let public_instance_properties: &[(
         &str,
-        Option<NativeMethodImpl>,
-        Option<NativeMethodImpl>,
+        Option<NativeMethodImpl<B>>,
+        Option<NativeMethodImpl<B>>,
     )] = &[("prototype", Some(prototype), Some(set_prototype))];
-    write.define_public_builtin_instance_properties(gc_context, PUBLIC_INSTANCE_PROPERTIES);
+    write.define_public_builtin_instance_properties(gc_context, public_instance_properties);
 
     function_class
 }

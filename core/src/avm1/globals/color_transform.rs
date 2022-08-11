@@ -6,29 +6,16 @@ use crate::avm1::object::color_transform_object::ColorTransformObject;
 use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{Object, TObject, Value};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 use ruffle_types::color_transform::ColorTransform;
 use ruffle_types::string::AvmString;
 use swf::Fixed8;
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "alphaMultiplier" => property(get_alpha_multiplier, set_alpha_multiplier);
-    "redMultiplier" => property(get_red_multiplier, set_red_multiplier);
-    "greenMultiplier" => property(get_green_multiplier, set_green_multiplier);
-    "blueMultiplier" => property(get_blue_multiplier, set_blue_multiplier);
-    "alphaOffset" => property(get_alpha_offset, set_alpha_offset);
-    "redOffset" => property(get_red_offset, set_red_offset);
-    "greenOffset" => property(get_green_offset, set_green_offset);
-    "blueOffset" => property(get_blue_offset, set_blue_offset);
-    "rgb" => property(get_rgb, set_rgb);
-    "concat" => method(concat);
-    "toString" => method(to_string);
-};
-
-pub fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let red_multiplier = args.get(0).unwrap_or(&1.into()).coerce_to_f64(activation)?;
     let green_multiplier = args.get(1).unwrap_or(&1.into()).coerce_to_f64(activation)?;
     let blue_multiplier = args.get(2).unwrap_or(&1.into()).coerce_to_f64(activation)?;
@@ -52,10 +39,10 @@ pub fn constructor<'gc>(
     Ok(this.into())
 }
 
-pub fn object_to_color_transform<'gc>(
-    object: Object<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<ColorTransform, Error<'gc>> {
+pub fn object_to_color_transform<'gc, B: Backend>(
+    object: Object<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<ColorTransform, Error<'gc, B>> {
     let red_multiplier = object
         .get("redMultiplier", activation)?
         .coerce_to_f64(activation)?;
@@ -92,10 +79,10 @@ pub fn object_to_color_transform<'gc>(
     })
 }
 
-pub fn color_transform_to_object<'gc>(
+pub fn color_transform_to_object<'gc, B: Backend>(
     color_transform: ColorTransform,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Value<'gc>, Error<'gc>> {
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let args = [
         color_transform.r_mult.to_f64().into(),
         color_transform.g_mult.to_f64().into(),
@@ -115,11 +102,11 @@ pub fn color_transform_to_object<'gc>(
     Ok(object)
 }
 
-pub fn get_rgb<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_rgb<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(ct) = this.as_color_transform_object() {
         let rgb = ((ct.get_red_offset() as u32) << 16)
             | ((ct.get_green_offset() as u32) << 8)
@@ -130,11 +117,11 @@ pub fn get_rgb<'gc>(
     }
 }
 
-pub fn set_rgb<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_rgb<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let new_rgb = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -157,11 +144,11 @@ pub fn set_rgb<'gc>(
 macro_rules! color_transform_value_accessor {
     ($([$get_ident: ident, $set_ident: ident],)*) => {
         $(
-            pub fn $set_ident<'gc>(
-                activation: &mut Activation<'_, 'gc, '_>,
-                this: Object<'gc>,
-                args: &[Value<'gc>],
-            ) -> Result<Value<'gc>, Error<'gc>> {
+            pub fn $set_ident<'gc, B: Backend>(
+                activation: &mut Activation<'_, 'gc, '_, B>,
+                this: Object<'gc, B>,
+                args: &[Value<'gc, B>],
+            ) -> Result<Value<'gc, B>, Error<'gc, B>> {
                 let new_val = args
                     .get(0)
                     .unwrap_or(&Value::Undefined)
@@ -173,11 +160,11 @@ macro_rules! color_transform_value_accessor {
                 Ok(Value::Undefined.into())
             }
 
-            pub fn $get_ident<'gc>(
-                _activation: &mut Activation<'_, 'gc, '_>,
-                this: Object<'gc>,
-                _args: &[Value<'gc>],
-            ) -> Result<Value<'gc>, Error<'gc>> {
+            pub fn $get_ident<'gc, B: Backend>(
+                _activation: &mut Activation<'_, 'gc, '_, B>,
+                this: Object<'gc, B>,
+                _args: &[Value<'gc, B>],
+            ) -> Result<Value<'gc, B>, Error<'gc, B>> {
                 if let Some(ct) = this.as_color_transform_object() {
                     Ok(ct.$get_ident().into())
                 } else {
@@ -199,23 +186,38 @@ color_transform_value_accessor!(
     [get_alpha_offset, set_alpha_offset],
 );
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let color_transform_object =
         ColorTransformObject::empty_color_transform_object(gc_context, Some(proto));
     let object = color_transform_object.as_script_object().unwrap();
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "alphaMultiplier" => property(get_alpha_multiplier, set_alpha_multiplier);
+        "redMultiplier" => property(get_red_multiplier, set_red_multiplier);
+        "greenMultiplier" => property(get_green_multiplier, set_green_multiplier);
+        "blueMultiplier" => property(get_blue_multiplier, set_blue_multiplier);
+        "alphaOffset" => property(get_alpha_offset, set_alpha_offset);
+        "redOffset" => property(get_red_offset, set_red_offset);
+        "greenOffset" => property(get_green_offset, set_green_offset);
+        "blueOffset" => property(get_blue_offset, set_blue_offset);
+        "rgb" => property(get_rgb, set_rgb);
+        "concat" => method(concat);
+        "toString" => method(to_string);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     color_transform_object.into()
 }
 
-fn to_string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn to_string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let formatted = format!("(redMultiplier={}, greenMultiplier={}, blueMultiplier={}, alphaMultiplier={}, redOffset={}, greenOffset={}, blueOffset={}, alphaOffset={})",
             this.get("redMultiplier", activation)?.coerce_to_string(activation)?,
             this.get("greenMultiplier", activation)?.coerce_to_string(activation)?,
@@ -230,11 +232,11 @@ fn to_string<'gc>(
     Ok(AvmString::new_utf8(activation.context.gc_context, formatted).into())
 }
 
-fn concat<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn concat<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // Without an arg, does nothing
     if let Some(arg) = _args.get(0) {
         // If given an invalid var, return undefined

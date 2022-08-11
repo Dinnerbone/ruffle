@@ -27,13 +27,13 @@ use instant::Instant;
 use log::info;
 use rand::{rngs::SmallRng, SeedableRng};
 use ruffle_types::backend::audio::AudioBackend;
-use ruffle_types::backend::audio::NullAudioBackend;
-use ruffle_types::backend::log::{LogBackend, NullLogBackend};
+use ruffle_types::backend::log::LogBackend;
 use ruffle_types::backend::navigator::{NavigatorBackend, Request};
 use ruffle_types::backend::render::RenderBackend;
 use ruffle_types::backend::storage::StorageBackend;
 use ruffle_types::backend::ui::{InputManager, MouseCursor, UiBackend};
 use ruffle_types::backend::video::VideoBackend;
+use ruffle_types::backend::Backend;
 use ruffle_types::display_object::stage::{
     StageDisplayState, StageQuality, StageScaleMode, WindowMode,
 };
@@ -57,80 +57,80 @@ pub const NEWEST_PLAYER_VERSION: u8 = 32;
 
 #[derive(Collect)]
 #[collect(no_drop)]
-struct GcRoot<'gc>(GcCell<'gc, GcRootData<'gc>>);
+struct GcRoot<'gc, B: Backend>(GcCell<'gc, GcRootData<'gc, B>>);
 
 #[derive(Collect)]
 #[collect(no_drop)]
-struct GcRootData<'gc> {
-    library: Library<'gc>,
+struct GcRootData<'gc, B: Backend> {
+    library: Library<'gc, B>,
 
     /// The root of the display object hierarchy.
     ///
     /// It's children are the `level`s of AVM1, it may also be directly
     /// accessed in AVM2.
-    stage: Stage<'gc>,
+    stage: Stage<'gc, B>,
 
     /// The display object that the mouse is currently hovering over.
-    mouse_hovered_object: Option<InteractiveObject<'gc>>,
+    mouse_hovered_object: Option<InteractiveObject<'gc, B>>,
 
     /// If the mouse is down, the display object that the mouse is currently pressing.
-    mouse_pressed_object: Option<InteractiveObject<'gc>>,
+    mouse_pressed_object: Option<InteractiveObject<'gc, B>>,
 
     /// The object being dragged via a `startDrag` action.
-    drag_object: Option<DragObject<'gc>>,
+    drag_object: Option<DragObject<'gc, B>>,
 
     /// Interpreter state for AVM1 code.
-    avm1: Avm1<'gc>,
+    avm1: Avm1<'gc, B>,
 
     /// Interpreter state for AVM2 code.
-    avm2: Avm2<'gc>,
+    avm2: Avm2<'gc, B>,
 
-    action_queue: ActionQueue<'gc>,
+    action_queue: ActionQueue<'gc, B>,
 
     /// Object which manages asynchronous processes that need to interact with
     /// data in the GC arena.
-    load_manager: LoadManager<'gc>,
+    load_manager: LoadManager<'gc, B>,
 
-    shared_objects: HashMap<String, Object<'gc>>,
+    shared_objects: HashMap<String, Object<'gc, B>>,
 
     /// Text fields with unbound variable bindings.
-    unbound_text_fields: Vec<EditText<'gc>>,
+    unbound_text_fields: Vec<EditText<'gc, B>>,
 
     /// Timed callbacks created with `setInterval`/`setTimeout`.
-    timers: Timers<'gc>,
+    timers: Timers<'gc, B>,
 
-    current_context_menu: Option<ContextMenuState<'gc>>,
+    current_context_menu: Option<ContextMenuState<'gc, B>>,
 
     /// External interface for (for example) JavaScript <-> ActionScript interaction
-    external_interface: ExternalInterface<'gc>,
+    external_interface: ExternalInterface<'gc, B>,
 
     /// A tracker for the current keyboard focused element
-    focus_tracker: FocusTracker<'gc>,
+    focus_tracker: FocusTracker<'gc, B>,
 
     /// Manager of active sound instances.
-    audio_manager: AudioManager<'gc>,
+    audio_manager: AudioManager<'gc, B>,
 }
 
-impl<'gc> GcRootData<'gc> {
+impl<'gc, B: Backend> GcRootData<'gc, B> {
     /// Splits out parameters for creating an `UpdateContext`
     /// (because we can borrow fields of `self` independently)
     #[allow(clippy::type_complexity)]
     fn update_context_params(
         &mut self,
     ) -> (
-        Stage<'gc>,
-        &mut Library<'gc>,
-        &mut ActionQueue<'gc>,
-        &mut Avm1<'gc>,
-        &mut Avm2<'gc>,
-        &mut Option<DragObject<'gc>>,
-        &mut LoadManager<'gc>,
-        &mut HashMap<String, Object<'gc>>,
-        &mut Vec<EditText<'gc>>,
-        &mut Timers<'gc>,
-        &mut Option<ContextMenuState<'gc>>,
-        &mut ExternalInterface<'gc>,
-        &mut AudioManager<'gc>,
+        Stage<'gc, B>,
+        &mut Library<'gc, B>,
+        &mut ActionQueue<'gc, B>,
+        &mut Avm1<'gc, B>,
+        &mut Avm2<'gc, B>,
+        &mut Option<DragObject<'gc, B>>,
+        &mut LoadManager<'gc, B>,
+        &mut HashMap<String, Object<'gc, B>>,
+        &mut Vec<EditText<'gc, B>>,
+        &mut Timers<'gc, B>,
+        &mut Option<ContextMenuState<'gc, B>>,
+        &mut ExternalInterface<'gc, B>,
+        &mut AudioManager<'gc, B>,
     ) {
         (
             self.stage,
@@ -151,7 +151,7 @@ impl<'gc> GcRootData<'gc> {
 }
 type Error = Box<dyn std::error::Error>;
 
-make_arena!(GcArena, GcRoot);
+make_arena!(GcArena, GcRoot, B, Backend);
 
 type Audio = Box<dyn AudioBackend>;
 type Navigator = Box<dyn NavigatorBackend>;
@@ -161,7 +161,7 @@ type Log = Box<dyn LogBackend>;
 type Ui = Box<dyn UiBackend>;
 type Video = Box<dyn VideoBackend>;
 
-pub struct Player {
+pub struct Player<B: Backend> {
     /// The version of the player we're emulating.
     ///
     /// This serves a few purposes, primarily for compatibility:
@@ -181,19 +181,13 @@ pub struct Player {
     is_playing: bool,
     needs_render: bool,
 
-    renderer: Renderer,
-    audio: Audio,
-    navigator: Navigator,
-    storage: Storage,
-    log: Log,
-    ui: Ui,
-    video: Video,
+    backend: B,
 
     transform_stack: TransformStack,
 
     rng: SmallRng,
 
-    gc_arena: GcArena,
+    gc_arena: GcArena<B>,
 
     frame_rate: f64,
     actions_since_timeout_check: u16,
@@ -243,7 +237,7 @@ pub struct Player {
     current_frame: Option<u16>,
 }
 
-impl Player {
+impl<B: Backend> Player<B> {
     /// Fetch the root movie.
     ///
     /// This should not be called if a root movie fetch has already been kicked
@@ -556,9 +550,9 @@ impl Player {
     }
 
     fn run_context_menu_custom_callback<'gc>(
-        item: Object<'gc>,
-        callback: Object<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        item: Object<'gc, B>,
+        callback: Object<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
     ) {
         let globals = context.avm1.global_object_cell();
         let root_clip = context.stage.root_clip();
@@ -593,7 +587,7 @@ impl Player {
         });
     }
 
-    fn toggle_play_root_movie<'gc>(context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn toggle_play_root_movie<'gc>(context: &mut UpdateContext<'_, 'gc, '_, B>) {
         if let Some(mc) = context.stage.root_clip().as_movie_clip() {
             if mc.playing() {
                 mc.stop(context);
@@ -602,17 +596,17 @@ impl Player {
             }
         }
     }
-    fn rewind_root_movie<'gc>(context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn rewind_root_movie<'gc>(context: &mut UpdateContext<'_, 'gc, '_, B>) {
         if let Some(mc) = context.stage.root_clip().as_movie_clip() {
             mc.goto_frame(context, 1, true)
         }
     }
-    fn forward_root_movie<'gc>(context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn forward_root_movie<'gc>(context: &mut UpdateContext<'_, 'gc, '_, B>) {
         if let Some(mc) = context.stage.root_clip().as_movie_clip() {
             mc.next_frame(context);
         }
     }
-    fn back_root_movie<'gc>(context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn back_root_movie<'gc>(context: &mut UpdateContext<'_, 'gc, '_, B>) {
         if let Some(mc) = context.stage.root_clip().as_movie_clip() {
             mc.prev_frame(context);
         }
@@ -972,7 +966,7 @@ impl Player {
     }
 
     /// Update dragged object, if any.
-    pub fn update_drag<'gc>(context: &mut UpdateContext<'_, 'gc, '_>) {
+    pub fn update_drag<'gc>(context: &mut UpdateContext<'_, 'gc, '_, B>) {
         let (mouse_x, mouse_y) = *context.mouse_position;
         if let Some(drag_object) = &mut context.drag_object {
             let display_object = drag_object.display_object;
@@ -1026,7 +1020,7 @@ impl Player {
                     .and_then(|l| l.mouse_pick(context, *context.mouse_position, true))
             });
 
-            let mut events: smallvec::SmallVec<[(InteractiveObject<'_>, ClipEvent); 2]> =
+            let mut events: smallvec::SmallVec<[(InteractiveObject<'_>, ClipEvent<B>); 2]> =
                 Default::default();
 
             if is_mouse_moved {
@@ -1317,35 +1311,15 @@ impl Player {
         self.frame_rate
     }
 
-    pub fn renderer(&self) -> &Renderer {
-        &self.renderer
+    pub fn backend(&self) -> &B {
+        &self.backend
     }
 
-    pub fn renderer_mut(&mut self) -> &mut Renderer {
-        &mut self.renderer
+    pub fn backend_mut(&mut self) -> &mut B {
+        &mut self.backend
     }
 
-    pub fn storage(&self) -> &Storage {
-        &self.storage
-    }
-
-    pub fn storage_mut(&mut self) -> &mut Storage {
-        &mut self.storage
-    }
-
-    pub fn destroy(self) -> Renderer {
-        self.renderer
-    }
-
-    pub fn ui(&self) -> &Ui {
-        &self.ui
-    }
-
-    pub fn ui_mut(&mut self) -> &mut Ui {
-        &mut self.ui
-    }
-
-    pub fn run_actions<'gc>(context: &mut UpdateContext<'_, 'gc, '_>) {
+    pub fn run_actions<'gc>(context: &mut UpdateContext<'_, 'gc, '_, B>) {
         // Note that actions can queue further actions, so a while loop is necessary here.
         while let Some(actions) = context.action_queue.pop_action() {
             // We don't run frame actions if the clip was removed after it queued the action.
@@ -1459,7 +1433,7 @@ impl Player {
     /// This takes cares of populating the `UpdateContext` struct, avoiding borrow issues.
     pub(crate) fn mutate_with_update_context<F, R>(&mut self, f: F) -> R
     where
-        F: for<'a, 'gc> FnOnce(&mut UpdateContext<'a, 'gc, '_>) -> R,
+        F: for<'a, 'gc> FnOnce(&mut UpdateContext<'a, 'gc, '_, B>) -> R,
     {
         self.gc_arena.mutate(|gc_context, gc_root| {
             let mut root_data = gc_root.0.write(gc_context);
@@ -1486,11 +1460,8 @@ impl Player {
                 player_version: self.player_version,
                 swf: &self.swf,
                 library,
+                backend: &mut self.backend,
                 rng: &mut self.rng,
-                renderer: self.renderer.deref_mut(),
-                audio: self.audio.deref_mut(),
-                navigator: self.navigator.deref_mut(),
-                ui: self.ui.deref_mut(),
                 action_queue,
                 gc_context,
                 stage,
@@ -1503,9 +1474,6 @@ impl Player {
                 load_manager,
                 system: &mut self.system,
                 instance_counter: &mut self.instance_counter,
-                storage: self.storage.deref_mut(),
-                log: self.log.deref_mut(),
-                video: self.video.deref_mut(),
                 shared_objects,
                 unbound_text_fields,
                 timers,
@@ -1581,7 +1549,7 @@ impl Player {
     /// hover state up to date, and running garbage collection.
     pub fn update<F, R>(&mut self, func: F) -> R
     where
-        F: for<'a, 'gc, 'gc_context> FnOnce(&mut UpdateContext<'a, 'gc, 'gc_context>) -> R,
+        F: for<'a, 'gc, 'gc_context> FnOnce(&mut UpdateContext<'a, 'gc, 'gc_context, B>) -> R,
     {
         let rval = self.mutate_with_update_context(|context| {
             let rval = func(context);
@@ -1627,7 +1595,7 @@ impl Player {
         self.mutate_with_update_context(|context| context.avm1.has_mouse_listener())
     }
 
-    pub fn add_external_interface(&mut self, provider: Box<dyn ExternalInterfaceProvider>) {
+    pub fn add_external_interface(&mut self, provider: Box<dyn ExternalInterfaceProvider<B>>) {
         self.mutate_with_update_context(|context| {
             context.external_interface.add_provider(provider)
         });
@@ -1661,17 +1629,11 @@ impl Player {
 }
 
 /// Player factory, which can be used to configure the aspects of a Ruffle player.
-pub struct PlayerBuilder {
+pub struct PlayerBuilder<B: Backend> {
     movie: Option<SwfMovie>,
 
     // Backends
-    audio: Option<Audio>,
-    log: Option<Log>,
-    navigator: Option<Navigator>,
-    renderer: Option<Renderer>,
-    storage: Option<Storage>,
-    ui: Option<Ui>,
-    video: Option<Video>,
+    backend: B,
 
     // Misc. player configuration
     autoplay: bool,
@@ -1684,23 +1646,16 @@ pub struct PlayerBuilder {
     warn_on_unsupported_content: bool,
 }
 
-impl PlayerBuilder {
+impl<B: Backend> PlayerBuilder<B> {
     /// Generates the base configuration for creating a player.
     ///
-    /// All settings will be at their defaults, and "null" backends will be used. The settings
+    /// All settings will be at their defaults. The settings
     /// can be changed by chaining the configuration methods.
     #[inline]
-    pub fn new() -> Self {
+    pub fn new(backend: B) -> Self {
         Self {
             movie: None,
-
-            audio: None,
-            log: None,
-            navigator: None,
-            renderer: None,
-            storage: None,
-            ui: None,
-            video: None,
+            backend,
 
             autoplay: false,
             fullscreen: false,
@@ -1830,41 +1785,14 @@ impl PlayerBuilder {
     }
 
     /// Builds the player, wiring up the backends and configuring the specified settings.
-    pub fn build(self) -> Arc<Mutex<Player>> {
-        use ruffle_types::backend::{navigator, render, storage, ui, video};
-        let audio = self
-            .audio
-            .unwrap_or_else(|| Box::new(NullAudioBackend::new()));
-        let log = self.log.unwrap_or_else(|| Box::new(NullLogBackend::new()));
-        let navigator = self
-            .navigator
-            .unwrap_or_else(|| Box::new(navigator::NullNavigatorBackend::new()));
-        let renderer = self
-            .renderer
-            .unwrap_or_else(|| Box::new(render::NullRenderer::new()));
-        let storage = self
-            .storage
-            .unwrap_or_else(|| Box::new(storage::MemoryStorageBackend::new()));
-        let ui = self
-            .ui
-            .unwrap_or_else(|| Box::new(ui::NullUiBackend::new()));
-        let video = self
-            .video
-            .unwrap_or_else(|| Box::new(video::NullVideoBackend::new()));
-
+    pub fn build(self) -> Arc<Mutex<Player<B>>> {
         // Instantiate the player.
         let fake_movie = Arc::new(SwfMovie::empty(NEWEST_PLAYER_VERSION));
         let frame_rate = 12.0;
         let player = Arc::new_cyclic(|self_ref| {
             Mutex::new(Player {
                 // Backends
-                audio,
-                log,
-                navigator,
-                renderer,
-                storage,
-                ui,
-                video,
+                backend: self.backend,
 
                 // SWF info
                 swf: fake_movie.clone(),
@@ -1956,17 +1884,11 @@ impl PlayerBuilder {
     }
 }
 
-impl Default for PlayerBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[derive(Collect)]
 #[collect(no_drop)]
-pub struct DragObject<'gc> {
+pub struct DragObject<'gc, B: Backend> {
     /// The display object being dragged.
-    pub display_object: DisplayObject<'gc>,
+    pub display_object: DisplayObject<'gc, B>,
 
     /// The offset from the mouse position to the center of the clip.
     #[collect(require_static)]

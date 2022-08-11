@@ -6,27 +6,23 @@ use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{activation::Activation, AvmString};
 use crate::avm1::{Object, ScriptObject, TObject, Value};
 use gc_arena::MutationContext;
-
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "call" => method(call; DONT_ENUM | DONT_DELETE);
-    "apply" => method(apply; DONT_ENUM | DONT_DELETE);
-};
+use ruffle_types::backend::Backend;
 
 /// Implements `new Function()`
-pub fn constructor<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(this.into())
 }
 
 /// Implements `Function()`
-pub fn function<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn function<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(arg) = args.get(0) {
         Ok(arg.to_owned())
     } else {
@@ -36,11 +32,11 @@ pub fn function<'gc>(
 }
 
 /// Implements `Function.prototype.call`
-pub fn call<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    func: Object<'gc>,
-    myargs: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn call<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    func: Object<'gc, B>,
+    myargs: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let this = match myargs.get(0).unwrap_or(&Value::Undefined) {
         Value::Undefined | Value::Null => activation.context.avm1.globals,
         this_val => this_val.coerce_to_object(activation),
@@ -67,11 +63,11 @@ pub fn call<'gc>(
 }
 
 /// Implements `Function.prototype.apply`
-pub fn apply<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    func: Object<'gc>,
-    myargs: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn apply<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    func: Object<'gc, B>,
+    myargs: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let this = match myargs.get(0).unwrap_or(&Value::Undefined) {
         Value::Undefined | Value::Null => activation.context.avm1.globals,
         this_val => this_val.coerce_to_object(activation),
@@ -116,9 +112,18 @@ pub fn apply<'gc>(
 /// them in order to obtain a valid ECMAScript `Function` prototype. The
 /// returned object is also a bare object, which will need to be linked into
 /// the prototype of `Object`.
-pub fn create_proto<'gc>(gc_context: MutationContext<'gc, '_>, proto: Object<'gc>) -> Object<'gc> {
+pub fn create_proto<'gc, B: Backend>(
+    gc_context: MutationContext<'gc, '_>,
+    proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let function_proto = ScriptObject::object_cell(gc_context, Some(proto));
     let object = function_proto.as_script_object().unwrap();
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "call" => method(call; DONT_ENUM | DONT_DELETE);
+        "apply" => method(apply; DONT_ENUM | DONT_DELETE);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, function_proto);
+
     function_proto
 }

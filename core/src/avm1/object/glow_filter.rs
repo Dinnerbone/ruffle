@@ -3,18 +3,19 @@ use crate::avm1::{Object, ScriptObject, TObject};
 use crate::impl_custom_object;
 use gc_arena::{Collect, GcCell, MutationContext};
 
+use ruffle_types::backend::Backend;
 use std::fmt;
 
 /// A GlowFilter
 #[derive(Clone, Copy, Collect)]
 #[collect(no_drop)]
-pub struct GlowFilterObject<'gc>(GcCell<'gc, GlowFilterData<'gc>>);
+pub struct GlowFilterObject<'gc, B: Backend>(GcCell<'gc, GlowFilterData<'gc, B>>);
 
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct GlowFilterData<'gc> {
+pub struct GlowFilterData<'gc, B: Backend> {
     /// The underlying script object.
-    base: ScriptObject<'gc>,
+    base: ScriptObject<'gc, B>,
 
     alpha: f64,
     blur_x: f64,
@@ -26,7 +27,7 @@ pub struct GlowFilterData<'gc> {
     strength: f64,
 }
 
-impl fmt::Debug for GlowFilterObject<'_> {
+impl<B: Backend> fmt::Debug for GlowFilterObject<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let this = self.0.read();
         f.debug_struct("GlowFilter")
@@ -42,7 +43,7 @@ impl fmt::Debug for GlowFilterObject<'_> {
     }
 }
 
-impl<'gc> GlowFilterObject<'gc> {
+impl<'gc, B: Backend> GlowFilterObject<'gc, B> {
     add_field_accessors!(
         [set_alpha, alpha, alpha, f64],
         [set_blur_x, blur_x, blur_x, f64],
@@ -54,7 +55,10 @@ impl<'gc> GlowFilterObject<'gc> {
         [set_strength, strength, strength, f64],
     );
 
-    pub fn empty_object(gc_context: MutationContext<'gc, '_>, proto: Option<Object<'gc>>) -> Self {
+    pub fn empty_object(
+        gc_context: MutationContext<'gc, '_>,
+        proto: Option<Object<'gc, B>>,
+    ) -> Self {
         GlowFilterObject(GcCell::allocate(
             gc_context,
             GlowFilterData {
@@ -72,8 +76,10 @@ impl<'gc> GlowFilterObject<'gc> {
     }
 }
 
-impl<'gc> TObject<'gc> for GlowFilterObject<'gc> {
-    impl_custom_object!(base {
+impl<'gc, B: Backend> TObject<'gc> for GlowFilterObject<'gc, B> {
+    type B = B;
+
+    impl_custom_object!(B, base {
         bare_object(as_glow_filter_object -> GlowFilterObject::empty_object);
     });
 }

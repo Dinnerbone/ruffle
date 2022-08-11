@@ -4,6 +4,7 @@ use crate::avm1::{Object, Value};
 use bitflags::bitflags;
 use core::fmt;
 use gc_arena::Collect;
+use ruffle_types::backend::Backend;
 
 bitflags! {
     /// Attributes of properties in the AVM runtime.
@@ -38,15 +39,15 @@ const VERSION_MASKS: [u16; 10] = [
 
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct Property<'gc> {
-    data: Value<'gc>,
-    getter: Option<Object<'gc>>,
-    setter: Option<Object<'gc>>,
+pub struct Property<'gc, B: Backend> {
+    data: Value<'gc, B>,
+    getter: Option<Object<'gc, B>>,
+    setter: Option<Object<'gc, B>>,
     attributes: Attribute,
 }
 
-impl<'gc> Property<'gc> {
-    pub fn new_stored(data: Value<'gc>, attributes: Attribute) -> Self {
+impl<'gc, B: Backend> Property<'gc, B> {
+    pub fn new_stored(data: Value<'gc, B>, attributes: Attribute) -> Self {
         Self {
             data,
             getter: None,
@@ -56,8 +57,8 @@ impl<'gc> Property<'gc> {
     }
 
     pub fn new_virtual(
-        getter: Object<'gc>,
-        setter: Option<Object<'gc>>,
+        getter: Object<'gc, B>,
+        setter: Option<Object<'gc, B>>,
         attributes: Attribute,
     ) -> Self {
         Self {
@@ -68,22 +69,22 @@ impl<'gc> Property<'gc> {
         }
     }
 
-    pub fn data(&self) -> Value<'gc> {
+    pub fn data(&self) -> Value<'gc, B> {
         self.data
     }
 
-    pub fn getter(&self) -> Option<Object<'gc>> {
+    pub fn getter(&self) -> Option<Object<'gc, B>> {
         self.getter
     }
 
-    pub fn setter(&self) -> Option<Object<'gc>> {
+    pub fn setter(&self) -> Option<Object<'gc, B>> {
         self.setter
     }
 
     /// Store data on this property, ignoring virtual setters.
     ///
     /// Read-only properties are not affected.
-    pub fn set_data(&mut self, data: Value<'gc>) {
+    pub fn set_data(&mut self, data: Value<'gc, B>) {
         if self.is_overwritable() {
             self.data = data;
             // Overwriting a property also clears SWF version requirements.
@@ -92,7 +93,7 @@ impl<'gc> Property<'gc> {
     }
 
     /// Make this property virtual by attaching a getter/setter to it.
-    pub fn set_virtual(&mut self, getter: Object<'gc>, setter: Option<Object<'gc>>) {
+    pub fn set_virtual(&mut self, getter: Object<'gc, B>, setter: Option<Object<'gc, B>>) {
         self.getter = Some(getter);
         self.setter = setter;
     }
@@ -134,7 +135,7 @@ impl<'gc> Property<'gc> {
     }
 }
 
-impl fmt::Debug for Property<'_> {
+impl<B: Backend> fmt::Debug for Property<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Property")
             .field("data", &self.data)

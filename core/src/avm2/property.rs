@@ -8,6 +8,7 @@ use crate::avm2::Error;
 use crate::avm2::TranslationUnit;
 use crate::avm2::Value;
 use gc_arena::{Collect, Gc};
+use ruffle_types::backend::Backend;
 
 #[derive(Debug, Collect, Clone, Copy)]
 #[collect(no_drop)]
@@ -33,20 +34,20 @@ pub enum Property {
 /// that allows private types to be referenced.
 #[derive(Debug, Collect, Clone)]
 #[collect(no_drop)]
-pub enum PropertyClass<'gc> {
+pub enum PropertyClass<'gc, B: Backend> {
     /// The type `*` (Multiname::is_any()). This allows
     /// `Value::Undefined`, so it needs to be distinguished
     /// from the `Object` class
     Any,
-    Class(ClassObject<'gc>),
-    Name(Gc<'gc, (Multiname<'gc>, Option<TranslationUnit<'gc>>)>),
+    Class(ClassObject<'gc, B>),
+    Name(Gc<'gc, (Multiname<'gc>, Option<TranslationUnit<'gc, B>>)>),
 }
 
-impl<'gc> PropertyClass<'gc> {
+impl<'gc, B: Backend> PropertyClass<'gc, B> {
     pub fn name(
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         name: Multiname<'gc>,
-        unit: Option<TranslationUnit<'gc>>,
+        unit: Option<TranslationUnit<'gc, B>>,
     ) -> Self {
         PropertyClass::Name(Gc::allocate(activation.context.gc_context, (name, unit)))
     }
@@ -56,9 +57,9 @@ impl<'gc> PropertyClass<'gc> {
     /// to cache a class resolution, and `false` if it was not modified.
     pub fn coerce(
         &mut self,
-        activation: &mut Activation<'_, 'gc, '_>,
-        value: Value<'gc>,
-    ) -> Result<(Value<'gc>, bool), Error> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        value: Value<'gc, B>,
+    ) -> Result<(Value<'gc, B>, bool), Error> {
         let (class, changed) = match self {
             PropertyClass::Class(class) => (Some(*class), false),
             PropertyClass::Name(gc) => {
@@ -123,8 +124,8 @@ impl<'gc> PropertyClass<'gc> {
     }
 }
 
-enum ResolveOutcome<'gc> {
-    Class(ClassObject<'gc>),
+enum ResolveOutcome<'gc, B: Backend> {
+    Class(ClassObject<'gc, B>),
     Any,
     NotFound,
 }
@@ -135,11 +136,11 @@ enum ResolveOutcome<'gc> {
 ///
 /// This is an internal operation used to resolve property type names.
 /// It does not correspond to any opcode or native method.
-fn resolve_class_private<'gc>(
+fn resolve_class_private<'gc, B: Backend>(
     name: &Multiname<'gc>,
-    unit: Option<TranslationUnit<'gc>>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<ResolveOutcome<'gc>, Error> {
+    unit: Option<TranslationUnit<'gc, B>>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<ResolveOutcome<'gc, B>, Error> {
     // A Property may have a type of '*' (which corresponds to 'Multiname::any()')
     // We don't want to perform any coercions in this case - in particular,
     // this means that the property can have a value of `Undefined`.

@@ -5,51 +5,16 @@ use crate::avm1::object::Object;
 use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{ScriptObject, Value};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
-
-const OBJECT_DECLS: &[Declaration] = declare_properties! {
-    "supports64BitProcesses" => property(get_has_64_bit_support);
-    "supports32BitProcesses" => property(get_has_32_bit_support);
-    "isEmbeddedInAcrobat" => property(get_is_acrobat_embedded);
-    "hasTLS" => property(get_has_tls);
-    "cpuArchitecture" => property(get_cpu_architecture);
-    "hasAccessibility" => property(get_has_accessibility);
-    "hasAudio" => property(get_has_audio);
-    "hasAudioEncoder" => property(get_has_audio_encoder);
-    "hasEmbeddedVideo" => property(get_has_embedded_video);
-    "hasIME" => property(get_has_ime);
-    "hasMP3" => property(get_has_mp3);
-    "hasPrinting" => property(get_has_printing);
-    "hasScreenBroadcast" => property(get_has_screen_broadcast);
-    "hasScreenPlayback" => property(get_has_screen_playback);
-    "hasStreamingAudio" => property(get_has_streaming_audio);
-    "hasStreamingVideo" => property(get_has_streaming_video);
-    "hasVideoEncoder" => property(get_has_video_encoder);
-    "isDebugger" => property(get_is_debugger);
-    "avHardwareDisable" => property(get_is_av_hardware_disabled);
-    "localFileReadDisable" => property(get_is_local_file_read_disabled);
-    "windowlessDisable" => property(get_is_windowless_disabled);
-    "language" => property(get_language);
-    "manufacturer" => property(get_manufacturer);
-    "os" => property(get_os_name);
-    "pixelAspectRatio" => property(get_pixel_aspect_ratio);
-    "playerType" => property(get_player_type);
-    "screenColor" => property(get_screen_color);
-    "screenDPI" => property(get_screen_dpi);
-    "screenResolutionX" => property(get_screen_resolution_x);
-    "screenResolutionY" => property(get_screen_resolution_y);
-    "serverString" => property(get_server_string);
-    "version" => property(get_version);
-    "maxLevelIDC" => property(get_max_idc_level);
-};
 
 macro_rules! capabilities_func {
     ($func_name: ident, $capability: expr) => {
-        pub fn $func_name<'gc>(
-            activation: &mut Activation<'_, 'gc, '_>,
-            _this: Object<'gc>,
-            _args: &[Value<'gc>],
-        ) -> Result<Value<'gc>, Error<'gc>> {
+        pub fn $func_name<'gc, B: Backend>(
+            activation: &mut Activation<'_, 'gc, '_, B>,
+            _this: Object<'gc, B>,
+            _args: &[Value<'gc, B>],
+        ) -> Result<Value<'gc, B>, Error<'gc, B>> {
             Ok(activation.context.system.has_capability($capability).into())
         }
     };
@@ -57,11 +22,11 @@ macro_rules! capabilities_func {
 
 macro_rules! inverse_capabilities_func {
     ($func_name: ident, $capability: expr) => {
-        pub fn $func_name<'gc>(
-            activation: &mut Activation<'_, 'gc, '_>,
-            _this: Object<'gc>,
-            _args: &[Value<'gc>],
-        ) -> Result<Value<'gc>, Error<'gc>> {
+        pub fn $func_name<'gc, B: Backend>(
+            activation: &mut Activation<'_, 'gc, '_, B>,
+            _this: Object<'gc, B>,
+            _args: &[Value<'gc, B>],
+        ) -> Result<Value<'gc, B>, Error<'gc, B>> {
             Ok((!activation.context.system.has_capability($capability)).into())
         }
     };
@@ -98,11 +63,11 @@ inverse_capabilities_func!(
 inverse_capabilities_func!(get_is_av_hardware_disabled, SystemCapabilities::AV_HARDWARE);
 inverse_capabilities_func!(get_is_windowless_disabled, SystemCapabilities::WINDOW_LESS);
 
-pub fn get_player_type<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_player_type<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(AvmString::new_utf8(
         activation.context.gc_context,
         activation.context.system.player_type.to_string(),
@@ -110,11 +75,11 @@ pub fn get_player_type<'gc>(
     .into())
 }
 
-pub fn get_screen_color<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_screen_color<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(AvmString::new_utf8(
         activation.context.gc_context,
         activation.context.system.screen_color.to_string(),
@@ -122,11 +87,11 @@ pub fn get_screen_color<'gc>(
     .into())
 }
 
-pub fn get_language<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_language<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(AvmString::new_utf8(
         activation.context.gc_context,
         activation
@@ -138,43 +103,43 @@ pub fn get_language<'gc>(
     .into())
 }
 
-pub fn get_screen_resolution_x<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_screen_resolution_x<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(activation.context.system.screen_resolution.0.into())
 }
 
-pub fn get_screen_resolution_y<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_screen_resolution_y<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(activation.context.system.screen_resolution.1.into())
 }
 
-pub fn get_pixel_aspect_ratio<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_pixel_aspect_ratio<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(activation.context.system.aspect_ratio.into())
 }
 
-pub fn get_screen_dpi<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_screen_dpi<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(activation.context.system.dpi.into())
 }
 
-pub fn get_manufacturer<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_manufacturer<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(AvmString::new_utf8(
         activation.context.gc_context,
         activation
@@ -186,11 +151,11 @@ pub fn get_manufacturer<'gc>(
     .into())
 }
 
-pub fn get_os_name<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_os_name<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(AvmString::new_utf8(
         activation.context.gc_context,
         activation.context.system.os.to_string(),
@@ -198,11 +163,11 @@ pub fn get_os_name<'gc>(
     .into())
 }
 
-pub fn get_version<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_version<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(AvmString::new_utf8(
         activation.context.gc_context,
         activation
@@ -213,11 +178,11 @@ pub fn get_version<'gc>(
     .into())
 }
 
-pub fn get_server_string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_server_string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let server_string = activation
         .context
         .system
@@ -225,11 +190,11 @@ pub fn get_server_string<'gc>(
     Ok(AvmString::new_utf8(activation.context.gc_context, server_string).into())
 }
 
-pub fn get_cpu_architecture<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_cpu_architecture<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(AvmString::new_utf8(
         activation.context.gc_context,
         activation.context.system.cpu_architecture.to_string(),
@@ -237,11 +202,11 @@ pub fn get_cpu_architecture<'gc>(
     .into())
 }
 
-pub fn get_max_idc_level<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_max_idc_level<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(AvmString::new_utf8(
         activation.context.gc_context,
         &activation.context.system.idc_level,
@@ -249,12 +214,49 @@ pub fn get_max_idc_level<'gc>(
     .into())
 }
 
-pub fn create<'gc>(
+pub fn create<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Option<Object<'gc>>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Option<Object<'gc, B>>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let capabilities = ScriptObject::object(gc_context, proto);
+
+    let OBJECT_DECLS: &[Declaration<B>] = declare_properties! {
+        "supports64BitProcesses" => property(get_has_64_bit_support);
+        "supports32BitProcesses" => property(get_has_32_bit_support);
+        "isEmbeddedInAcrobat" => property(get_is_acrobat_embedded);
+        "hasTLS" => property(get_has_tls);
+        "cpuArchitecture" => property(get_cpu_architecture);
+        "hasAccessibility" => property(get_has_accessibility);
+        "hasAudio" => property(get_has_audio);
+        "hasAudioEncoder" => property(get_has_audio_encoder);
+        "hasEmbeddedVideo" => property(get_has_embedded_video);
+        "hasIME" => property(get_has_ime);
+        "hasMP3" => property(get_has_mp3);
+        "hasPrinting" => property(get_has_printing);
+        "hasScreenBroadcast" => property(get_has_screen_broadcast);
+        "hasScreenPlayback" => property(get_has_screen_playback);
+        "hasStreamingAudio" => property(get_has_streaming_audio);
+        "hasStreamingVideo" => property(get_has_streaming_video);
+        "hasVideoEncoder" => property(get_has_video_encoder);
+        "isDebugger" => property(get_is_debugger);
+        "avHardwareDisable" => property(get_is_av_hardware_disabled);
+        "localFileReadDisable" => property(get_is_local_file_read_disabled);
+        "windowlessDisable" => property(get_is_windowless_disabled);
+        "language" => property(get_language);
+        "manufacturer" => property(get_manufacturer);
+        "os" => property(get_os_name);
+        "pixelAspectRatio" => property(get_pixel_aspect_ratio);
+        "playerType" => property(get_player_type);
+        "screenColor" => property(get_screen_color);
+        "screenDPI" => property(get_screen_dpi);
+        "screenResolutionX" => property(get_screen_resolution_x);
+        "screenResolutionY" => property(get_screen_resolution_y);
+        "serverString" => property(get_server_string);
+        "version" => property(get_version);
+        "maxLevelIDC" => property(get_max_idc_level);
+    };
     define_properties_on(OBJECT_DECLS, gc_context, capabilities, fn_proto);
+
     capabilities.into()
 }

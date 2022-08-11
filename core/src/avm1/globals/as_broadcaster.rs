@@ -7,22 +7,23 @@ use crate::avm1::property::Attribute;
 use crate::avm1::property_decl::Declaration;
 use crate::avm1::{Activation, ArrayObject, AvmString, Object, ScriptObject, Value};
 use gc_arena::{Collect, MutationContext};
+use ruffle_types::backend::Backend;
 
-const OBJECT_DECLS: &[Declaration] = declare_properties! {
-    "initialize" => method(initialize; DONT_ENUM | DONT_DELETE);
-    "addListener" => function(add_listener; DONT_ENUM | DONT_DELETE);
-    "removeListener" => function(remove_listener; DONT_ENUM | DONT_DELETE);
-    "broadcastMessage" => function(broadcast_message; DONT_ENUM | DONT_DELETE);
-};
-
-pub fn create<'gc>(
+pub fn create<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Option<Object<'gc>>,
-    fn_proto: Object<'gc>,
-) -> (BroadcasterFunctions<'gc>, Object<'gc>) {
+    proto: Option<Object<'gc, B>>,
+    fn_proto: Object<'gc, B>,
+) -> (BroadcasterFunctions<'gc, B>, Object<'gc, B>) {
     let object = ScriptObject::object(gc_context, proto);
 
-    let define_as_object = |index: usize| -> Object<'gc> {
+    let OBJECT_DECLS: &[Declaration<B>] = declare_properties! {
+        "initialize" => method(initialize; DONT_ENUM | DONT_DELETE);
+        "addListener" => function(add_listener; DONT_ENUM | DONT_DELETE);
+        "removeListener" => function(remove_listener; DONT_ENUM | DONT_DELETE);
+        "broadcastMessage" => function(broadcast_message; DONT_ENUM | DONT_DELETE);
+    };
+
+    let define_as_object = |index: usize| -> Object<'gc, B> {
         match OBJECT_DECLS[index].define_on(gc_context, object, fn_proto) {
             Value::Object(o) => o,
             _ => panic!("expected object for broadcaster function"),
@@ -42,28 +43,28 @@ pub fn create<'gc>(
 
 #[derive(Clone, Collect, Debug, Copy)]
 #[collect(no_drop)]
-pub struct BroadcasterFunctions<'gc> {
-    pub add_listener: Object<'gc>,
-    pub remove_listener: Object<'gc>,
-    pub broadcast_message: Object<'gc>,
+pub struct BroadcasterFunctions<'gc, B: Backend> {
+    pub add_listener: Object<'gc, B>,
+    pub remove_listener: Object<'gc, B>,
+    pub broadcast_message: Object<'gc, B>,
 }
 
-impl<'gc> BroadcasterFunctions<'gc> {
+impl<'gc, B: Backend> BroadcasterFunctions<'gc, B> {
     pub fn initialize(
         self,
         gc_context: MutationContext<'gc, '_>,
-        broadcaster: Object<'gc>,
-        array_proto: Object<'gc>,
+        broadcaster: Object<'gc, B>,
+        array_proto: Object<'gc, B>,
     ) {
         initialize_internal(gc_context, broadcaster, self, array_proto);
     }
 }
 
-pub fn add_listener<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn add_listener<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let new_listener = args.get(0).cloned().unwrap_or(Value::Undefined);
     let listeners = this.get("_listeners", activation)?;
 
@@ -83,11 +84,11 @@ pub fn add_listener<'gc>(
     Ok(true.into())
 }
 
-pub fn remove_listener<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn remove_listener<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let old_listener = args.get(0).cloned().unwrap_or(Value::Undefined);
     let listeners = this.get("_listeners", activation)?;
 
@@ -109,11 +110,11 @@ pub fn remove_listener<'gc>(
     Ok(false.into())
 }
 
-pub fn broadcast_message<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn broadcast_message<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(event_name_value) = args.get(0) {
         let event_name = event_name_value.coerce_to_string(activation)?;
         let call_args = &args[1..];
@@ -124,12 +125,12 @@ pub fn broadcast_message<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn broadcast_internal<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    call_args: &[Value<'gc>],
+pub fn broadcast_internal<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    call_args: &[Value<'gc, B>],
     method_name: AvmString<'gc>,
-) -> Result<bool, Error<'gc>> {
+) -> Result<bool, Error<'gc, B>> {
     let listeners = this.get("_listeners", activation)?;
 
     if let Value::Object(listeners) = listeners {
@@ -153,11 +154,11 @@ pub fn broadcast_internal<'gc>(
     }
 }
 
-pub fn initialize<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn initialize<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(val) = args.get(0) {
         let broadcaster = val.coerce_to_object(activation);
         initialize_internal(
@@ -170,11 +171,11 @@ pub fn initialize<'gc>(
     Ok(Value::Undefined)
 }
 
-fn initialize_internal<'gc>(
+fn initialize_internal<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    broadcaster: Object<'gc>,
-    functions: BroadcasterFunctions<'gc>,
-    array_proto: Object<'gc>,
+    broadcaster: Object<'gc, B>,
+    functions: BroadcasterFunctions<'gc, B>,
+    array_proto: Object<'gc, B>,
 ) {
     broadcaster.define_value(
         gc_context,

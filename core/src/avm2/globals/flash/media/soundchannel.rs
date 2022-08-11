@@ -10,13 +10,14 @@ use crate::avm2::Error;
 use crate::display_object::SoundTransform;
 use crate::display_object::SoundTransformExt;
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 
 /// Implements `flash.media.SoundChannel`'s instance constructor.
-pub fn instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         activation.super_init(this, &[])?;
     }
@@ -25,38 +26,38 @@ pub fn instance_init<'gc>(
 }
 
 /// Implements `flash.media.SoundChannel`'s class constructor.
-pub fn class_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn class_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok(Value::Undefined)
 }
 
 /// Stub `SoundChannel.leftPeak`
-pub fn left_peak<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn left_peak<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Err("Sound.leftPeak is a stub.".into())
 }
 
 /// Stub `SoundChannel.rightPeak`
-pub fn right_peak<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn right_peak<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Err("Sound.rightPeak is a stub.".into())
 }
 
 /// Impl `SoundChannel.position`
-pub fn position<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn position<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(instance) = this.and_then(|this| this.as_sound_channel()) {
         return Ok(instance.position().into());
     }
@@ -64,11 +65,11 @@ pub fn position<'gc>(
 }
 
 /// Implements `soundTransform`'s getter
-pub fn sound_transform<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn sound_transform<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(instance) = this
         .and_then(|this| this.as_sound_channel())
         .and_then(|channel| channel.instance())
@@ -84,11 +85,11 @@ pub fn sound_transform<'gc>(
 }
 
 /// Implements `soundTransform`'s setter
-pub fn set_sound_transform<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn set_sound_transform<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(instance) = this
         .and_then(|this| this.as_sound_channel())
         .and_then(|channel| channel.instance())
@@ -109,11 +110,11 @@ pub fn set_sound_transform<'gc>(
 }
 
 /// Impl `SoundChannel.stop`
-pub fn stop<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn stop<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(instance) = this
         .and_then(|this| this.as_sound_channel())
         .and_then(|channel| channel.instance())
@@ -125,7 +126,7 @@ pub fn stop<'gc>(
 }
 
 /// Construct `SoundChannel`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::package("flash.media"), "SoundChannel"),
         Some(QName::new(Namespace::package("flash.events"), "EventDispatcher").into()),
@@ -139,10 +140,10 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
     write.set_attributes(ClassAttributes::SEALED | ClassAttributes::FINAL);
     write.set_instance_allocator(soundchannel_allocator);
 
-    const PUBLIC_INSTANCE_PROPERTIES: &[(
+    let public_instance_properties: &[(
         &str,
-        Option<NativeMethodImpl>,
-        Option<NativeMethodImpl>,
+        Option<NativeMethodImpl<B>>,
+        Option<NativeMethodImpl<B>>,
     )] = &[
         ("leftPeak", Some(left_peak), None),
         ("rightPeak", Some(right_peak), None),
@@ -153,10 +154,10 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
             Some(set_sound_transform),
         ),
     ];
-    write.define_public_builtin_instance_properties(mc, PUBLIC_INSTANCE_PROPERTIES);
+    write.define_public_builtin_instance_properties(mc, public_instance_properties);
 
-    const PUBLIC_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] = &[("stop", stop)];
-    write.define_public_builtin_instance_methods(mc, PUBLIC_INSTANCE_METHODS);
+    let public_instance_methods: &[(&str, NativeMethodImpl<B>)] = &[("stop", stop)];
+    write.define_public_builtin_instance_methods(mc, public_instance_methods);
 
     class
 }

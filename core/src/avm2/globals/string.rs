@@ -9,16 +9,18 @@ use crate::avm2::regexp::RegExpFlags;
 use crate::avm2::value::Value;
 use crate::avm2::Error;
 use crate::avm2::{ArrayObject, ArrayStorage};
+use crate::external::ExternalInterfaceMethod;
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::{AvmString, WString};
 use std::iter;
 
 /// Implements `String`'s instance initializer.
-pub fn instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         activation.super_init(this, &[])?;
 
@@ -37,20 +39,20 @@ pub fn instance_init<'gc>(
 }
 
 /// Implements `String`'s class initializer.
-pub fn class_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn class_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok(Value::Undefined)
 }
 
 /// Implements `length` property's getter
-fn length<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn length<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Value::String(s) = this.value_of(activation.context.gc_context)? {
             return Ok(s.len().into());
@@ -61,11 +63,11 @@ fn length<'gc>(
 }
 
 /// Implements `String.charAt`
-fn char_at<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn char_at<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Value::String(s) = this.value_of(activation.context.gc_context)? {
             // This function takes Number, so if we use coerce_to_i32 instead of coerce_to_number, the value may overflow.
@@ -91,11 +93,11 @@ fn char_at<'gc>(
 }
 
 /// Implements `String.charCodeAt`
-fn char_code_at<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn char_code_at<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Value::String(s) = this.value_of(activation.context.gc_context)? {
             // This function takes Number, so if we use coerce_to_i32 instead of coerce_to_number, the value may overflow.
@@ -117,11 +119,11 @@ fn char_code_at<'gc>(
 }
 
 /// Implements `String.concat`
-fn concat<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn concat<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let mut ret = WString::from(Value::from(this).coerce_to_string(activation)?.as_wstr());
         for arg in args {
@@ -135,11 +137,11 @@ fn concat<'gc>(
 }
 
 /// Implements `String.fromCharCode`
-fn from_char_code<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn from_char_code<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let mut out = WString::with_capacity(args.len(), false);
     for arg in args {
         let i = arg.coerce_to_u32(activation)? as u16;
@@ -153,11 +155,11 @@ fn from_char_code<'gc>(
 }
 
 /// Implements `String.indexOf`
-fn index_of<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn index_of<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let this = Value::from(this).coerce_to_string(activation)?;
         let pattern = match args.get(0) {
@@ -181,11 +183,11 @@ fn index_of<'gc>(
 }
 
 /// Implements `String.lastIndexOf`
-fn last_index_of<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn last_index_of<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let this = Value::from(this).coerce_to_string(activation)?;
         let pattern = match args.get(0) {
@@ -213,11 +215,11 @@ fn last_index_of<'gc>(
 }
 
 /// Implements `String.match`
-fn match_s<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn match_s<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let (Some(this), pattern) = (this, args.get(0).unwrap_or(&Value::Undefined)) {
         let this = Value::from(this).coerce_to_string(activation)?;
 
@@ -280,11 +282,11 @@ fn match_s<'gc>(
 }
 
 /// Implements `String.replace`
-fn replace<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn replace<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let this = Value::from(this).coerce_to_string(activation)?;
         let pattern = args.get(0).unwrap_or(&Value::Undefined);
@@ -327,11 +329,11 @@ fn replace<'gc>(
 }
 
 /// Implements `String.slice`
-fn slice<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn slice<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let this = Value::from(this).coerce_to_string(activation)?;
         let start_index = match args.get(0) {
@@ -359,11 +361,11 @@ fn slice<'gc>(
 }
 
 /// Implements `String.split`
-fn split<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn split<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let delimiter = args.get(0).unwrap_or(&Value::Undefined);
         if matches!(delimiter, Value::Undefined) {
@@ -419,11 +421,11 @@ fn split<'gc>(
 }
 
 /// Implements `String.substr`
-fn substr<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn substr<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let this_val = Value::from(this);
         let this = this_val.coerce_to_string(activation)?;
@@ -458,11 +460,11 @@ fn substr<'gc>(
 }
 
 /// Implements `String.substring`
-fn substring<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn substring<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let this_val = Value::from(this);
         let this = this_val.coerce_to_string(activation)?;
@@ -497,7 +499,7 @@ fn substring<'gc>(
 }
 
 /// Construct `String`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::public(), "String"),
         Some(QName::new(Namespace::public(), "Object").into()),
@@ -510,14 +512,14 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
     write.set_attributes(ClassAttributes::FINAL | ClassAttributes::SEALED);
     write.set_instance_allocator(primitive_allocator);
 
-    const PUBLIC_INSTANCE_PROPERTIES: &[(
+    let PUBLIC_INSTANCE_PROPERTIES: &[(
         &str,
-        Option<NativeMethodImpl>,
-        Option<NativeMethodImpl>,
+        Option<NativeMethodImpl<B>>,
+        Option<NativeMethodImpl<B>>,
     )] = &[("length", Some(length), None)];
     write.define_public_builtin_instance_properties(mc, PUBLIC_INSTANCE_PROPERTIES);
 
-    const AS3_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] = &[
+    let AS3_INSTANCE_METHODS: &[(&str, NativeMethodImpl<B>)] = &[
         ("charAt", char_at),
         ("charCodeAt", char_code_at),
         ("concat", concat),
@@ -532,8 +534,8 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
     ];
     write.define_as3_builtin_instance_methods(mc, AS3_INSTANCE_METHODS);
 
-    const AS3_CLASS_METHODS: &[(&str, NativeMethodImpl)] = &[("fromCharCode", from_char_code)];
-    const PUBLIC_CLASS_METHODS: &[(&str, NativeMethodImpl)] = &[("fromCharCode", from_char_code)];
+    let AS3_CLASS_METHODS: &[(&str, NativeMethodImpl<B>)] = &[("fromCharCode", from_char_code)];
+    let PUBLIC_CLASS_METHODS: &[(&str, NativeMethodImpl<B>)] = &[("fromCharCode", from_char_code)];
     write.define_as3_builtin_class_methods(mc, AS3_CLASS_METHODS);
     write.define_public_builtin_class_methods(mc, PUBLIC_CLASS_METHODS);
 

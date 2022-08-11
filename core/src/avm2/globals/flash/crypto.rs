@@ -3,13 +3,14 @@
 use crate::avm2::object::TObject;
 use crate::avm2::{Activation, Error, Object, Value};
 use rand::{rngs::OsRng, RngCore};
+use ruffle_types::backend::Backend;
 
 /// Implements `flash.crypto.generateRandomBytes`
-pub fn generate_random_bytes<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn generate_random_bytes<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let length = args
         .get(0)
         .unwrap_or(&Value::Undefined)

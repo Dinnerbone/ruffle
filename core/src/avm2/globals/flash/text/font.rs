@@ -9,14 +9,15 @@ use crate::avm2::value::Value;
 use crate::avm2::Error;
 use crate::character::Character;
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 
 /// Implements `flash.text.Font`'s instance constructor.
-pub fn instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         activation.super_init(this, &[])?;
     }
@@ -25,20 +26,20 @@ pub fn instance_init<'gc>(
 }
 
 /// Implements `flash.text.Font`'s class constructor.
-pub fn class_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn class_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok(Value::Undefined)
 }
 
 /// Implements `Font.fontName`
-pub fn font_name<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn font_name<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some((movie, character_id)) = this.and_then(|this| this.instance_of()).and_then(|this| {
         activation
             .context
@@ -64,11 +65,11 @@ pub fn font_name<'gc>(
 }
 
 /// Implements `Font.fontStyle`
-pub fn font_style<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn font_style<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some((movie, character_id)) = this.and_then(|this| this.instance_of()).and_then(|this| {
         activation
             .context
@@ -95,11 +96,11 @@ pub fn font_style<'gc>(
 }
 
 /// Implements `Font.fontType`
-pub fn font_type<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn font_type<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some((movie, character_id)) = this.and_then(|this| this.instance_of()).and_then(|this| {
         activation
             .context
@@ -122,11 +123,11 @@ pub fn font_type<'gc>(
 }
 
 /// Implements `Font.hasGlyphs`
-pub fn has_glyphs<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn has_glyphs<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some((movie, character_id)) = this.and_then(|this| this.instance_of()).and_then(|this| {
         activation
             .context
@@ -154,25 +155,25 @@ pub fn has_glyphs<'gc>(
 }
 
 /// Stub `Font.enumerateFonts`
-pub fn enumerate_fonts<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn enumerate_fonts<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Err("Font.enumerateFonts is a stub".into())
 }
 
 /// Stub `Font.registerFont`
-pub fn register_font<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn register_font<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Err("Font.registerFont is a stub".into())
 }
 
 /// Construct `Font`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::package("flash.text"), "Font"),
         Some(QName::new(Namespace::package(""), "Object").into()),
@@ -185,25 +186,25 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
 
     write.set_attributes(ClassAttributes::SEALED);
 
-    const PUBLIC_INSTANCE_PROPERTIES: &[(
+    let public_instance_properties: &[(
         &str,
-        Option<NativeMethodImpl>,
-        Option<NativeMethodImpl>,
+        Option<NativeMethodImpl<B>>,
+        Option<NativeMethodImpl<B>>,
     )] = &[
         ("fontName", Some(font_name), None),
         ("fontStyle", Some(font_style), None),
         ("fontType", Some(font_type), None),
     ];
-    write.define_public_builtin_instance_properties(mc, PUBLIC_INSTANCE_PROPERTIES);
+    write.define_public_builtin_instance_properties(mc, public_instance_properties);
 
-    const PUBLIC_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] = &[("hasGlyphs", has_glyphs)];
-    write.define_public_builtin_instance_methods(mc, PUBLIC_INSTANCE_METHODS);
+    let public_instance_methods: &[(&str, NativeMethodImpl<B>)] = &[("hasGlyphs", has_glyphs)];
+    write.define_public_builtin_instance_methods(mc, public_instance_methods);
 
-    const PUBLIC_CLASS_METHODS: &[(&str, NativeMethodImpl)] = &[
+    let public_class_methods: &[(&str, NativeMethodImpl<B>)] = &[
         ("enumerateFonts", enumerate_fonts),
         ("registerFont", register_font),
     ];
-    write.define_public_builtin_class_methods(mc, PUBLIC_CLASS_METHODS);
+    write.define_public_builtin_class_methods(mc, public_class_methods);
 
     class
 }

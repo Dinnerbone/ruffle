@@ -6,26 +6,21 @@ use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{Object, ScriptObject, Value};
 use crate::external::{Callback, Value as ExternalValue};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 
-const OBJECT_DECLS: &[Declaration] = declare_properties! {
-    "available" => property(get_available; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "addCallback" => method(add_callback; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "call" => method(call; DONT_ENUM | DONT_DELETE | READ_ONLY);
-};
-
-pub fn get_available<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_available<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(activation.context.external_interface.available().into())
 }
 
-pub fn add_callback<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn add_callback<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if args.len() < 3 {
         return Ok(false.into());
     }
@@ -48,11 +43,11 @@ pub fn add_callback<'gc>(
     }
 }
 
-pub fn call<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn call<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if args.is_empty() {
         return Ok(Value::Null);
     }
@@ -75,17 +70,27 @@ pub fn call<'gc>(
     }
 }
 
-pub fn create_external_interface_object<'gc>(
+pub fn create_external_interface_object<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let object = ScriptObject::object(gc_context, Some(proto));
+
+    let OBJECT_DECLS: &[Declaration<B>] = declare_properties! {
+        "available" => property(get_available; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "addCallback" => method(add_callback; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "call" => method(call; DONT_ENUM | DONT_DELETE | READ_ONLY);
+    };
     define_properties_on(OBJECT_DECLS, gc_context, object, fn_proto);
+
     object.into()
 }
 
-pub fn create_proto<'gc>(gc_context: MutationContext<'gc, '_>, proto: Object<'gc>) -> Object<'gc> {
+pub fn create_proto<'gc, B: Backend>(
+    gc_context: MutationContext<'gc, '_>,
+    proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     // It's a custom prototype but it's empty.
     ScriptObject::object(gc_context, Some(proto)).into()
 }

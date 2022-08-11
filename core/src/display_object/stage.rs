@@ -21,6 +21,7 @@ use crate::display_object::{
 use crate::events::{ClipEvent, ClipEventResult};
 use crate::prelude::*;
 use gc_arena::{Collect, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::display_object::stage::{
     StageAlign, StageDisplayState, StageQuality, StageScaleMode, WindowMode,
 };
@@ -32,22 +33,22 @@ use std::cell::{Ref, RefMut};
 /// levels as well as AVM2 movies.
 #[derive(Clone, Debug, Collect, Copy)]
 #[collect(no_drop)]
-pub struct Stage<'gc>(GcCell<'gc, StageData<'gc>>);
+pub struct Stage<'gc, B: Backend>(GcCell<'gc, StageData<'gc, B>>);
 
 #[derive(Clone, Debug, Collect)]
 #[collect(no_drop)]
-pub struct StageData<'gc> {
+pub struct StageData<'gc, B: Backend> {
     /// Base properties for interactive display objects.
     ///
     /// This particular base has additional constraints currently not
     /// expressable by the type system. Notably, this should never have a
     /// parent, as the stage does not respect it.
-    base: InteractiveObjectBase<'gc>,
+    base: InteractiveObjectBase<'gc, B>,
 
     /// The list of all children of the stage.
     ///
     /// Stage children are exposed to AVM1 as `_level*n*` on all stage objects.
-    child: ChildContainer<'gc>,
+    child: ChildContainer<'gc, B>,
 
     /// The stage background.
     ///
@@ -105,19 +106,19 @@ pub struct StageData<'gc> {
     show_menu: bool,
 
     /// The AVM2 view of this stage object.
-    avm2_object: Avm2Object<'gc>,
+    avm2_object: Avm2Object<'gc, B>,
 
     /// The AVM2 'LoaderInfo' object for this stage object
-    loader_info: Avm2Object<'gc>,
+    loader_info: Avm2Object<'gc, B>,
 }
 
-impl<'gc> Stage<'gc> {
+impl<'gc, B: Backend> Stage<'gc, B> {
     pub fn empty(
         gc_context: MutationContext<'gc, '_>,
         width: u32,
         height: u32,
         fullscreen: bool,
-    ) -> Stage<'gc> {
+    ) -> Stage<'gc, B> {
         let stage = Self(GcCell::allocate(
             gc_context,
             StageData {
@@ -226,7 +227,7 @@ impl<'gc> Stage<'gc> {
     /// Set the stage scale mode.
     pub fn set_scale_mode(
         self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         scale_mode: StageScaleMode,
     ) {
         self.0.write(context.gc_context).scale_mode = scale_mode;
@@ -251,7 +252,7 @@ impl<'gc> Stage<'gc> {
     }
 
     /// Toggles display state between fullscreen and normal
-    pub fn toggle_display_state(self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    pub fn toggle_display_state(self, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         if self.is_fullscreen() {
             self.set_display_state(context, StageDisplayState::Normal);
         } else {
@@ -262,7 +263,7 @@ impl<'gc> Stage<'gc> {
     /// Set the stage display state.
     pub fn set_display_state(
         self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         display_state: StageDisplayState,
     ) {
         if display_state == self.display_state()
@@ -292,7 +293,7 @@ impl<'gc> Stage<'gc> {
 
     /// Set the stage alignment.
     /// This only has an effect if the scale mode is not `StageScaleMode::ExactFit`.
-    pub fn set_align(self, context: &mut UpdateContext<'_, 'gc, '_>, align: StageAlign) {
+    pub fn set_align(self, context: &mut UpdateContext<'_, 'gc, '_, B>, align: StageAlign) {
         self.0.write(context.gc_context).align = align;
         self.build_matrices(context);
     }
@@ -326,7 +327,7 @@ impl<'gc> Stage<'gc> {
     /// is the number of device pixels needed to make one standard scale pixel.
     pub fn set_viewport_size(
         self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         width: u32,
         height: u32,
         scale_factor: f64,
@@ -349,7 +350,7 @@ impl<'gc> Stage<'gc> {
     /// Sets the window mode.
     pub fn set_window_mode(
         self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         window_mode: WindowMode,
     ) {
         self.0.write(context.gc_context).window_mode = window_mode;
@@ -363,7 +364,7 @@ impl<'gc> Stage<'gc> {
         self.0.read().show_menu
     }
 
-    pub fn set_show_menu(self, context: &mut UpdateContext<'_, 'gc, '_>, show_menu: bool) {
+    pub fn set_show_menu(self, context: &mut UpdateContext<'_, 'gc, '_, B>, show_menu: bool) {
         let mut write = self.0.write(context.gc_context);
         write.show_menu = show_menu;
     }
@@ -382,7 +383,7 @@ impl<'gc> Stage<'gc> {
     }
 
     /// Update the stage's transform matrix in response to a root movie change.
-    pub fn build_matrices(self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    pub fn build_matrices(self, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         let mut stage = self.0.write(context.gc_context);
         let scale_mode = stage.scale_mode;
         let align = stage.align;
@@ -500,7 +501,7 @@ impl<'gc> Stage<'gc> {
     }
 
     /// Draw the stage's letterbox.
-    fn draw_letterbox(&self, context: &mut RenderContext<'_, 'gc>) {
+    fn draw_letterbox(&self, context: &mut RenderContext<'_, 'gc, B>) {
         let (viewport_width, viewport_height) = self.0.read().viewport_size;
         let viewport_width = viewport_width as f32;
         let viewport_height = viewport_height as f32;
@@ -576,13 +577,13 @@ impl<'gc> Stage<'gc> {
     /// Obtain the root movie on the stage.
     ///
     /// `Stage` guarantees that there is always a movie clip at depth 0.
-    pub fn root_clip(self) -> DisplayObject<'gc> {
+    pub fn root_clip(self) -> DisplayObject<'gc, B> {
         self.child_by_depth(0)
             .expect("Stage must always have a root movie")
     }
 
     /// Fires `Stage.onResize` in AVM1 or `Event.RESIZE` in AVM2.
-    fn fire_resize_event(self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn fire_resize_event(self, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         // This event fires immediately when scaleMode is changed;
         // it doesn't queue up.
         let library = context.library.library_for_movie_mut(context.swf.clone());
@@ -603,7 +604,7 @@ impl<'gc> Stage<'gc> {
     }
 
     /// Fires `Stage.onFullScreen` in AVM1 or `Event.FULLSCREEN` in AVM2.
-    pub fn fire_fullscreen_event(self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    pub fn fire_fullscreen_event(self, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         let library = context.library.library_for_movie_mut(context.swf.clone());
         if library.avm_type() == AvmType::Avm1 {
             crate::avm1::Avm1::notify_system_listeners(
@@ -636,16 +637,21 @@ impl<'gc> Stage<'gc> {
     }
 }
 
-impl<'gc> TDisplayObject<'gc> for Stage<'gc> {
-    fn base(&self) -> Ref<DisplayObjectBase<'gc>> {
+impl<'gc, B: Backend> TDisplayObject<'gc> for Stage<'gc, B> {
+    type B = B;
+
+    fn base(&self) -> Ref<DisplayObjectBase<'gc, B>> {
         Ref::map(self.0.read(), |r| &r.base.base)
     }
 
-    fn base_mut<'a>(&'a self, mc: MutationContext<'gc, '_>) -> RefMut<'a, DisplayObjectBase<'gc>> {
+    fn base_mut<'a>(
+        &'a self,
+        mc: MutationContext<'gc, '_>,
+    ) -> RefMut<'a, DisplayObjectBase<'gc, B>> {
         RefMut::map(self.0.write(mc), |w| &mut w.base.base)
     }
 
-    fn instantiate(&self, gc_context: MutationContext<'gc, '_>) -> DisplayObject<'gc> {
+    fn instantiate(&self, gc_context: MutationContext<'gc, '_>) -> DisplayObject<'gc, B> {
         Self(GcCell::allocate(gc_context, self.0.read().clone())).into()
     }
 
@@ -660,8 +666,8 @@ impl<'gc> TDisplayObject<'gc> for Stage<'gc> {
 
     fn post_instantiation(
         &self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        _init_object: Option<Avm1Object<'gc>>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        _init_object: Option<Avm1Object<'gc, B>>,
         _instantiated_by: Instantiator,
         _run_frame: bool,
     ) {
@@ -698,23 +704,23 @@ impl<'gc> TDisplayObject<'gc> for Stage<'gc> {
         Default::default()
     }
 
-    fn as_container(self) -> Option<DisplayObjectContainer<'gc>> {
+    fn as_container(self) -> Option<DisplayObjectContainer<'gc, B>> {
         Some(self.into())
     }
 
-    fn as_interactive(self) -> Option<InteractiveObject<'gc>> {
+    fn as_interactive(self) -> Option<InteractiveObject<'gc, B>> {
         Some(self.into())
     }
 
-    fn as_stage(&self) -> Option<Stage<'gc>> {
+    fn as_stage(&self) -> Option<Stage<'gc, B>> {
         Some(*self)
     }
 
-    fn render_self(&self, context: &mut RenderContext<'_, 'gc>) {
+    fn render_self(&self, context: &mut RenderContext<'_, 'gc, B>) {
         self.render_children(context);
     }
 
-    fn render(&self, context: &mut RenderContext<'_, 'gc>) {
+    fn render(&self, context: &mut RenderContext<'_, 'gc, B>) {
         let background_color =
             if self.window_mode() != WindowMode::Transparent || self.is_fullscreen() {
                 self.background_color().unwrap_or(Color::WHITE)
@@ -733,46 +739,50 @@ impl<'gc> TDisplayObject<'gc> for Stage<'gc> {
         context.renderer.end_frame();
     }
 
-    fn construct_frame(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn construct_frame(&self, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         for child in self.iter_render_list() {
             child.construct_frame(context);
         }
     }
 
-    fn object2(&self) -> Avm2Value<'gc> {
+    fn object2(&self) -> Avm2Value<'gc, B> {
         self.0.read().avm2_object.into()
     }
 
-    fn loader_info(&self) -> Option<Avm2Object<'gc>> {
+    fn loader_info(&self) -> Option<Avm2Object<'gc, B>> {
         Some(self.0.read().loader_info)
     }
 }
 
-impl<'gc> TDisplayObjectContainer<'gc> for Stage<'gc> {
+impl<'gc, B: Backend> TDisplayObjectContainer<'gc> for Stage<'gc, B> {
+    type B = B;
+
     impl_display_object_container!(child);
 }
 
-impl<'gc> TInteractiveObject<'gc> for Stage<'gc> {
-    fn ibase(&self) -> Ref<InteractiveObjectBase<'gc>> {
+impl<'gc, B: Backend> TInteractiveObject<'gc> for Stage<'gc, B> {
+    type B = B;
+
+    fn ibase(&self) -> Ref<InteractiveObjectBase<'gc, B>> {
         Ref::map(self.0.read(), |r| &r.base)
     }
 
-    fn ibase_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<InteractiveObjectBase<'gc>> {
+    fn ibase_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<InteractiveObjectBase<'gc, B>> {
         RefMut::map(self.0.write(mc), |w| &mut w.base)
     }
 
-    fn as_displayobject(self) -> DisplayObject<'gc> {
+    fn as_displayobject(self) -> DisplayObject<'gc, B> {
         self.into()
     }
 
-    fn filter_clip_event(self, _event: ClipEvent) -> ClipEventResult {
+    fn filter_clip_event(self, _event: ClipEvent<B>) -> ClipEventResult {
         ClipEventResult::Handled
     }
 
     fn event_dispatch(
         self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        event: ClipEvent<'gc>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        event: ClipEvent<'gc, B>,
     ) -> ClipEventResult {
         self.event_dispatch_to_avm2(context, event);
 

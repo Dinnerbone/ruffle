@@ -5,21 +5,13 @@ use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{Object, ScriptObject, TDisplayObject, TObject, Value};
 use crate::display_object::{EditText, TextSelection};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 
-const OBJECT_DECLS: &[Declaration] = declare_properties! {
-    "getBeginIndex" => method(get_begin_index; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "getEndIndex" => method(get_end_index; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "getCaretIndex" => method(get_caret_index; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "setSelection" => method(set_selection; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "setFocus" => method(set_focus; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "getFocus" => method(get_focus; DONT_ENUM | DONT_DELETE | READ_ONLY);
-};
-
-pub fn get_begin_index<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_begin_index<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(selection) = activation
         .context
         .focus_tracker
@@ -33,11 +25,11 @@ pub fn get_begin_index<'gc>(
     }
 }
 
-pub fn get_end_index<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_end_index<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(selection) = activation
         .context
         .focus_tracker
@@ -51,11 +43,11 @@ pub fn get_end_index<'gc>(
     }
 }
 
-pub fn get_caret_index<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_caret_index<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(selection) = activation
         .context
         .focus_tracker
@@ -69,11 +61,11 @@ pub fn get_caret_index<'gc>(
     }
 }
 
-pub fn set_selection<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_selection<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if args.is_empty() {
         return Ok(Value::Undefined);
     }
@@ -102,11 +94,11 @@ pub fn set_selection<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn get_focus<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_focus<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let focus = activation.context.focus_tracker.get();
     match focus {
         Some(focus) => Ok(focus.object()),
@@ -114,11 +106,11 @@ pub fn get_focus<'gc>(
     }
 }
 
-pub fn set_focus<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_focus<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let tracker = activation.context.focus_tracker;
     match args.get(0) {
         Some(Value::Undefined | Value::Null) => {
@@ -141,20 +133,33 @@ pub fn set_focus<'gc>(
     }
 }
 
-pub fn create_selection_object<'gc>(
+pub fn create_selection_object<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-    broadcaster_functions: BroadcasterFunctions<'gc>,
-    array_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+    broadcaster_functions: BroadcasterFunctions<'gc, B>,
+    array_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let object = ScriptObject::object(gc_context, Some(proto));
     broadcaster_functions.initialize(gc_context, object.into(), array_proto);
+
+    let OBJECT_DECLS: &[Declaration<B>] = declare_properties! {
+        "getBeginIndex" => method(get_begin_index; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "getEndIndex" => method(get_end_index; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "getCaretIndex" => method(get_caret_index; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "setSelection" => method(set_selection; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "setFocus" => method(set_focus; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "getFocus" => method(get_focus; DONT_ENUM | DONT_DELETE | READ_ONLY);
+    };
     define_properties_on(OBJECT_DECLS, gc_context, object, fn_proto);
+
     object.into()
 }
 
-pub fn create_proto<'gc>(gc_context: MutationContext<'gc, '_>, proto: Object<'gc>) -> Object<'gc> {
+pub fn create_proto<'gc, B: Backend>(
+    gc_context: MutationContext<'gc, '_>,
+    proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     // It's a custom prototype but it's empty.
     ScriptObject::object(gc_context, Some(proto)).into()
 }

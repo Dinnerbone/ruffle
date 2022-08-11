@@ -12,13 +12,14 @@ use crate::avm2::object::TObject;
 use crate::avm2::{Activation as Avm2Activation, Object as Avm2Object};
 use crate::context::UpdateContext;
 use gc_arena::Collect;
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 use std::collections::{binary_heap::PeekMut, BinaryHeap};
 
 /// Manages the collection of timers.
-pub struct Timers<'gc> {
+pub struct Timers<'gc, B: Backend> {
     /// The collection of active timers.
-    timers: BinaryHeap<Timer<'gc>>,
+    timers: BinaryHeap<Timer<'gc, B>>,
 
     /// An increasing ID used for created timers.
     timer_counter: i32,
@@ -27,9 +28,9 @@ pub struct Timers<'gc> {
     cur_time: u64,
 }
 
-impl<'gc> Timers<'gc> {
+impl<'gc, B: Backend> Timers<'gc, B> {
     /// Ticks all timers and runs necessary callbacks.
-    pub fn update_timers(context: &mut UpdateContext<'_, 'gc, '_>, dt: f64) -> Option<f64> {
+    pub fn update_timers(context: &mut UpdateContext<'_, 'gc, '_, B>, dt: f64) -> Option<f64> {
         context.timers.cur_time = context
             .timers
             .cur_time
@@ -174,7 +175,7 @@ impl<'gc> Timers<'gc> {
     /// Registers a new timer and returns the timer ID.
     pub fn add_timer(
         &mut self,
-        callback: TimerCallback<'gc>,
+        callback: TimerCallback<'gc, B>,
         interval: i32,
         is_timeout: bool,
     ) -> i32 {
@@ -206,26 +207,26 @@ impl<'gc> Timers<'gc> {
         }
     }
 
-    fn peek(&self) -> Option<&Timer<'gc>> {
+    fn peek(&self) -> Option<&Timer<'gc, B>> {
         self.timers.peek()
     }
 
-    fn peek_mut(&mut self) -> Option<PeekMut<'_, Timer<'gc>>> {
+    fn peek_mut(&mut self) -> Option<PeekMut<'_, Timer<'gc, B>>> {
         self.timers.peek_mut()
     }
 
-    fn pop(&mut self) -> Option<Timer<'gc>> {
+    fn pop(&mut self) -> Option<Timer<'gc, B>> {
         self.timers.pop()
     }
 }
 
-impl Default for Timers<'_> {
+impl<B: Backend> Default for Timers<'_, B> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-unsafe impl<'gc> Collect for Timers<'gc> {
+unsafe impl<'gc, B: Backend> Collect for Timers<'gc, B> {
     fn trace(&self, cc: gc_arena::CollectionContext) {
         for timer in &self.timers {
             timer.trace(cc);
@@ -236,13 +237,13 @@ unsafe impl<'gc> Collect for Timers<'gc> {
 /// Runs a callback when it ticks.
 #[derive(Collect)]
 #[collect(no_drop)]
-pub struct Timer<'gc> {
+pub struct Timer<'gc, B: Backend> {
     /// The ID of the timer.
     id: i32,
 
     /// The callback that this timer runs when it fires.
     /// A callback is either a function object, or a parent object with a method name.
-    callback: TimerCallback<'gc>,
+    callback: TimerCallback<'gc, B>,
 
     /// The time when this timer should fire.
     tick_time: u64,
@@ -258,15 +259,15 @@ pub struct Timer<'gc> {
 }
 
 // Implement `Ord` so that timers can be stored in the BinaryHeap (as a min-heap).
-impl PartialEq for Timer<'_> {
+impl<B: Backend> PartialEq for Timer<'_, B> {
     fn eq(&self, other: &Self) -> bool {
         self.tick_time == other.tick_time
     }
 }
 
-impl Eq for Timer<'_> {}
+impl<B: Backend> Eq for Timer<'_, B> {}
 
-impl PartialOrd for Timer<'_> {
+impl<B: Backend> PartialOrd for Timer<'_, B> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.tick_time
             .partial_cmp(&other.tick_time)
@@ -274,7 +275,7 @@ impl PartialOrd for Timer<'_> {
     }
 }
 
-impl Ord for Timer<'_> {
+impl<B: Backend> Ord for Timer<'_, B> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.tick_time.cmp(&other.tick_time).reverse()
     }
@@ -283,18 +284,18 @@ impl Ord for Timer<'_> {
 /// A callback fired by a `setInterval`/`setTimeout` timer.
 #[derive(Clone, Collect, Debug)]
 #[collect(no_drop)]
-pub enum TimerCallback<'gc> {
+pub enum TimerCallback<'gc, B: Backend> {
     Avm1Function {
-        func: Avm1Object<'gc>,
+        func: Avm1Object<'gc, B>,
         /// The parameters to pass to the callback function.
-        params: Vec<Avm1Value<'gc>>,
+        params: Vec<Avm1Value<'gc, B>>,
     },
 
     Avm1Method {
-        this: Avm1Object<'gc>,
+        this: Avm1Object<'gc, B>,
         method_name: AvmString<'gc>,
-        params: Vec<Avm1Value<'gc>>,
+        params: Vec<Avm1Value<'gc, B>>,
     },
 
-    Avm2Callback(Avm2Object<'gc>),
+    Avm2Callback(Avm2Object<'gc, B>),
 }

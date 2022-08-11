@@ -10,15 +10,16 @@ use crate::context::UpdateContext;
 use crate::display_object::TDisplayObject;
 use crate::display_object::{DisplayObject, InteractiveObject, TInteractiveObject};
 use gc_arena::{Collect, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::events::KeyCode;
 use ruffle_types::string::AvmString;
 use std::cell::{Ref, RefMut};
 
 /// A class instance allocator that allocates Event objects.
-pub fn event_allocator<'gc>(
-    class: ClassObject<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Object<'gc>, Error> {
+pub fn event_allocator<'gc, B: Backend>(
+    class: ClassObject<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Object<'gc, B>, Error> {
     let base = ScriptObjectData::new(class);
 
     Ok(EventObject(GcCell::allocate(
@@ -33,27 +34,27 @@ pub fn event_allocator<'gc>(
 
 #[derive(Clone, Collect, Debug, Copy)]
 #[collect(no_drop)]
-pub struct EventObject<'gc>(GcCell<'gc, EventObjectData<'gc>>);
+pub struct EventObject<'gc, B: Backend>(GcCell<'gc, EventObjectData<'gc, B>>);
 
 #[derive(Clone, Collect, Debug)]
 #[collect(no_drop)]
-pub struct EventObjectData<'gc> {
+pub struct EventObjectData<'gc, B: Backend> {
     /// Base script object
-    base: ScriptObjectData<'gc>,
+    base: ScriptObjectData<'gc, B>,
 
     /// The event this object holds.
-    event: Event<'gc>,
+    event: Event<'gc, B>,
 }
 
-impl<'gc> EventObject<'gc> {
+impl<'gc, B: Backend> EventObject<'gc, B> {
     /// Create a bare Event instance while skipping the usual `construct()` pipeline.
     /// It's just slightly faster and doesn't require an Activation.
     /// This is equivalent to
     /// classes.event.construct(activation, &[event_type, false, false])
     pub fn bare_default_event<S>(
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         event_type: S,
-    ) -> Object<'gc>
+    ) -> Object<'gc, B>
     where
         S: Into<AvmString<'gc>>,
     {
@@ -64,11 +65,11 @@ impl<'gc> EventObject<'gc> {
     /// It's just slightly faster and doesn't require an Activation.
     /// Note that if you need an Event subclass, you need to construct it via .construct().
     pub fn bare_event<S>(
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         event_type: S,
         bubbles: bool,
         cancelable: bool,
-    ) -> Object<'gc>
+    ) -> Object<'gc, B>
     where
         S: Into<AvmString<'gc>>,
     {
@@ -92,12 +93,12 @@ impl<'gc> EventObject<'gc> {
     }
 
     pub fn mouse_event<S>(
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         event_type: S,
-        target: DisplayObject<'gc>,
-        related_object: Option<InteractiveObject<'gc>>,
+        target: DisplayObject<'gc, B>,
+        related_object: Option<InteractiveObject<'gc, B>>,
         delta: i32,
-    ) -> Object<'gc>
+    ) -> Object<'gc, B>
     where
         S: Into<AvmString<'gc>>,
     {
@@ -143,12 +144,14 @@ impl<'gc> EventObject<'gc> {
     }
 }
 
-impl<'gc> TObject<'gc> for EventObject<'gc> {
-    fn base(&self) -> Ref<ScriptObjectData<'gc>> {
+impl<'gc, B: Backend> TObject<'gc> for EventObject<'gc, B> {
+    type B = B;
+
+    fn base(&self) -> Ref<ScriptObjectData<'gc, B>> {
         Ref::map(self.0.read(), |read| &read.base)
     }
 
-    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc>> {
+    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc, B>> {
         RefMut::map(self.0.write(mc), |write| &mut write.base)
     }
 
@@ -156,15 +159,15 @@ impl<'gc> TObject<'gc> for EventObject<'gc> {
         self.0.as_ptr() as *const ObjectPtr
     }
 
-    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc>, Error> {
+    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc, B>, Error> {
         Ok(Value::Object((*self).into()))
     }
 
-    fn as_event(&self) -> Option<Ref<Event<'gc>>> {
+    fn as_event(&self) -> Option<Ref<Event<'gc, B>>> {
         Some(Ref::map(self.0.read(), |d| &d.event))
     }
 
-    fn as_event_mut(&self, mc: MutationContext<'gc, '_>) -> Option<RefMut<Event<'gc>>> {
+    fn as_event_mut(&self, mc: MutationContext<'gc, '_>) -> Option<RefMut<Event<'gc, B>>> {
         Some(RefMut::map(self.0.write(mc), |d| &mut d.event))
     }
 }

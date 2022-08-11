@@ -1,16 +1,17 @@
 use crate::avm1::activation::Activation;
 use crate::avm1::{AvmString, Object, ObjectPtr, TObject, Value};
+use ruffle_types::backend::Backend;
 use std::fmt::Write;
 
 #[allow(dead_code)]
-pub struct VariableDumper<'a> {
+pub struct VariableDumper<'a, B: Backend> {
     objects: Vec<*const ObjectPtr>,
     depth: u32,
     output: String,
     indent: &'a str,
 }
 
-impl<'a> VariableDumper<'a> {
+impl<'a, B: Backend> VariableDumper<'a, B> {
     pub fn new(indent: &'a str) -> Self {
         Self {
             objects: Vec::new(),
@@ -22,9 +23,9 @@ impl<'a> VariableDumper<'a> {
 
     #[allow(dead_code)]
     pub fn dump<'gc>(
-        value: &Value<'gc>,
+        value: &Value<'gc, B>,
         indent: &str,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> String {
         let mut dumper = VariableDumper::new(indent);
         dumper.print_value(value, activation);
@@ -35,7 +36,7 @@ impl<'a> VariableDumper<'a> {
         &self.output
     }
 
-    fn object_id(&mut self, object: &Object) -> (usize, bool) {
+    fn object_id(&mut self, object: &Object<B>) -> (usize, bool) {
         let ptr = object.as_ptr();
 
         for (i, other) in self.objects.iter().enumerate() {
@@ -82,8 +83,8 @@ impl<'a> VariableDumper<'a> {
 
     pub fn print_object<'gc>(
         &mut self,
-        object: &Object<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        object: &Object<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) {
         let (id, new) = self.object_id(object);
         self.output.push_str("[object #");
@@ -97,9 +98,9 @@ impl<'a> VariableDumper<'a> {
 
     pub fn print_property<'gc>(
         &mut self,
-        object: &Object<'gc>,
+        object: &Object<'gc, B>,
         key: AvmString<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) {
         match object.get(key, activation) {
             Ok(value) => {
@@ -115,8 +116,8 @@ impl<'a> VariableDumper<'a> {
 
     pub fn print_properties<'gc>(
         &mut self,
-        object: &Object<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        object: &Object<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) {
         let keys = object.get_keys(activation);
         if keys.is_empty() {
@@ -141,8 +142,8 @@ impl<'a> VariableDumper<'a> {
 
     pub fn print_value<'gc>(
         &mut self,
-        value: &Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        value: &Value<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) {
         match value {
             Value::Undefined => self.output.push_str("undefined"),
@@ -162,8 +163,8 @@ impl<'a> VariableDumper<'a> {
         &mut self,
         header: &str,
         name: &str,
-        object: &Object<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        object: &Object<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) {
         let keys = object.get_keys(activation);
         if keys.is_empty() {

@@ -9,6 +9,7 @@ use crate::avm_warn;
 use crate::context::UpdateContext;
 use crate::display_object::{DisplayObject, EditText, MovieClip, TDisplayObjectContainer};
 use gc_arena::{Collect, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::numbers::Percent;
 use ruffle_types::string::{AvmString, WStr};
 use std::fmt;
@@ -16,29 +17,29 @@ use std::fmt;
 /// A ScriptObject that is inherently tied to a display node.
 #[derive(Clone, Copy, Collect)]
 #[collect(no_drop)]
-pub struct StageObject<'gc>(GcCell<'gc, StageObjectData<'gc>>);
+pub struct StageObject<'gc, B: Backend>(GcCell<'gc, StageObjectData<'gc, B>>);
 
 #[derive(Collect)]
 #[collect(no_drop)]
-pub struct StageObjectData<'gc> {
+pub struct StageObjectData<'gc, B: Backend> {
     /// The underlying script object.
     ///
     /// This is used to handle "expando properties" on AVM1 display nodes, as
     /// well as the underlying prototype chain.
-    base: ScriptObject<'gc>,
+    base: ScriptObject<'gc, B>,
 
     /// The display node this stage object
-    display_object: DisplayObject<'gc>,
+    display_object: DisplayObject<'gc, B>,
 
-    text_field_bindings: Vec<TextFieldBinding<'gc>>,
+    text_field_bindings: Vec<TextFieldBinding<'gc, B>>,
 }
 
-impl<'gc> StageObject<'gc> {
+impl<'gc, B: Backend> StageObject<'gc, B> {
     /// Create a stage object for a given display node.
     pub fn for_display_object(
         gc_context: MutationContext<'gc, '_>,
-        display_object: DisplayObject<'gc>,
-        proto: Option<Object<'gc>>,
+        display_object: DisplayObject<'gc, B>,
+        proto: Option<Object<'gc, B>>,
     ) -> Self {
         Self(GcCell::allocate(
             gc_context,
@@ -55,7 +56,7 @@ impl<'gc> StageObject<'gc> {
     pub fn register_text_field_binding(
         self,
         gc_context: MutationContext<'gc, '_>,
-        text_field: EditText<'gc>,
+        text_field: EditText<'gc, B>,
         variable_name: AvmString<'gc>,
     ) {
         self.0
@@ -73,7 +74,7 @@ impl<'gc> StageObject<'gc> {
     pub fn clear_text_field_binding(
         self,
         gc_context: MutationContext<'gc, '_>,
-        text_field: EditText<'gc>,
+        text_field: EditText<'gc, B>,
     ) {
         self.0
             .write(gc_context)
@@ -83,7 +84,7 @@ impl<'gc> StageObject<'gc> {
 
     /// Clears all text field bindings from this stage object, and places the textfields on the unbound list.
     /// This is called when the object is removed from the stage.
-    pub fn unregister_text_field_bindings(self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    pub fn unregister_text_field_bindings(self, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         for binding in self
             .0
             .write(context.gc_context)
@@ -98,8 +99,8 @@ impl<'gc> StageObject<'gc> {
     fn resolve_path_property(
         self,
         name: AvmString<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Option<Value<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Option<Value<'gc, B>> {
         let case_sensitive = activation.is_case_sensitive();
         if name.eq_with_case(b"_root", case_sensitive) {
             return Some(activation.root_object());
@@ -161,12 +162,12 @@ impl<'gc> StageObject<'gc> {
 /// A binding from a property of this StageObject to an EditText text field.
 #[derive(Collect)]
 #[collect(no_drop)]
-struct TextFieldBinding<'gc> {
-    text_field: EditText<'gc>,
+struct TextFieldBinding<'gc, B: Backend> {
+    text_field: EditText<'gc, B>,
     variable_name: AvmString<'gc>,
 }
 
-impl fmt::Debug for StageObject<'_> {
+impl<B: Backend> fmt::Debug for StageObject<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let o = self.0.read();
         f.debug_struct("StageObject")
@@ -176,12 +177,14 @@ impl fmt::Debug for StageObject<'_> {
     }
 }
 
-impl<'gc> TObject<'gc> for StageObject<'gc> {
+impl<'gc, B: Backend> TObject<'gc> for StageObject<'gc, B> {
+    type B = B;
+
     fn get_local_stored(
         &self,
         name: impl Into<AvmString<'gc>>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Option<Value<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Option<Value<'gc, B>> {
         let name = name.into();
         let obj = self.0.read();
         let props = activation.context.avm1.display_properties;
@@ -222,10 +225,10 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
     fn set_local(
         &self,
         name: AvmString<'gc>,
-        value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-        this: Object<'gc>,
-    ) -> Result<(), Error<'gc>> {
+        value: Value<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+    ) -> Result<(), Error<'gc, B>> {
         let obj = self.0.read();
         let props = activation.context.avm1.display_properties;
 
@@ -264,43 +267,43 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
     fn call(
         &self,
         name: AvmString<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-        this: Value<'gc>,
-        args: &[Value<'gc>],
-    ) -> Result<Value<'gc>, Error<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        this: Value<'gc, B>,
+        args: &[Value<'gc, B>],
+    ) -> Result<Value<'gc, B>, Error<'gc, B>> {
         self.0.read().base.call(name, activation, this, args)
     }
 
     fn getter(
         &self,
         name: AvmString<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Option<Object<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Option<Object<'gc, B>> {
         self.0.read().base.getter(name, activation)
     }
 
     fn setter(
         &self,
         name: AvmString<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Option<Object<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Option<Object<'gc, B>> {
         self.0.read().base.setter(name, activation)
     }
 
     fn create_bare_object(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
-        this: Object<'gc>,
-    ) -> Result<Object<'gc>, Error<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+    ) -> Result<Object<'gc, B>, Error<'gc, B>> {
         //TODO: Create a StageObject of some kind
         self.0.read().base.create_bare_object(activation, this)
     }
 
-    fn delete(&self, activation: &mut Activation<'_, 'gc, '_>, name: AvmString<'gc>) -> bool {
+    fn delete(&self, activation: &mut Activation<'_, 'gc, '_, B>, name: AvmString<'gc>) -> bool {
         self.0.read().base.delete(activation, name)
     }
 
-    fn proto(&self, activation: &mut Activation<'_, 'gc, '_>) -> Value<'gc> {
+    fn proto(&self, activation: &mut Activation<'_, 'gc, '_, B>) -> Value<'gc, B> {
         self.0.read().base.proto(activation)
     }
 
@@ -308,7 +311,7 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         &self,
         gc_context: MutationContext<'gc, '_>,
         name: impl Into<AvmString<'gc>>,
-        value: Value<'gc>,
+        value: Value<'gc, B>,
         attributes: Attribute,
     ) {
         self.0
@@ -336,8 +339,8 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         &self,
         gc_context: MutationContext<'gc, '_>,
         name: AvmString<'gc>,
-        get: Object<'gc>,
-        set: Option<Object<'gc>>,
+        get: Object<'gc, B>,
+        set: Option<Object<'gc, B>>,
         attributes: Attribute,
     ) {
         self.0
@@ -348,10 +351,10 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
 
     fn add_property_with_case(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         name: AvmString<'gc>,
-        get: Object<'gc>,
-        set: Option<Object<'gc>>,
+        get: Object<'gc, B>,
+        set: Option<Object<'gc, B>>,
         attributes: Attribute,
     ) {
         self.0
@@ -362,11 +365,11 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
 
     fn call_watcher(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         name: AvmString<'gc>,
-        value: &mut Value<'gc>,
-        this: Object<'gc>,
-    ) -> Result<(), Error<'gc>> {
+        value: &mut Value<'gc, B>,
+        this: Object<'gc, B>,
+    ) -> Result<(), Error<'gc, B>> {
         self.0
             .read()
             .base
@@ -375,10 +378,10 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
 
     fn watch(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         name: AvmString<'gc>,
-        callback: Object<'gc>,
-        user_data: Value<'gc>,
+        callback: Object<'gc, B>,
+        user_data: Value<'gc, B>,
     ) {
         self.0
             .read()
@@ -386,11 +389,15 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
             .watch(activation, name, callback, user_data);
     }
 
-    fn unwatch(&self, activation: &mut Activation<'_, 'gc, '_>, name: AvmString<'gc>) -> bool {
+    fn unwatch(&self, activation: &mut Activation<'_, 'gc, '_, B>, name: AvmString<'gc>) -> bool {
         self.0.read().base.unwatch(activation, name)
     }
 
-    fn has_property(&self, activation: &mut Activation<'_, 'gc, '_>, name: AvmString<'gc>) -> bool {
+    fn has_property(
+        &self,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        name: AvmString<'gc>,
+    ) -> bool {
         let obj = self.0.read();
         if obj.base.has_property(activation, name) {
             return true;
@@ -428,7 +435,7 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
 
     fn has_own_property(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         name: AvmString<'gc>,
     ) -> bool {
         // Note that `hasOwnProperty` does NOT return true for child display objects.
@@ -437,7 +444,7 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
 
     fn has_own_virtual(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         name: AvmString<'gc>,
     ) -> bool {
         self.0.read().base.has_own_virtual(activation, name)
@@ -445,13 +452,13 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
 
     fn is_property_enumerable(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         name: AvmString<'gc>,
     ) -> bool {
         self.0.read().base.is_property_enumerable(activation, name)
     }
 
-    fn get_keys(&self, activation: &mut Activation<'_, 'gc, '_>) -> Vec<AvmString<'gc>> {
+    fn get_keys(&self, activation: &mut Activation<'_, 'gc, '_, B>) -> Vec<AvmString<'gc>> {
         // Keys from the underlying object are listed first, followed by
         // child display objects in order from highest depth to lowest depth.
         let obj = self.0.read();
@@ -464,60 +471,68 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         keys
     }
 
-    fn length(&self, activation: &mut Activation<'_, 'gc, '_>) -> Result<i32, Error<'gc>> {
+    fn length(&self, activation: &mut Activation<'_, 'gc, '_, B>) -> Result<i32, Error<'gc, B>> {
         self.0.read().base.length(activation)
     }
 
     fn set_length(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         length: i32,
-    ) -> Result<(), Error<'gc>> {
+    ) -> Result<(), Error<'gc, B>> {
         self.0.read().base.set_length(activation, length)
     }
 
-    fn has_element(&self, activation: &mut Activation<'_, 'gc, '_>, index: i32) -> bool {
+    fn has_element(&self, activation: &mut Activation<'_, 'gc, '_, B>, index: i32) -> bool {
         self.0.read().base.has_element(activation, index)
     }
 
-    fn get_element(&self, activation: &mut Activation<'_, 'gc, '_>, index: i32) -> Value<'gc> {
+    fn get_element(
+        &self,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        index: i32,
+    ) -> Value<'gc, B> {
         self.0.read().base.get_element(activation, index)
     }
 
     fn set_element(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         index: i32,
-        value: Value<'gc>,
-    ) -> Result<(), Error<'gc>> {
+        value: Value<'gc, B>,
+    ) -> Result<(), Error<'gc, B>> {
         self.0.read().base.set_element(activation, index, value)
     }
 
-    fn delete_element(&self, activation: &mut Activation<'_, 'gc, '_>, index: i32) -> bool {
+    fn delete_element(&self, activation: &mut Activation<'_, 'gc, '_, B>, index: i32) -> bool {
         self.0.read().base.delete_element(activation, index)
     }
 
-    fn interfaces(&self) -> Vec<Object<'gc>> {
+    fn interfaces(&self) -> Vec<Object<'gc, B>> {
         self.0.read().base.interfaces()
     }
 
-    fn set_interfaces(&self, gc_context: MutationContext<'gc, '_>, iface_list: Vec<Object<'gc>>) {
+    fn set_interfaces(
+        &self,
+        gc_context: MutationContext<'gc, '_>,
+        iface_list: Vec<Object<'gc, B>>,
+    ) {
         self.0
             .write(gc_context)
             .base
             .set_interfaces(gc_context, iface_list)
     }
 
-    fn as_script_object(&self) -> Option<ScriptObject<'gc>> {
+    fn as_script_object(&self) -> Option<ScriptObject<'gc, B>> {
         Some(self.0.read().base)
     }
 
     /// Get the underlying stage object, if it exists.
-    fn as_stage_object(&self) -> Option<StageObject<'gc>> {
+    fn as_stage_object(&self) -> Option<StageObject<'gc, B>> {
         Some(*self)
     }
 
-    fn as_display_object(&self) -> Option<DisplayObject<'gc>> {
+    fn as_display_object(&self) -> Option<DisplayObject<'gc, B>> {
         Some(self.0.read().display_object)
     }
 
@@ -533,38 +548,42 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
 /// to normal property lookup.
 /// The map of property names to display object getts/setters.
 #[derive(Copy, Clone)]
-pub struct DisplayProperty<'gc> {
-    get: DisplayGetter<'gc>,
-    set: Option<DisplaySetter<'gc>>,
+pub struct DisplayProperty<'gc, B: Backend> {
+    get: DisplayGetter<'gc, B>,
+    set: Option<DisplaySetter<'gc, B>>,
 }
 
-pub type DisplayGetter<'gc> = fn(&mut Activation<'_, 'gc, '_>, DisplayObject<'gc>) -> Value<'gc>;
+pub type DisplayGetter<'gc, B: Backend> =
+    fn(&mut Activation<'_, 'gc, '_, B>, DisplayObject<'gc, B>) -> Value<'gc, B>;
 
-pub type DisplaySetter<'gc> =
-    fn(&mut Activation<'_, 'gc, '_>, DisplayObject<'gc>, Value<'gc>) -> Result<(), Error<'gc>>;
+pub type DisplaySetter<'gc, B: Backend> = fn(
+    &mut Activation<'_, 'gc, '_, B>,
+    DisplayObject<'gc, B>,
+    Value<'gc, B>,
+) -> Result<(), Error<'gc, B>>;
 
-impl<'gc> DisplayProperty<'gc> {
+impl<'gc, B: Backend> DisplayProperty<'gc, B> {
     pub fn get(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
-        this: DisplayObject<'gc>,
-    ) -> Value<'gc> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        this: DisplayObject<'gc, B>,
+    ) -> Value<'gc, B> {
         (self.get)(activation, this)
     }
 
     pub fn set(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
-        this: DisplayObject<'gc>,
-        value: Value<'gc>,
-    ) -> Result<(), Error<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        this: DisplayObject<'gc, B>,
+        value: Value<'gc, B>,
+    ) -> Result<(), Error<'gc, B>> {
         self.set
             .map(|f| f(activation, this, value))
             .unwrap_or(Ok(()))
     }
 }
 
-unsafe impl<'gc> Collect for DisplayProperty<'gc> {
+unsafe impl<'gc, B: Backend> Collect for DisplayProperty<'gc, B> {
     fn needs_trace() -> bool {
         false
     }
@@ -573,11 +592,11 @@ unsafe impl<'gc> Collect for DisplayProperty<'gc> {
 /// The map from key/index to function pointers for special display object properties.
 #[derive(Collect)]
 #[collect(no_drop)]
-pub struct DisplayPropertyMap<'gc>(PropertyMap<'gc, DisplayProperty<'gc>>);
+pub struct DisplayPropertyMap<'gc, B: Backend>(PropertyMap<'gc, DisplayProperty<'gc, B>>);
 
-impl<'gc> DisplayPropertyMap<'gc> {
+impl<'gc, B: Backend> DisplayPropertyMap<'gc, B> {
     /// Creates the display property map.
-    pub fn new(gc_context: MutationContext<'gc, '_>) -> GcCell<'gc, DisplayPropertyMap<'gc>> {
+    pub fn new(gc_context: MutationContext<'gc, '_>) -> GcCell<'gc, DisplayPropertyMap<'gc, B>> {
         let mut property_map = DisplayPropertyMap(PropertyMap::new());
 
         // Order is important:
@@ -614,7 +633,7 @@ impl<'gc> DisplayPropertyMap<'gc> {
 
     /// Gets a property slot by name.
     /// Used by `GetMember`, `GetVariable`, `SetMember`, and `SetVariable`.
-    pub fn get_by_name(&self, name: AvmString<'gc>) -> Option<&DisplayProperty<'gc>> {
+    pub fn get_by_name(&self, name: AvmString<'gc>) -> Option<&DisplayProperty<'gc, B>> {
         // Display object properties are case insensitive, regardless of SWF version!?
         // TODO: Another string alloc; optimize this eventually.
         self.0.get(name, false)
@@ -624,127 +643,145 @@ impl<'gc> DisplayPropertyMap<'gc> {
     /// The order is defined by the SWF specs.
     /// Used by `GetProperty`/`SetProperty`.
     /// SWF19 pp. 85-86
-    pub fn get_by_index(&self, index: usize) -> Option<&DisplayProperty<'gc>> {
+    pub fn get_by_index(&self, index: usize) -> Option<&DisplayProperty<'gc, B>> {
         self.0.get_index(index)
     }
 
     fn add_property(
         &mut self,
         name: AvmString<'gc>,
-        get: DisplayGetter<'gc>,
-        set: Option<DisplaySetter<'gc>>,
+        get: DisplayGetter<'gc, B>,
+        set: Option<DisplaySetter<'gc, B>>,
     ) {
         let prop = DisplayProperty { get, set };
         self.0.insert(name, prop, false);
     }
 }
 
-fn x<'gc>(_activation: &mut Activation<'_, 'gc, '_>, this: DisplayObject<'gc>) -> Value<'gc> {
+fn x<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     this.x().into()
 }
 
-fn set_x<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-    val: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_x<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     if let Some(val) = property_coerce_to_number(activation, val)? {
         this.set_x(activation.context.gc_context, val);
     }
     Ok(())
 }
 
-fn y<'gc>(_activation: &mut Activation<'_, 'gc, '_>, this: DisplayObject<'gc>) -> Value<'gc> {
+fn y<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     this.y().into()
 }
 
-fn set_y<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-    val: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_y<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     if let Some(val) = property_coerce_to_number(activation, val)? {
         this.set_y(activation.context.gc_context, val);
     }
     Ok(())
 }
 
-fn x_scale<'gc>(activation: &mut Activation<'_, 'gc, '_>, this: DisplayObject<'gc>) -> Value<'gc> {
+fn x_scale<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     this.scale_x(activation.context.gc_context)
         .into_fraction()
         .into()
 }
 
-fn set_x_scale<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-    val: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_x_scale<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     if let Some(val) = property_coerce_to_number(activation, val)? {
         this.set_scale_x(activation.context.gc_context, Percent::from_fraction(val));
     }
     Ok(())
 }
 
-fn y_scale<'gc>(activation: &mut Activation<'_, 'gc, '_>, this: DisplayObject<'gc>) -> Value<'gc> {
+fn y_scale<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     this.scale_y(activation.context.gc_context)
         .into_fraction()
         .into()
 }
 
-fn set_y_scale<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-    val: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_y_scale<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     if let Some(val) = property_coerce_to_number(activation, val)? {
         this.set_scale_y(activation.context.gc_context, Percent::from_fraction(val));
     }
     Ok(())
 }
 
-fn current_frame<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-) -> Value<'gc> {
+fn current_frame<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     this.as_movie_clip()
         .map(MovieClip::current_frame)
         .map_or(Value::Undefined, Value::from)
 }
 
-fn total_frames<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-) -> Value<'gc> {
+fn total_frames<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     this.as_movie_clip()
         .map(MovieClip::total_frames)
         .map_or(Value::Undefined, Value::from)
 }
 
-fn alpha<'gc>(_activation: &mut Activation<'_, 'gc, '_>, this: DisplayObject<'gc>) -> Value<'gc> {
+fn alpha<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     (this.alpha() * 100.0).into()
 }
 
-fn set_alpha<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-    val: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_alpha<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     if let Some(val) = property_coerce_to_number(activation, val)? {
         this.set_alpha(activation.context.gc_context, val / 100.0);
     }
     Ok(())
 }
 
-fn visible<'gc>(_activation: &mut Activation<'_, 'gc, '_>, this: DisplayObject<'gc>) -> Value<'gc> {
+fn visible<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     this.visible().into()
 }
 
-fn set_visible<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-    val: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_visible<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     // Because this property dates to the era of Flash 4, this is actually coerced to an integer.
     // `_visible = "false";` coerces to NaN and has no effect.
     if let Some(n) = property_coerce_to_number(activation, val)? {
@@ -753,46 +790,55 @@ fn set_visible<'gc>(
     Ok(())
 }
 
-fn width<'gc>(_activation: &mut Activation<'_, 'gc, '_>, this: DisplayObject<'gc>) -> Value<'gc> {
+fn width<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     this.width().into()
 }
 
-fn set_width<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-    val: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_width<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     if let Some(val) = property_coerce_to_number(activation, val)? {
         this.set_width(activation.context.gc_context, val);
     }
     Ok(())
 }
 
-fn height<'gc>(_activation: &mut Activation<'_, 'gc, '_>, this: DisplayObject<'gc>) -> Value<'gc> {
+fn height<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     this.height().into()
 }
 
-fn set_height<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-    val: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_height<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     if let Some(val) = property_coerce_to_number(activation, val)? {
         this.set_height(activation.context.gc_context, val);
     }
     Ok(())
 }
 
-fn rotation<'gc>(activation: &mut Activation<'_, 'gc, '_>, this: DisplayObject<'gc>) -> Value<'gc> {
+fn rotation<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     let degrees: f64 = this.rotation(activation.context.gc_context).into();
     degrees.into()
 }
 
-fn set_rotation<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-    degrees: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_rotation<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+    degrees: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     if let Some(mut degrees) = property_coerce_to_number(activation, degrees)? {
         // Normalize into the range of [-180, 180].
         degrees %= 360.0;
@@ -806,37 +852,43 @@ fn set_rotation<'gc>(
     Ok(())
 }
 
-fn target<'gc>(activation: &mut Activation<'_, 'gc, '_>, this: DisplayObject<'gc>) -> Value<'gc> {
+fn target<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     AvmString::new(activation.context.gc_context, this.slash_path()).into()
 }
 
-fn frames_loaded<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-) -> Value<'gc> {
+fn frames_loaded<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     this.as_movie_clip()
         .map(MovieClip::frames_loaded)
         .map_or(Value::Undefined, Value::from)
 }
 
-fn name<'gc>(_activation: &mut Activation<'_, 'gc, '_>, this: DisplayObject<'gc>) -> Value<'gc> {
+fn name<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     this.name().into()
 }
 
-fn set_name<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-    val: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_name<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     let name = val.coerce_to_string(activation)?;
     this.set_name(activation.context.gc_context, name);
     Ok(())
 }
 
-fn drop_target<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DisplayObject<'gc>,
-) -> Value<'gc> {
+fn drop_target<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     this.as_movie_clip()
         .and_then(|mc| mc.drop_target())
         .map_or_else(
@@ -847,7 +899,10 @@ fn drop_target<'gc>(
         )
 }
 
-fn url<'gc>(activation: &mut Activation<'_, 'gc, '_>, this: DisplayObject<'gc>) -> Value<'gc> {
+fn url<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     this.as_movie_clip()
         .and_then(|mc| mc.movie())
         .and_then(|mov| mov.url().map(|url| url.to_string()))
@@ -857,10 +912,10 @@ fn url<'gc>(activation: &mut Activation<'_, 'gc, '_>, this: DisplayObject<'gc>) 
         )
 }
 
-fn high_quality<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
-) -> Value<'gc> {
+fn high_quality<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     use ruffle_types::display_object::stage::StageQuality;
     let quality = match activation.context.stage.quality() {
         StageQuality::Best => 2,
@@ -870,11 +925,11 @@ fn high_quality<'gc>(
     quality.into()
 }
 
-fn set_high_quality<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
-    val: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_high_quality<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     use ruffle_types::display_object::stage::StageQuality;
     let val = val.coerce_to_f64(activation)?;
     if !val.is_nan() {
@@ -894,35 +949,35 @@ fn set_high_quality<'gc>(
     Ok(())
 }
 
-fn focus_rect<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
-) -> Value<'gc> {
+fn focus_rect<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     avm_warn!(activation, "Unimplemented property _focusrect");
     Value::Null
 }
 
-fn set_focus_rect<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
-    _val: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_focus_rect<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: DisplayObject<'gc, B>,
+    _val: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     avm_warn!(activation, "Unimplemented property _focusrect");
     Ok(())
 }
 
-fn sound_buf_time<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
-) -> Value<'gc> {
+fn sound_buf_time<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     activation.context.audio_manager.stream_buffer_time().into()
 }
 
-fn set_sound_buf_time<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
-    val: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_sound_buf_time<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     avm_warn!(activation, "_soundbuftime is currently ignored by Ruffle");
     if let Some(val) = property_coerce_to_i32(activation, val)? {
         activation
@@ -933,16 +988,19 @@ fn set_sound_buf_time<'gc>(
     Ok(())
 }
 
-fn quality<'gc>(activation: &mut Activation<'_, 'gc, '_>, _this: DisplayObject<'gc>) -> Value<'gc> {
+fn quality<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     let quality = activation.context.stage.quality().into_avm_str();
     quality.into()
 }
 
-fn set_quality<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: DisplayObject<'gc>,
-    val: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_quality<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: DisplayObject<'gc, B>,
+    val: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     if let Ok(quality) = val.coerce_to_string(activation)?.parse() {
         activation
             .context
@@ -952,20 +1010,26 @@ fn set_quality<'gc>(
     Ok(())
 }
 
-fn x_mouse<'gc>(activation: &mut Activation<'_, 'gc, '_>, this: DisplayObject<'gc>) -> Value<'gc> {
+fn x_mouse<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     let (local_x, _) = this.global_to_local(*activation.context.mouse_position);
     local_x.to_pixels().into()
 }
 
-fn y_mouse<'gc>(activation: &mut Activation<'_, 'gc, '_>, this: DisplayObject<'gc>) -> Value<'gc> {
+fn y_mouse<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DisplayObject<'gc, B>,
+) -> Value<'gc, B> {
     let (_, local_y) = this.global_to_local(*activation.context.mouse_position);
     local_y.to_pixels().into()
 }
 
-fn property_coerce_to_number<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    value: Value<'gc>,
-) -> Result<Option<f64>, Error<'gc>> {
+fn property_coerce_to_number<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    value: Value<'gc, B>,
+) -> Result<Option<f64>, Error<'gc, B>> {
     if value != Value::Undefined && value != Value::Null {
         let n = value.coerce_to_f64(activation)?;
         if n.is_finite() {
@@ -981,10 +1045,10 @@ fn property_coerce_to_number<'gc>(
 ///
 /// Values out of range of `i32` will be clamped to `i32::MIN`. Returns `None` if the value is
 /// invalid (NaN, null, or undefined).
-fn property_coerce_to_i32<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    value: Value<'gc>,
-) -> Result<Option<i32>, Error<'gc>> {
+fn property_coerce_to_i32<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    value: Value<'gc, B>,
+) -> Result<Option<i32>, Error<'gc, B>> {
     let n = value.coerce_to_f64(activation)?;
     let ret = if n.is_nan() {
         // NaN/undefined/null are invalid values; do not set.

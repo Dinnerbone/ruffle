@@ -7,13 +7,14 @@ use crate::avm2::value::Value;
 use crate::avm2::Error;
 use crate::display_object::DisplayObject;
 use gc_arena::{Collect, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use std::cell::{Ref, RefMut};
 
 /// A class instance allocator that allocates Stage objects.
-pub fn stage_allocator<'gc>(
-    class: ClassObject<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Object<'gc>, Error> {
+pub fn stage_allocator<'gc, B: Backend>(
+    class: ClassObject<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Object<'gc, B>, Error> {
     let base = ScriptObjectData::new(class);
 
     Ok(StageObject(GcCell::allocate(
@@ -28,19 +29,19 @@ pub fn stage_allocator<'gc>(
 
 #[derive(Clone, Collect, Debug, Copy)]
 #[collect(no_drop)]
-pub struct StageObject<'gc>(GcCell<'gc, StageObjectData<'gc>>);
+pub struct StageObject<'gc, B: Backend>(GcCell<'gc, StageObjectData<'gc, B>>);
 
 #[derive(Clone, Collect, Debug)]
 #[collect(no_drop)]
-pub struct StageObjectData<'gc> {
+pub struct StageObjectData<'gc, B: Backend> {
     /// The base data common to all AVM2 objects.
-    base: ScriptObjectData<'gc>,
+    base: ScriptObjectData<'gc, B>,
 
     /// The associated display object, if one exists.
-    display_object: Option<DisplayObject<'gc>>,
+    display_object: Option<DisplayObject<'gc, B>>,
 }
 
-impl<'gc> StageObject<'gc> {
+impl<'gc, B: Backend> StageObject<'gc, B> {
     /// Allocate the AVM2 side of a display object intended to be of a given
     /// class's type.
     ///
@@ -52,9 +53,9 @@ impl<'gc> StageObject<'gc> {
     /// Display objects that do not need to use this flow should use
     /// `for_display_object_childless`.
     pub fn for_display_object(
-        activation: &mut Activation<'_, 'gc, '_>,
-        display_object: DisplayObject<'gc>,
-        class: ClassObject<'gc>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        display_object: DisplayObject<'gc, B>,
+        class: ClassObject<'gc, B>,
     ) -> Result<Self, Error> {
         let mut instance = Self(GcCell::allocate(
             activation.context.gc_context,
@@ -74,9 +75,9 @@ impl<'gc> StageObject<'gc> {
     /// This function is intended for display objects that do not have children
     /// and thus do not need to be allocated and initialized in separate phases.
     pub fn for_display_object_childless(
-        activation: &mut Activation<'_, 'gc, '_>,
-        display_object: DisplayObject<'gc>,
-        class: ClassObject<'gc>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        display_object: DisplayObject<'gc, B>,
+        class: ClassObject<'gc, B>,
     ) -> Result<Self, Error> {
         let this = Self::for_display_object(activation, display_object, class)?;
 
@@ -87,8 +88,8 @@ impl<'gc> StageObject<'gc> {
 
     /// Create a `graphics` object for a given display object.
     pub fn graphics(
-        activation: &mut Activation<'_, 'gc, '_>,
-        display_object: DisplayObject<'gc>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        display_object: DisplayObject<'gc, B>,
     ) -> Result<Self, Error> {
         let class = activation.avm2().classes().graphics;
         let mut this = Self(GcCell::allocate(
@@ -106,12 +107,14 @@ impl<'gc> StageObject<'gc> {
     }
 }
 
-impl<'gc> TObject<'gc> for StageObject<'gc> {
-    fn base(&self) -> Ref<ScriptObjectData<'gc>> {
+impl<'gc, B: Backend> TObject<'gc> for StageObject<'gc, B> {
+    type B = B;
+
+    fn base(&self) -> Ref<ScriptObjectData<'gc, B>> {
         Ref::map(self.0.read(), |read| &read.base)
     }
 
-    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc>> {
+    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc, B>> {
         RefMut::map(self.0.write(mc), |write| &mut write.base)
     }
 
@@ -119,15 +122,15 @@ impl<'gc> TObject<'gc> for StageObject<'gc> {
         self.0.as_ptr() as *const ObjectPtr
     }
 
-    fn as_display_object(&self) -> Option<DisplayObject<'gc>> {
+    fn as_display_object(&self) -> Option<DisplayObject<'gc, B>> {
         self.0.read().display_object
     }
 
-    fn init_display_object(&self, mc: MutationContext<'gc, '_>, obj: DisplayObject<'gc>) {
+    fn init_display_object(&self, mc: MutationContext<'gc, '_>, obj: DisplayObject<'gc, B>) {
         self.0.write(mc).display_object = Some(obj);
     }
 
-    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc>, Error> {
+    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc, B>, Error> {
         Ok(Value::Object(Object::from(*self)))
     }
 }

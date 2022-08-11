@@ -11,47 +11,13 @@ use crate::bitmap::is_size_valid;
 use crate::character::Character;
 use crate::display_object::TDisplayObject;
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "height" => property(height);
-    "width" => property(width);
-    "transparent" => property(get_transparent);
-    "rectangle" => property(get_rectangle);
-    "getPixel" => method(get_pixel);
-    "getPixel32" => method(get_pixel32);
-    "setPixel" => method(set_pixel);
-    "setPixel32" => method(set_pixel32);
-    "copyChannel" => method(copy_channel);
-    "fillRect" => method(fill_rect);
-    "clone" => method(clone);
-    "dispose" => method(dispose);
-    "floodFill" => method(flood_fill);
-    "noise" => method(noise);
-    "colorTransform" => method(color_transform);
-    "getColorBoundsRect" => method(get_color_bounds_rect);
-    "perlinNoise" => method(perlin_noise);
-    "applyFilter" => method(apply_filter);
-    "draw" => method(draw);
-    "hitTest" => method(hit_test);
-    "generateFilterRect" => method(generate_filter_rect);
-    "copyPixels" => method(copy_pixels);
-    "merge" => method(merge);
-    "paletteMap" => method(palette_map);
-    "pixelDissolve" => method(pixel_dissolve);
-    "scroll" => method(scroll);
-    "threshold" => method(threshold);
-    "compare" => method(compare);
-};
-
-const OBJECT_DECLS: &[Declaration] = declare_properties! {
-    "loadBitmap" => method(load_bitmap);
-};
-
-pub fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let width = args.get(0).unwrap_or(&0.into()).coerce_to_i32(activation)? as u32;
 
     let height = args.get(1).unwrap_or(&0.into()).coerce_to_i32(activation)? as u32;
@@ -81,11 +47,11 @@ pub fn constructor<'gc>(
     Ok(this.into())
 }
 
-pub fn height<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn height<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             return Ok(bitmap_data.bitmap_data().read().height().into());
@@ -95,11 +61,11 @@ pub fn height<'gc>(
     Ok((-1).into())
 }
 
-pub fn width<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn width<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             return Ok(bitmap_data.bitmap_data().read().width().into());
@@ -109,11 +75,11 @@ pub fn width<'gc>(
     Ok((-1).into())
 }
 
-pub fn get_transparent<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_transparent<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             return Ok(bitmap_data.bitmap_data().read().transparency().into());
@@ -123,11 +89,11 @@ pub fn get_transparent<'gc>(
     Ok((-1).into())
 }
 
-pub fn get_rectangle<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_rectangle<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             let proto = activation.context.avm1.prototypes.rectangle_constructor;
@@ -147,11 +113,11 @@ pub fn get_rectangle<'gc>(
     Ok((-1).into())
 }
 
-pub fn get_pixel<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_pixel<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             if let (Some(x_val), Some(y_val)) = (args.get(0), args.get(1)) {
@@ -165,11 +131,11 @@ pub fn get_pixel<'gc>(
     Ok((-1).into())
 }
 
-pub fn get_pixel32<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_pixel32<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             if let (Some(x_val), Some(y_val)) = (args.get(0), args.get(1)) {
@@ -184,11 +150,11 @@ pub fn get_pixel32<'gc>(
     Ok((-1).into())
 }
 
-pub fn set_pixel<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_pixel<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             if let (Some(x_val), Some(y_val), Some(color_val)) =
@@ -211,11 +177,11 @@ pub fn set_pixel<'gc>(
     Ok((-1).into())
 }
 
-pub fn set_pixel32<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_pixel32<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             if let (Some(x_val), Some(y_val), Some(color_val)) =
@@ -238,11 +204,11 @@ pub fn set_pixel32<'gc>(
     Ok((-1).into())
 }
 
-pub fn copy_channel<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn copy_channel<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let source_bitmap = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -331,11 +297,11 @@ pub fn copy_channel<'gc>(
     Ok((-1).into())
 }
 
-pub fn fill_rect<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn fill_rect<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let rectangle = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -367,11 +333,11 @@ pub fn fill_rect<'gc>(
     Ok((-1).into())
 }
 
-pub fn clone<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn clone<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             let new_bitmap_data = BitmapDataObject::empty_object(
@@ -398,11 +364,11 @@ pub fn clone<'gc>(
     Ok((-1).into())
 }
 
-pub fn dispose<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn dispose<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             bitmap_data.dispose(&mut activation.context);
@@ -413,11 +379,11 @@ pub fn dispose<'gc>(
     Ok((-1).into())
 }
 
-pub fn flood_fill<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn flood_fill<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             if let (Some(x_val), Some(y_val), Some(color_val)) =
@@ -443,11 +409,11 @@ pub fn flood_fill<'gc>(
     Ok((-1).into())
 }
 
-pub fn noise<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn noise<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let low = args.get(1).unwrap_or(&0.into()).coerce_to_u32(activation)? as u8;
 
     let high = args
@@ -483,20 +449,20 @@ pub fn noise<'gc>(
     Ok((-1).into())
 }
 
-pub fn apply_filter<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn apply_filter<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     log::warn!("BitmapData.applyFilter - not yet implemented");
     Ok((-1).into())
 }
 
-pub fn draw<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn draw<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             log::warn!("BitmapData.draw - not yet implemented");
@@ -507,11 +473,11 @@ pub fn draw<'gc>(
     Ok((-1).into())
 }
 
-pub fn generate_filter_rect<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn generate_filter_rect<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             log::warn!("BitmapData.generateFilterRect - not yet implemented");
@@ -522,11 +488,11 @@ pub fn generate_filter_rect<'gc>(
     Ok((-1).into())
 }
 
-pub fn color_transform<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn color_transform<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             let rectangle = args
@@ -568,11 +534,11 @@ pub fn color_transform<'gc>(
     Ok((-1).into())
 }
 
-pub fn get_color_bounds_rect<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_color_bounds_rect<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             let find_color = args
@@ -600,11 +566,11 @@ pub fn get_color_bounds_rect<'gc>(
     Ok((-1).into())
 }
 
-pub fn perlin_noise<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn perlin_noise<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             let base_x = args
@@ -645,7 +611,7 @@ pub fn perlin_noise<'gc>(
                 .unwrap_or(&Value::Undefined)
                 .coerce_to_object(activation);
 
-            let octave_offsets: Result<Vec<_>, Error<'gc>> = (0..num_octaves)
+            let octave_offsets: Result<Vec<_>, Error<'gc, B>> = (0..num_octaves)
                 .map(|i| {
                     if let Value::Object(e) = offsets.get_element(activation, i as i32) {
                         let x = e.get("x", activation)?.coerce_to_f64(activation)?;
@@ -677,11 +643,11 @@ pub fn perlin_noise<'gc>(
     Ok((-1).into())
 }
 
-pub fn hit_test<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn hit_test<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             log::warn!("BitmapData.hitTest - not yet implemented");
@@ -692,11 +658,11 @@ pub fn hit_test<'gc>(
     Ok((-1).into())
 }
 
-pub fn copy_pixels<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn copy_pixels<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             let source_bitmap = args
@@ -823,11 +789,11 @@ pub fn copy_pixels<'gc>(
     Ok((-1).into())
 }
 
-pub fn merge<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn merge<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             let source_bitmap = args
@@ -915,11 +881,11 @@ pub fn merge<'gc>(
     Ok((-1).into())
 }
 
-pub fn palette_map<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn palette_map<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             let source_bitmap = args
@@ -953,21 +919,22 @@ pub fn palette_map<'gc>(
             let dest_x = dest_point.get("x", activation)?.coerce_to_f64(activation)? as i32;
             let dest_y = dest_point.get("y", activation)?.coerce_to_f64(activation)? as i32;
 
-            let mut get_channel = |index: usize, shift: usize| -> Result<[u32; 256], Error<'gc>> {
-                let arg = args.get(index).unwrap_or(&Value::Null);
-                let mut array = [0_u32; 256];
-                for (i, item) in array.iter_mut().enumerate() {
-                    *item = if let Value::Object(arg) = arg {
-                        arg.get_element(activation, i as i32)
-                            .coerce_to_u32(activation)?
-                    } else {
-                        // This is an "identity mapping", fulfilling the part of the spec that
-                        // says that channels which have no array provided are simply copied.
-                        (i << shift) as u32
+            let mut get_channel =
+                |index: usize, shift: usize| -> Result<[u32; 256], Error<'gc, B>> {
+                    let arg = args.get(index).unwrap_or(&Value::Null);
+                    let mut array = [0_u32; 256];
+                    for (i, item) in array.iter_mut().enumerate() {
+                        *item = if let Value::Object(arg) = arg {
+                            arg.get_element(activation, i as i32)
+                                .coerce_to_u32(activation)?
+                        } else {
+                            // This is an "identity mapping", fulfilling the part of the spec that
+                            // says that channels which have no array provided are simply copied.
+                            (i << shift) as u32
+                        }
                     }
-                }
-                Ok(array)
-            };
+                    Ok(array)
+                };
 
             let red_array = get_channel(3, 16)?;
             let green_array = get_channel(4, 8)?;
@@ -1006,11 +973,11 @@ pub fn palette_map<'gc>(
     Ok((-1).into())
 }
 
-pub fn pixel_dissolve<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn pixel_dissolve<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             log::warn!("BitmapData.pixelDissolve - not yet implemented");
@@ -1021,11 +988,11 @@ pub fn pixel_dissolve<'gc>(
     Ok((-1).into())
 }
 
-pub fn scroll<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn scroll<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             let x = args
@@ -1049,11 +1016,11 @@ pub fn scroll<'gc>(
     Ok((-1).into())
 }
 
-pub fn threshold<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn threshold<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = this.as_bitmap_data_object() {
         if !bitmap_data.disposed() {
             log::warn!("BitmapData.threshold - not yet implemented");
@@ -1064,11 +1031,11 @@ pub fn threshold<'gc>(
     Ok((-1).into())
 }
 
-pub fn compare<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn compare<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     const EQUIVALENT: i32 = 0;
     const NOT_BITMAP: i32 = -1;
     const BITMAP_DISPOSED: i32 = -2;
@@ -1126,22 +1093,54 @@ pub fn compare<'gc>(
     }
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let bitmap_data_object = BitmapDataObject::empty_object(gc_context, Some(proto));
     let object = bitmap_data_object.as_script_object().unwrap();
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "height" => property(height);
+        "width" => property(width);
+        "transparent" => property(get_transparent);
+        "rectangle" => property(get_rectangle);
+        "getPixel" => method(get_pixel);
+        "getPixel32" => method(get_pixel32);
+        "setPixel" => method(set_pixel);
+        "setPixel32" => method(set_pixel32);
+        "copyChannel" => method(copy_channel);
+        "fillRect" => method(fill_rect);
+        "clone" => method(clone);
+        "dispose" => method(dispose);
+        "floodFill" => method(flood_fill);
+        "noise" => method(noise);
+        "colorTransform" => method(color_transform);
+        "getColorBoundsRect" => method(get_color_bounds_rect);
+        "perlinNoise" => method(perlin_noise);
+        "applyFilter" => method(apply_filter);
+        "draw" => method(draw);
+        "hitTest" => method(hit_test);
+        "generateFilterRect" => method(generate_filter_rect);
+        "copyPixels" => method(copy_pixels);
+        "merge" => method(merge);
+        "paletteMap" => method(palette_map);
+        "pixelDissolve" => method(pixel_dissolve);
+        "scroll" => method(scroll);
+        "threshold" => method(threshold);
+        "compare" => method(compare);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     bitmap_data_object.into()
 }
 
-pub fn load_bitmap<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn load_bitmap<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let name = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -1188,11 +1187,11 @@ pub fn load_bitmap<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn create_bitmap_data_object<'gc>(
+pub fn create_bitmap_data_object<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    bitmap_data_proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    bitmap_data_proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let bitmap_data = FunctionObject::constructor(
         gc_context,
         Executable::Native(constructor),
@@ -1201,6 +1200,11 @@ pub fn create_bitmap_data_object<'gc>(
         bitmap_data_proto,
     );
     let object = bitmap_data.as_script_object().unwrap();
+
+    let OBJECT_DECLS: &[Declaration<B>] = declare_properties! {
+        "loadBitmap" => method(load_bitmap);
+    };
     define_properties_on(OBJECT_DECLS, gc_context, object, fn_proto);
+
     bitmap_data
 }

@@ -9,22 +9,23 @@ use crate::avm2::value::Value;
 use crate::avm2::Error;
 use crate::display_object::{TDisplayObject, TInteractiveObject};
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 
 /// Implements `flash.display.InteractiveObject`'s instance constructor.
-pub fn instance_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn instance_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Err("You cannot directly construct InteractiveObject.".into())
 }
 
 /// Implements `flash.display.InteractiveObject`'s native instance constructor.
-pub fn native_instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn native_instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         activation.super_init(this, &[])?;
     }
@@ -33,20 +34,20 @@ pub fn native_instance_init<'gc>(
 }
 
 /// Implements `flash.display.InteractiveObject`'s class constructor.
-pub fn class_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn class_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok(Value::Undefined)
 }
 
 /// Implements `InteractiveObject.mouseEnabled`'s getter.
-pub fn mouse_enabled<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn mouse_enabled<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(int) = this
         .and_then(|t| t.as_display_object())
         .and_then(|dobj| dobj.as_interactive())
@@ -58,11 +59,11 @@ pub fn mouse_enabled<'gc>(
 }
 
 /// Implements `InteractiveObject.mouseEnabled`'s setter.
-pub fn set_mouse_enabled<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn set_mouse_enabled<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(int) = this
         .and_then(|t| t.as_display_object())
         .and_then(|dobj| dobj.as_interactive())
@@ -79,11 +80,11 @@ pub fn set_mouse_enabled<'gc>(
 }
 
 /// Implements `InteractiveObject.doubleClickEnabled`'s getter.
-pub fn double_click_enabled<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn double_click_enabled<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(int) = this
         .and_then(|t| t.as_display_object())
         .and_then(|dobj| dobj.as_interactive())
@@ -95,11 +96,11 @@ pub fn double_click_enabled<'gc>(
 }
 
 /// Implements `InteractiveObject.doubleClickEnabled`'s setter.
-pub fn set_double_click_enabled<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn set_double_click_enabled<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(int) = this
         .and_then(|t| t.as_display_object())
         .and_then(|dobj| dobj.as_interactive())
@@ -116,11 +117,11 @@ pub fn set_double_click_enabled<'gc>(
 }
 
 /// Implements `InteractiveObject.contextMenu`'s getter.
-fn context_menu<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn context_menu<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(int) = this
         .and_then(|t| t.as_display_object())
         .and_then(|dobj| dobj.as_interactive())
@@ -132,11 +133,11 @@ fn context_menu<'gc>(
 }
 
 /// Implements `InteractiveObject.contextMenu`'s setter.
-fn set_context_menu<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn set_context_menu<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(int) = this
         .and_then(|t| t.as_display_object())
         .and_then(|dobj| dobj.as_interactive())
@@ -155,7 +156,7 @@ fn set_context_menu<'gc>(
 }
 
 /// Construct `InteractiveObject`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::package("flash.display"), "InteractiveObject"),
         Some(QName::new(Namespace::package("flash.display"), "DisplayObject").into()),
@@ -176,10 +177,10 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
         mc,
     ));
 
-    const PUBLIC_INSTANCE_PROPERTIES: &[(
+    let public_instance_properties: &[(
         &str,
-        Option<NativeMethodImpl>,
-        Option<NativeMethodImpl>,
+        Option<NativeMethodImpl<B>>,
+        Option<NativeMethodImpl<B>>,
     )] = &[
         ("mouseEnabled", Some(mouse_enabled), Some(set_mouse_enabled)),
         (
@@ -189,7 +190,7 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
         ),
         ("contextMenu", Some(context_menu), Some(set_context_menu)),
     ];
-    write.define_public_builtin_instance_properties(mc, PUBLIC_INSTANCE_PROPERTIES);
+    write.define_public_builtin_instance_properties(mc, public_instance_properties);
 
     class
 }

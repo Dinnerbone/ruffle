@@ -46,6 +46,7 @@ pub use graphic::Graphic;
 pub use interactive::{InteractiveObject, TInteractiveObject};
 pub use morph_shape::{MorphShape, MorphShapeStatic};
 pub use movie_clip::{MovieClip, Scene};
+use ruffle_types::backend::Backend;
 pub use ruffle_types::display_object::stage::StageAlign;
 pub use ruffle_types::display_object::stage::StageDisplayState;
 pub use ruffle_types::display_object::stage::StageQuality;
@@ -59,8 +60,8 @@ pub use video::Video;
 
 #[derive(Clone, Debug, Collect)]
 #[collect(no_drop)]
-pub struct DisplayObjectBase<'gc> {
-    parent: Option<DisplayObject<'gc>>,
+pub struct DisplayObjectBase<'gc, B: Backend> {
+    parent: Option<DisplayObject<'gc, B>>,
     place_frame: u16,
     depth: Depth,
     transform: Transform,
@@ -82,21 +83,21 @@ pub struct DisplayObjectBase<'gc> {
     /// The previous display object in order of AVM1 execution.
     ///
     /// `None` in an AVM2 movie.
-    prev_avm1_clip: Option<DisplayObject<'gc>>,
+    prev_avm1_clip: Option<DisplayObject<'gc, B>>,
 
     /// The next display object in order of execution.
     ///
     /// `None` in an AVM2 movie.
-    next_avm1_clip: Option<DisplayObject<'gc>>,
+    next_avm1_clip: Option<DisplayObject<'gc, B>>,
 
     /// The sound transform of sounds playing via this display object.
     sound_transform: SoundTransform,
 
     /// The display object that we are being masked by.
-    masker: Option<DisplayObject<'gc>>,
+    masker: Option<DisplayObject<'gc, B>>,
 
     /// The display object we are currently masking.
-    maskee: Option<DisplayObject<'gc>>,
+    maskee: Option<DisplayObject<'gc, B>>,
 
     /// The blend mode used when rendering this display object.
     /// Values other than the defualt `BlendMode::Normal` implicitly cause cache-as-bitmap behavior.
@@ -114,7 +115,7 @@ pub struct DisplayObjectBase<'gc> {
     flags: DisplayObjectFlags,
 }
 
-impl<'gc> Default for DisplayObjectBase<'gc> {
+impl<'gc, B: Backend> Default for DisplayObjectBase<'gc, B> {
     fn default() -> Self {
         Self {
             parent: Default::default(),
@@ -139,7 +140,7 @@ impl<'gc> Default for DisplayObjectBase<'gc> {
     }
 }
 
-impl<'gc> DisplayObjectBase<'gc> {
+impl<'gc, B: Backend> DisplayObjectBase<'gc, B> {
     /// Reset all properties that would be adjusted by a movie load.
     fn reset_for_movie_load(&mut self) {
         let flags_to_keep = self.flags & DisplayObjectFlags::LOCK_ROOT;
@@ -326,27 +327,27 @@ impl<'gc> DisplayObjectBase<'gc> {
         self.clip_depth = depth;
     }
 
-    fn parent(&self) -> Option<DisplayObject<'gc>> {
+    fn parent(&self) -> Option<DisplayObject<'gc, B>> {
         self.parent
     }
 
-    fn set_parent(&mut self, parent: Option<DisplayObject<'gc>>) {
+    fn set_parent(&mut self, parent: Option<DisplayObject<'gc, B>>) {
         self.parent = parent;
     }
 
-    fn prev_avm1_clip(&self) -> Option<DisplayObject<'gc>> {
+    fn prev_avm1_clip(&self) -> Option<DisplayObject<'gc, B>> {
         self.prev_avm1_clip
     }
 
-    fn set_prev_avm1_clip(&mut self, node: Option<DisplayObject<'gc>>) {
+    fn set_prev_avm1_clip(&mut self, node: Option<DisplayObject<'gc, B>>) {
         self.prev_avm1_clip = node;
     }
 
-    fn next_avm1_clip(&self) -> Option<DisplayObject<'gc>> {
+    fn next_avm1_clip(&self) -> Option<DisplayObject<'gc, B>> {
         self.next_avm1_clip
     }
 
-    fn set_next_avm1_clip(&mut self, node: Option<DisplayObject<'gc>>) {
+    fn set_next_avm1_clip(&mut self, node: Option<DisplayObject<'gc, B>>) {
         self.next_avm1_clip = node;
     }
 
@@ -451,24 +452,27 @@ impl<'gc> DisplayObjectBase<'gc> {
             .set(DisplayObjectFlags::INSTANTIATED_BY_TIMELINE, value);
     }
 
-    fn masker(&self) -> Option<DisplayObject<'gc>> {
+    fn masker(&self) -> Option<DisplayObject<'gc, B>> {
         self.masker
     }
 
-    fn set_masker(&mut self, node: Option<DisplayObject<'gc>>) {
+    fn set_masker(&mut self, node: Option<DisplayObject<'gc, B>>) {
         self.masker = node;
     }
 
-    fn maskee(&self) -> Option<DisplayObject<'gc>> {
+    fn maskee(&self) -> Option<DisplayObject<'gc, B>> {
         self.maskee
     }
 
-    fn set_maskee(&mut self, node: Option<DisplayObject<'gc>>) {
+    fn set_maskee(&mut self, node: Option<DisplayObject<'gc, B>>) {
         self.maskee = node;
     }
 }
 
-pub fn render_base<'gc>(this: DisplayObject<'gc>, context: &mut RenderContext<'_, 'gc>) {
+pub fn render_base<'gc, B: Backend>(
+    this: DisplayObject<'gc, B>,
+    context: &mut RenderContext<'_, 'gc, B>,
+) {
     if this.maskee().is_some() {
         return;
     }
@@ -504,24 +508,29 @@ pub fn render_base<'gc>(this: DisplayObject<'gc>, context: &mut RenderContext<'_
 #[enum_trait_object(
     #[derive(Clone, Collect, Debug, Copy)]
     #[collect(no_drop)]
-    pub enum DisplayObject<'gc> {
-        Stage(Stage<'gc>),
-        Bitmap(Bitmap<'gc>),
-        Avm1Button(Avm1Button<'gc>),
-        Avm2Button(Avm2Button<'gc>),
-        EditText(EditText<'gc>),
-        Graphic(Graphic<'gc>),
-        MorphShape(MorphShape<'gc>),
-        MovieClip(MovieClip<'gc>),
-        Text(Text<'gc>),
-        Video(Video<'gc>),
+    pub enum DisplayObject<'gc, B: Backend> {
+        Stage(Stage<'gc, B>),
+        Bitmap(Bitmap<'gc, B>),
+        Avm1Button(Avm1Button<'gc, B>),
+        Avm2Button(Avm2Button<'gc, B>),
+        EditText(EditText<'gc, B>),
+        Graphic(Graphic<'gc, B>),
+        MorphShape(MorphShape<'gc, B>),
+        MovieClip(MovieClip<'gc, B>),
+        Text(Text<'gc, B>),
+        Video(Video<'gc, B>),
     }
 )]
 pub trait TDisplayObject<'gc>:
-    'gc + Clone + Copy + Collect + Debug + Into<DisplayObject<'gc>>
+    'gc + Clone + Copy + Collect + Debug + Into<DisplayObject<'gc, Self::B>>
 {
-    fn base<'a>(&'a self) -> Ref<'a, DisplayObjectBase<'gc>>;
-    fn base_mut<'a>(&'a self, mc: MutationContext<'gc, '_>) -> RefMut<'a, DisplayObjectBase<'gc>>;
+    type B: Backend;
+
+    fn base<'a>(&'a self) -> Ref<'a, DisplayObjectBase<'gc, Self::B>>;
+    fn base_mut<'a>(
+        &'a self,
+        mc: MutationContext<'gc, '_>,
+    ) -> RefMut<'a, DisplayObjectBase<'gc, Self::B>>;
 
     fn id(&self) -> CharacterId;
     fn depth(&self) -> Depth {
@@ -827,7 +836,7 @@ pub trait TDisplayObject<'gc>:
     /// Returns the Flash 4 slash-syntax path to this display object, e.g. `/foo/clip`.
     /// Returned by the `_target` property in AVM1.
     fn slash_path(&self) -> WString {
-        fn build_slash_path(object: DisplayObject<'_>) -> WString {
+        fn build_slash_path<B: Backend>(object: DisplayObject<'_, B>) -> WString {
             if let Some(parent) = object.avm1_parent() {
                 let mut path = build_slash_path(parent);
                 path.push_byte(b'/');
@@ -864,12 +873,16 @@ pub trait TDisplayObject<'gc>:
     ///
     /// This version of the function merely exposes the display object parent,
     /// without any further filtering.
-    fn parent(&self) -> Option<DisplayObject<'gc>> {
+    fn parent(&self) -> Option<DisplayObject<'gc, Self::B>> {
         self.base().parent()
     }
 
     /// Set the parent of this display object.
-    fn set_parent(&self, gc_context: MutationContext<'gc, '_>, parent: Option<DisplayObject<'gc>>) {
+    fn set_parent(
+        &self,
+        gc_context: MutationContext<'gc, '_>,
+        parent: Option<DisplayObject<'gc, Self::B>>,
+    ) {
         self.base_mut(gc_context).set_parent(parent)
     }
 
@@ -878,7 +891,7 @@ pub trait TDisplayObject<'gc>:
     /// This version of the function implements the concept of parenthood as
     /// seen in AVM1. Notably, it disallows access to the `Stage`; for an
     /// unfiltered concept of parent, use the `parent` method.
-    fn avm1_parent(&self) -> Option<DisplayObject<'gc>> {
+    fn avm1_parent(&self) -> Option<DisplayObject<'gc, Self::B>> {
         self.parent().filter(|p| p.as_stage().is_none())
     }
 
@@ -886,37 +899,37 @@ pub trait TDisplayObject<'gc>:
     ///
     /// This version of the function implements the concept of parenthood as
     /// seen in AVM2. Notably, it disallows access to non-container parents.
-    fn avm2_parent(&self) -> Option<DisplayObject<'gc>> {
+    fn avm2_parent(&self) -> Option<DisplayObject<'gc, Self::B>> {
         self.parent().filter(|p| p.as_container().is_some())
     }
 
-    fn prev_avm1_clip(&self) -> Option<DisplayObject<'gc>> {
+    fn prev_avm1_clip(&self) -> Option<DisplayObject<'gc, Self::B>> {
         self.base().prev_avm1_clip()
     }
     fn set_prev_avm1_clip(
         &self,
         gc_context: MutationContext<'gc, '_>,
-        node: Option<DisplayObject<'gc>>,
+        node: Option<DisplayObject<'gc, Self::B>>,
     ) {
         self.base_mut(gc_context).set_prev_avm1_clip(node);
     }
-    fn next_avm1_clip(&self) -> Option<DisplayObject<'gc>> {
+    fn next_avm1_clip(&self) -> Option<DisplayObject<'gc, Self::B>> {
         self.base().next_avm1_clip()
     }
     fn set_next_avm1_clip(
         &self,
         gc_context: MutationContext<'gc, '_>,
-        node: Option<DisplayObject<'gc>>,
+        node: Option<DisplayObject<'gc, Self::B>>,
     ) {
         self.base_mut(gc_context).set_next_avm1_clip(node);
     }
-    fn masker(&self) -> Option<DisplayObject<'gc>> {
+    fn masker(&self) -> Option<DisplayObject<'gc, Self::B>> {
         self.base().masker()
     }
     fn set_masker(
         &self,
         gc_context: MutationContext<'gc, '_>,
-        node: Option<DisplayObject<'gc>>,
+        node: Option<DisplayObject<'gc, Self::B>>,
         remove_old_link: bool,
     ) {
         if remove_old_link {
@@ -926,13 +939,13 @@ pub trait TDisplayObject<'gc>:
         }
         self.base_mut(gc_context).set_masker(node);
     }
-    fn maskee(&self) -> Option<DisplayObject<'gc>> {
+    fn maskee(&self) -> Option<DisplayObject<'gc, Self::B>> {
         self.base().maskee()
     }
     fn set_maskee(
         &self,
         gc_context: MutationContext<'gc, '_>,
-        node: Option<DisplayObject<'gc>>,
+        node: Option<DisplayObject<'gc, Self::B>>,
         remove_old_link: bool,
     ) {
         if remove_old_link {
@@ -1002,7 +1015,7 @@ pub trait TDisplayObject<'gc>:
     /// The sound transform for sounds played inside this display object.
     fn set_sound_transform(
         &self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, Self::B>,
         sound_transform: SoundTransform,
     ) {
         self.base_mut(context.gc_context)
@@ -1088,7 +1101,7 @@ pub trait TDisplayObject<'gc>:
 
     /// Emit an `enterFrame` event on this DisplayObject and any children it
     /// may have.
-    fn enter_frame(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn enter_frame(&self, context: &mut UpdateContext<'_, 'gc, '_, Self::B>) {
         let enter_frame_evt = Avm2EventObject::bare_default_event(context, "enterFrame");
 
         let dobject_constr = context.avm2.classes().display_object;
@@ -1110,16 +1123,16 @@ pub trait TDisplayObject<'gc>:
     /// 1. That the object itself has been allocated, if not constructed
     /// 2. That newly created children have been instantiated and are present
     ///    as properties on the class
-    fn construct_frame(&self, _context: &mut UpdateContext<'_, 'gc, '_>) {}
+    fn construct_frame(&self, _context: &mut UpdateContext<'_, 'gc, '_, Self::B>) {}
 
     /// Execute all other timeline actions on this object.
-    fn run_frame(&self, _context: &mut UpdateContext<'_, 'gc, '_>) {}
+    fn run_frame(&self, _context: &mut UpdateContext<'_, 'gc, '_, Self::B>) {}
 
     /// Execute all other timeline actions on this object and it's children.
     ///
     /// AVM2 operates recursively through children, so this also instructs
     /// children to run a frame.
-    fn run_frame_avm2(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn run_frame_avm2(&self, context: &mut UpdateContext<'_, 'gc, '_, Self::B>) {
         // Children run first.
         if let Some(container) = self.as_container() {
             for child in container.iter_render_list() {
@@ -1132,7 +1145,7 @@ pub trait TDisplayObject<'gc>:
 
     /// Emit a `frameConstructed` event on this DisplayObject and any children it
     /// may have.
-    fn frame_constructed(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn frame_constructed(&self, context: &mut UpdateContext<'_, 'gc, '_, Self::B>) {
         let frame_constructed_evt =
             Avm2EventObject::bare_default_event(context, "frameConstructed");
 
@@ -1147,7 +1160,7 @@ pub trait TDisplayObject<'gc>:
     }
 
     /// Run any frame scripts (if they exist and this object needs to run them).
-    fn run_frame_scripts(self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn run_frame_scripts(self, context: &mut UpdateContext<'_, 'gc, '_, Self::B>) {
         if let Some(container) = self.as_container() {
             for child in container.iter_render_list() {
                 child.run_frame_scripts(context);
@@ -1156,7 +1169,7 @@ pub trait TDisplayObject<'gc>:
     }
 
     /// Emit an `exitFrame` broadcast event.
-    fn exit_frame(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn exit_frame(&self, context: &mut UpdateContext<'_, 'gc, '_, Self::B>) {
         let exit_frame_evt = Avm2EventObject::bare_default_event(context, "exitFrame");
 
         let dobject_constr = context.avm2.classes().display_object;
@@ -1171,7 +1184,7 @@ pub trait TDisplayObject<'gc>:
         self.on_exit_frame(context);
     }
 
-    fn on_exit_frame(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn on_exit_frame(&self, context: &mut UpdateContext<'_, 'gc, '_, Self::B>) {
         if let Some(container) = self.as_container() {
             for child in container.iter_render_list() {
                 child.on_exit_frame(context);
@@ -1179,13 +1192,13 @@ pub trait TDisplayObject<'gc>:
         }
     }
 
-    fn render_self(&self, _context: &mut RenderContext<'_, 'gc>) {}
+    fn render_self(&self, _context: &mut RenderContext<'_, 'gc, Self::B>) {}
 
-    fn render(&self, context: &mut RenderContext<'_, 'gc>) {
+    fn render(&self, context: &mut RenderContext<'_, 'gc, Self::B>) {
         render_base((*self).into(), context)
     }
 
-    fn unload(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn unload(&self, context: &mut UpdateContext<'_, 'gc, '_, Self::B>) {
         // Unload children.
         if let Some(ctr) = self.as_container() {
             for child in ctr.iter_render_list() {
@@ -1209,43 +1222,43 @@ pub trait TDisplayObject<'gc>:
         self.set_removed(context.gc_context, true);
     }
 
-    fn as_stage(&self) -> Option<Stage<'gc>> {
+    fn as_stage(&self) -> Option<Stage<'gc, Self::B>> {
         None
     }
-    fn as_avm1_button(&self) -> Option<Avm1Button<'gc>> {
+    fn as_avm1_button(&self) -> Option<Avm1Button<'gc, Self::B>> {
         None
     }
-    fn as_avm2_button(&self) -> Option<Avm2Button<'gc>> {
+    fn as_avm2_button(&self) -> Option<Avm2Button<'gc, Self::B>> {
         None
     }
-    fn as_movie_clip(&self) -> Option<MovieClip<'gc>> {
+    fn as_movie_clip(&self) -> Option<MovieClip<'gc, Self::B>> {
         None
     }
-    fn as_edit_text(&self) -> Option<EditText<'gc>> {
+    fn as_edit_text(&self) -> Option<EditText<'gc, Self::B>> {
         None
     }
-    fn as_morph_shape(&self) -> Option<MorphShape<'gc>> {
+    fn as_morph_shape(&self) -> Option<MorphShape<'gc, Self::B>> {
         None
     }
-    fn as_container(self) -> Option<DisplayObjectContainer<'gc>> {
+    fn as_container(self) -> Option<DisplayObjectContainer<'gc, Self::B>> {
         None
     }
-    fn as_video(self) -> Option<Video<'gc>> {
+    fn as_video(self) -> Option<Video<'gc, Self::B>> {
         None
     }
     fn as_drawing(&self, _gc_context: MutationContext<'gc, '_>) -> Option<RefMut<'_, Drawing>> {
         None
     }
-    fn as_bitmap(self) -> Option<Bitmap<'gc>> {
+    fn as_bitmap(self) -> Option<Bitmap<'gc, Self::B>> {
         None
     }
-    fn as_interactive(self) -> Option<InteractiveObject<'gc>> {
+    fn as_interactive(self) -> Option<InteractiveObject<'gc, Self::B>> {
         None
     }
 
     fn apply_place_object(
         &self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, Self::B>,
         place_object: &swf::PlaceObject,
     ) {
         // PlaceObject tags only apply if this object has not been dynamically moved by AS code.
@@ -1290,19 +1303,19 @@ pub trait TDisplayObject<'gc>:
     }
 
     /// Called when this object should be replaced by a PlaceObject tag.
-    fn replace_with(&self, _context: &mut UpdateContext<'_, 'gc, '_>, _id: CharacterId) {
+    fn replace_with(&self, _context: &mut UpdateContext<'_, 'gc, '_, Self::B>, _id: CharacterId) {
         // Noop for most symbols; only shapes can replace their innards with another Graphic.
     }
 
-    fn object(&self) -> Avm1Value<'gc> {
+    fn object(&self) -> Avm1Value<'gc, Self::B> {
         Avm1Value::Undefined // TODO: Implement for every type and delete this fallback.
     }
 
-    fn object2(&self) -> Avm2Value<'gc> {
+    fn object2(&self) -> Avm2Value<'gc, Self::B> {
         Avm2Value::Undefined // TODO: See above.
     }
 
-    fn set_object2(&mut self, _mc: MutationContext<'gc, '_>, _to: Avm2Object<'gc>) {}
+    fn set_object2(&mut self, _mc: MutationContext<'gc, '_>, _to: Avm2Object<'gc, Self::B>) {}
 
     /// Tests if a given stage position point intersects with the world bounds of this object.
     fn hit_test_bounds(&self, pos: (Twips, Twips)) -> bool {
@@ -1311,14 +1324,14 @@ pub trait TDisplayObject<'gc>:
 
     /// Tests if a given object's world bounds intersects with the world bounds
     /// of this object.
-    fn hit_test_object(&self, other: DisplayObject<'gc>) -> bool {
+    fn hit_test_object(&self, other: DisplayObject<'gc, Self::B>) -> bool {
         self.world_bounds().intersects(&other.world_bounds())
     }
 
     /// Tests if a given stage position point intersects within this object, considering the art.
     fn hit_test_shape(
         &self,
-        _context: &mut UpdateContext<'_, 'gc, '_>,
+        _context: &mut UpdateContext<'_, 'gc, '_, Self::B>,
         pos: (Twips, Twips),
         _options: HitTestOptions,
     ) -> bool {
@@ -1328,8 +1341,8 @@ pub trait TDisplayObject<'gc>:
 
     fn post_instantiation(
         &self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        _init_object: Option<Avm1Object<'gc>>,
+        context: &mut UpdateContext<'_, 'gc, '_, Self::B>,
+        _init_object: Option<Avm1Object<'gc, Self::B>>,
         _instantiated_by: Instantiator,
         run_frame: bool,
     ) {
@@ -1350,11 +1363,11 @@ pub trait TDisplayObject<'gc>:
         self.parent().and_then(|p| p.movie())
     }
 
-    fn loader_info(&self) -> Option<Avm2Object<'gc>> {
+    fn loader_info(&self) -> Option<Avm2Object<'gc, Self::B>> {
         None
     }
 
-    fn instantiate(&self, gc_context: MutationContext<'gc, '_>) -> DisplayObject<'gc>;
+    fn instantiate(&self, gc_context: MutationContext<'gc, '_>) -> DisplayObject<'gc, Self::B>;
     fn as_ptr(&self) -> *const DisplayObjectPtr;
 
     /// Whether this object can be used as a mask.
@@ -1368,7 +1381,7 @@ pub trait TDisplayObject<'gc>:
     ///
     /// This function implements the AVM1 concept of root clips. For the AVM2
     /// version, see `avm2_root`.
-    fn avm1_root(&self) -> DisplayObject<'gc> {
+    fn avm1_root(&self) -> DisplayObject<'gc, Self::B> {
         let mut root = (*self).into();
         loop {
             if root.lock_root() {
@@ -1387,7 +1400,10 @@ pub trait TDisplayObject<'gc>:
     ///
     /// This function implements the AVM2 concept of root clips. For the AVM1
     /// version, see `avm1_root`.
-    fn avm2_root(&self, _context: &mut UpdateContext<'_, 'gc, '_>) -> Option<DisplayObject<'gc>> {
+    fn avm2_root(
+        &self,
+        _context: &mut UpdateContext<'_, 'gc, '_, Self::B>,
+    ) -> Option<DisplayObject<'gc, Self::B>> {
         let mut parent = Some((*self).into());
         while let Some(p) = parent {
             if p.is_root() {
@@ -1405,7 +1421,10 @@ pub trait TDisplayObject<'gc>:
     /// will fail to locate the current player's stage for objects that are not
     /// rooted to the DisplayObject hierarchy correctly. If you just want to
     /// access the current player's stage, grab it from the context.
-    fn avm2_stage(&self, _context: &UpdateContext<'_, 'gc, '_>) -> Option<DisplayObject<'gc>> {
+    fn avm2_stage(
+        &self,
+        _context: &UpdateContext<'_, 'gc, '_, Self::B>,
+    ) -> Option<DisplayObject<'gc, Self::B>> {
         let mut parent = Some((*self).into());
         while let Some(p) = parent {
             if p.as_stage().is_some() {
@@ -1417,7 +1436,7 @@ pub trait TDisplayObject<'gc>:
     }
 
     /// Determine if this display object is currently on the stage.
-    fn is_on_stage(self, context: &UpdateContext<'_, 'gc, '_>) -> bool {
+    fn is_on_stage(self, context: &UpdateContext<'_, 'gc, '_, Self::B>) -> bool {
         let mut ancestor = self.avm2_parent();
         while let Some(parent) = ancestor {
             if parent.avm2_parent().is_some() {
@@ -1432,7 +1451,7 @@ pub trait TDisplayObject<'gc>:
     }
 
     /// Assigns a default instance name `instanceN` to this object.
-    fn set_default_instance_name(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn set_default_instance_name(&self, context: &mut UpdateContext<'_, 'gc, '_, Self::B>) {
         if self.name().is_empty() {
             let name = format!("instance{}", *context.instance_counter);
             self.set_name(
@@ -1447,7 +1466,7 @@ pub trait TDisplayObject<'gc>:
     ///
     /// The default root names change based on the AVM configuration of the
     /// clip; AVM2 clips get `rootN` while AVM1 clips get blank strings.
-    fn set_default_root_name(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn set_default_root_name(&self, context: &mut UpdateContext<'_, 'gc, '_, Self::B>) {
         let vm_type = context.avm_type();
 
         if matches!(vm_type, AvmType::Avm2) {
@@ -1458,7 +1477,7 @@ pub trait TDisplayObject<'gc>:
         }
     }
 
-    fn bind_text_field_variables(&self, activation: &mut Activation<'_, 'gc, '_>) {
+    fn bind_text_field_variables(&self, activation: &mut Activation<'_, 'gc, '_, Self::B>) {
         // Check all unbound text fields to see if they apply to this object.
         // TODO: Replace with `Vec::drain_filter` when stable.
         let mut i = 0;
@@ -1478,12 +1497,15 @@ pub trait TDisplayObject<'gc>:
 
 pub enum DisplayObjectPtr {}
 
-impl<'gc> DisplayObject<'gc> {
-    pub fn ptr_eq(a: DisplayObject<'gc>, b: DisplayObject<'gc>) -> bool {
+impl<'gc, B: Backend> DisplayObject<'gc, B> {
+    pub fn ptr_eq(a: DisplayObject<'gc, B>, b: DisplayObject<'gc, B>) -> bool {
         a.as_ptr() == b.as_ptr()
     }
 
-    pub fn option_ptr_eq(a: Option<DisplayObject<'gc>>, b: Option<DisplayObject<'gc>>) -> bool {
+    pub fn option_ptr_eq(
+        a: Option<DisplayObject<'gc, B>>,
+        b: Option<DisplayObject<'gc, B>>,
+    ) -> bool {
         a.map(|o| o.as_ptr()) == b.map(|o| o.as_ptr())
     }
 }
@@ -1547,21 +1569,21 @@ bitflags! {
 }
 
 pub trait SoundTransformExt {
-    fn from_avm2_object<'gc>(
-        activation: &mut Avm2Activation<'_, 'gc, '_>,
-        as3_st: Avm2Object<'gc>,
+    fn from_avm2_object<'gc, B: Backend>(
+        activation: &mut Avm2Activation<'_, 'gc, '_, B>,
+        as3_st: Avm2Object<'gc, B>,
     ) -> Result<SoundTransform, Avm2Error>;
 
-    fn into_avm2_object<'gc>(
+    fn into_avm2_object<'gc, B: Backend>(
         self,
-        activation: &mut Avm2Activation<'_, 'gc, '_>,
-    ) -> Result<Avm2Object<'gc>, Avm2Error>;
+        activation: &mut Avm2Activation<'_, 'gc, '_, B>,
+    ) -> Result<Avm2Object<'gc, B>, Avm2Error>;
 }
 
 impl SoundTransformExt for SoundTransform {
-    fn from_avm2_object<'gc>(
-        activation: &mut Avm2Activation<'_, 'gc, '_>,
-        as3_st: Avm2Object<'gc>,
+    fn from_avm2_object<'gc, B: Backend>(
+        activation: &mut Avm2Activation<'_, 'gc, '_, B>,
+        as3_st: Avm2Object<'gc, B>,
     ) -> Result<Self, Avm2Error> {
         Ok(Self {
             left_to_left: (as3_st
@@ -1602,10 +1624,10 @@ impl SoundTransformExt for SoundTransform {
         })
     }
 
-    fn into_avm2_object<'gc>(
+    fn into_avm2_object<'gc, B: Backend>(
         self,
-        activation: &mut Avm2Activation<'_, 'gc, '_>,
-    ) -> Result<Avm2Object<'gc>, Avm2Error> {
+        activation: &mut Avm2Activation<'_, 'gc, '_, B>,
+    ) -> Result<Avm2Object<'gc, B>, Avm2Error> {
         let mut as3_st = activation
             .avm2()
             .classes()

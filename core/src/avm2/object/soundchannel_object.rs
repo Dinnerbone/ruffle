@@ -7,13 +7,14 @@ use crate::avm2::value::Value;
 use crate::avm2::Error;
 use gc_arena::{Collect, GcCell, MutationContext};
 use ruffle_types::backend::audio::SoundInstanceHandle;
+use ruffle_types::backend::Backend;
 use std::cell::{Ref, RefMut};
 
 /// A class instance allocator that allocates SoundChannel objects.
-pub fn soundchannel_allocator<'gc>(
-    class: ClassObject<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Object<'gc>, Error> {
+pub fn soundchannel_allocator<'gc, B: Backend>(
+    class: ClassObject<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Object<'gc, B>, Error> {
     let base = ScriptObjectData::new(class);
 
     Ok(SoundChannelObject(GcCell::allocate(
@@ -29,13 +30,13 @@ pub fn soundchannel_allocator<'gc>(
 
 #[derive(Clone, Collect, Debug, Copy)]
 #[collect(no_drop)]
-pub struct SoundChannelObject<'gc>(GcCell<'gc, SoundChannelObjectData<'gc>>);
+pub struct SoundChannelObject<'gc, B: Backend>(GcCell<'gc, SoundChannelObjectData<'gc, B>>);
 
 #[derive(Clone, Collect, Debug)]
 #[collect(no_drop)]
-pub struct SoundChannelObjectData<'gc> {
+pub struct SoundChannelObjectData<'gc, B: Backend> {
     /// Base script object
-    base: ScriptObjectData<'gc>,
+    base: ScriptObjectData<'gc, B>,
 
     /// The sound this object holds.
     #[collect(require_static)]
@@ -45,10 +46,10 @@ pub struct SoundChannelObjectData<'gc> {
     position: f64,
 }
 
-impl<'gc> SoundChannelObject<'gc> {
+impl<'gc, B: Backend> SoundChannelObject<'gc, B> {
     /// Convert a bare sound instance into it's object representation.
     pub fn from_sound_instance(
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         sound: SoundInstanceHandle,
     ) -> Result<Self, Error> {
         let class = activation.avm2().classes().soundchannel;
@@ -85,16 +86,18 @@ impl<'gc> SoundChannelObject<'gc> {
     }
 }
 
-impl<'gc> TObject<'gc> for SoundChannelObject<'gc> {
-    fn base(&self) -> Ref<ScriptObjectData<'gc>> {
+impl<'gc, B: Backend> TObject<'gc> for SoundChannelObject<'gc, B> {
+    type B = B;
+
+    fn base(&self) -> Ref<ScriptObjectData<'gc, B>> {
         Ref::map(self.0.read(), |read| &read.base)
     }
 
-    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc>> {
+    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc, B>> {
         RefMut::map(self.0.write(mc), |write| &mut write.base)
     }
 
-    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc>, Error> {
+    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc, B>, Error> {
         Ok(Object::from(*self).into())
     }
 
@@ -102,7 +105,7 @@ impl<'gc> TObject<'gc> for SoundChannelObject<'gc> {
         self.0.as_ptr() as *const ObjectPtr
     }
 
-    fn as_sound_channel(self) -> Option<SoundChannelObject<'gc>> {
+    fn as_sound_channel(self) -> Option<SoundChannelObject<'gc, B>> {
         Some(self)
     }
 

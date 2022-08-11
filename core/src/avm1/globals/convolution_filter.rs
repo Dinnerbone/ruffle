@@ -6,24 +6,13 @@ use crate::avm1::object::convolution_filter::ConvolutionFilterObject;
 use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{ArrayObject, Object, TObject, Value};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "alpha" => property(alpha, set_alpha);
-    "bias" => property(bias, set_bias);
-    "clamp" => property(clamp, set_clamp);
-    "color" => property(color, set_color);
-    "divisor" => property(divisor, set_divisor);
-    "matrix" => property(matrix, set_matrix);
-    "matrixX" => property(matrix_x, set_matrix_x);
-    "matrixY" => property(matrix_y, set_matrix_y);
-    "preserveAlpha" => property(preserve_alpha, set_preserve_alpha);
-};
-
-pub fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     set_matrix_x(activation, this, args.get(0..1).unwrap_or_default())?;
     set_matrix_y(activation, this, args.get(1..2).unwrap_or_default())?;
     set_matrix(activation, this, args.get(2..3).unwrap_or_default())?;
@@ -37,11 +26,11 @@ pub fn constructor<'gc>(
     Ok(this.into())
 }
 
-pub fn alpha<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn alpha<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_convolution_filter_object() {
         return Ok(filter.alpha().into());
     }
@@ -49,11 +38,11 @@ pub fn alpha<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_alpha<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_alpha<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let alpha = args
         .get(0)
         .unwrap_or(&0.into())
@@ -67,11 +56,11 @@ pub fn set_alpha<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn bias<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn bias<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_convolution_filter_object() {
         return Ok(filter.bias().into());
     }
@@ -79,11 +68,11 @@ pub fn bias<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_bias<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_bias<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let bias = args.get(0).unwrap_or(&0.into()).coerce_to_f64(activation)?;
 
     if let Some(filter) = this.as_convolution_filter_object() {
@@ -93,11 +82,11 @@ pub fn set_bias<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn clamp<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn clamp<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_convolution_filter_object() {
         return Ok(filter.clamp().into());
     }
@@ -105,11 +94,11 @@ pub fn clamp<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_clamp<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_clamp<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let clamp = args
         .get(0)
         .unwrap_or(&true.into())
@@ -122,11 +111,11 @@ pub fn set_clamp<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn color<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn color<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_convolution_filter_object() {
         return Ok(object.color().into());
     }
@@ -134,11 +123,11 @@ pub fn color<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_color<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_color<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let color = args
         .get(0)
         .unwrap_or(&0x000000.into())
@@ -151,11 +140,11 @@ pub fn set_color<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn divisor<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn divisor<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_convolution_filter_object() {
         return Ok(filter.divisor().into());
     }
@@ -163,11 +152,11 @@ pub fn divisor<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_divisor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_divisor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let divisor = args.get(0).unwrap_or(&1.into()).coerce_to_f64(activation)?;
 
     if let Some(filter) = this.as_convolution_filter_object() {
@@ -177,11 +166,11 @@ pub fn set_divisor<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn matrix<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn matrix<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_convolution_filter_object() {
         return Ok(ArrayObject::new(
             activation.context.gc_context,
@@ -194,11 +183,11 @@ pub fn matrix<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_matrix<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_matrix<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let matrix = args.get(0).unwrap_or(&Value::Undefined);
 
     if let Some(filter) = this.as_convolution_filter_object() {
@@ -225,11 +214,11 @@ pub fn set_matrix<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn matrix_x<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn matrix_x<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_convolution_filter_object() {
         return Ok(filter.matrix_x().into());
     }
@@ -237,11 +226,11 @@ pub fn matrix_x<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_matrix_x<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_matrix_x<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let matrix_x = args
         .get(0)
         .unwrap_or(&0.into())
@@ -255,11 +244,11 @@ pub fn set_matrix_x<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn matrix_y<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn matrix_y<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_convolution_filter_object() {
         return Ok(filter.matrix_y().into());
     }
@@ -267,11 +256,11 @@ pub fn matrix_y<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_matrix_y<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_matrix_y<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let matrix_y = args
         .get(0)
         .unwrap_or(&0.into())
@@ -285,11 +274,11 @@ pub fn set_matrix_y<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn preserve_alpha<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn preserve_alpha<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_convolution_filter_object() {
         return Ok(filter.preserve_alpha().into());
     }
@@ -297,11 +286,11 @@ pub fn preserve_alpha<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_preserve_alpha<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_preserve_alpha<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let preserve_alpha = args
         .get(0)
         .unwrap_or(&true.into())
@@ -314,13 +303,26 @@ pub fn set_preserve_alpha<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let filter = ConvolutionFilterObject::empty_object(gc_context, Some(proto));
     let object = filter.as_script_object().unwrap();
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "alpha" => property(alpha, set_alpha);
+        "bias" => property(bias, set_bias);
+        "clamp" => property(clamp, set_clamp);
+        "color" => property(color, set_color);
+        "divisor" => property(divisor, set_divisor);
+        "matrix" => property(matrix, set_matrix);
+        "matrixX" => property(matrix_x, set_matrix_x);
+        "matrixY" => property(matrix_y, set_matrix_y);
+        "preserveAlpha" => property(preserve_alpha, set_preserve_alpha);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     filter.into()
 }

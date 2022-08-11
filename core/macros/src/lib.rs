@@ -39,6 +39,7 @@ pub fn enum_trait_object(args: TokenStream, item: TokenStream) -> TokenStream {
     let trait_name = input_trait.ident.clone();
     let trait_generics = input_trait.generics.clone();
     let enum_input = parse_macro_input!(args as ItemEnum);
+    let enum_generics = enum_input.generics.clone();
     let enum_name = enum_input.ident.clone();
 
     // TODO: Revise whether the first two asserts are needed at all, and whether
@@ -53,17 +54,17 @@ pub fn enum_trait_object(args: TokenStream, item: TokenStream) -> TokenStream {
         "Generic type parameters are currently unsupported"
     );
 
-    assert_eq!(
-        trait_generics, enum_input.generics,
-        "Trait and enum should have the same generic parameters"
-    );
+    // assert_eq!(
+    //     trait_generics, enum_input.generics,
+    //     "Trait and enum should have the same generic parameters"
+    // );
 
     // Implement each trait. This will match against each enum variant and delegate
     // to the underlying type.
     let trait_methods: Vec<_> = input_trait
         .items
         .iter()
-        .map(|item| match item {
+        .flat_map(|item| match item {
             TraitItem::Method(method) => {
                 let method_name = method.sig.ident.clone();
                 let params: Vec<_> = method
@@ -97,19 +98,20 @@ pub fn enum_trait_object(args: TokenStream, item: TokenStream) -> TokenStream {
                     }
                 });
 
-                ImplItem::Method(ImplItemMethod {
+                Some(ImplItem::Method(ImplItemMethod {
                     attrs: method.attrs.clone(),
                     vis: Visibility::Inherited,
                     defaultness: None,
                     sig: method.sig.clone(),
                     block: parse_quote!(#method_block),
-                })
+                }))
             }
-            _ => panic!("Unsupported trait item: {:?}", item),
+            _ => None,
         })
         .collect();
 
-    let (impl_generics, ty_generics, where_clause) = trait_generics.split_for_impl();
+    let (impl_generics, enum_ty_generics, where_clause) = enum_generics.split_for_impl();
+    let (_, trait_ty_generics, _) = trait_generics.split_for_impl();
 
     // Implement `From` for each variant type.
     let from_impls: Vec<_> = enum_input
@@ -126,8 +128,8 @@ pub fn enum_trait_object(args: TokenStream, item: TokenStream) -> TokenStream {
                 .clone();
 
             quote!(
-                impl #impl_generics From<#variant_type> for #enum_name #ty_generics {
-                    fn from(obj: #variant_type) -> #enum_name #trait_generics {
+                impl #impl_generics From<#variant_type> for #enum_name #enum_ty_generics {
+                    fn from(obj: #variant_type) -> #enum_name <'gc, B> {
                         #enum_name::#variant_name(obj)
                     }
                 }
@@ -140,7 +142,8 @@ pub fn enum_trait_object(args: TokenStream, item: TokenStream) -> TokenStream {
 
         #enum_input
 
-        impl #impl_generics #trait_name #ty_generics for #enum_name #ty_generics #where_clause {
+        impl #impl_generics #trait_name #trait_ty_generics for #enum_name #enum_ty_generics #where_clause {
+            type B = B;
             #(#trait_methods)*
         }
 

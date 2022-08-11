@@ -8,15 +8,7 @@ use crate::avm_warn;
 use bitflags::bitflags;
 use core::fmt;
 use gc_arena::MutationContext;
-
-const OBJECT_DECLS: &[Declaration] = declare_properties! {
-    "exactSettings" => property(get_exact_settings, set_exact_settings);
-    "useCodepage" => property(get_use_code_page, set_use_code_page);
-    "setClipboard" => method(set_clipboard);
-    "showSettings" => method(show_settings);
-    // Pretty sure this is a variable
-    "onStatus" => method(on_status);
-};
+use ruffle_types::backend::Backend;
 
 /// Available cpu architectures
 #[allow(dead_code)]
@@ -294,7 +286,7 @@ pub struct SystemProperties {
 }
 
 impl SystemProperties {
-    pub fn get_version_string(&self, avm: &mut Avm1) -> String {
+    pub fn get_version_string<B: Backend>(&self, avm: &mut Avm1<B>) -> String {
         format!(
             "{} {},0,0,0",
             self.manufacturer.get_platform_name(),
@@ -326,7 +318,7 @@ impl SystemProperties {
         percent_encoding::utf8_percent_encode(s, percent_encoding::NON_ALPHANUMERIC).to_string()
     }
 
-    pub fn get_server_string(&self, avm: &mut Avm1) -> String {
+    pub fn get_server_string<B: Backend>(&self, avm: &mut Avm1<B>) -> String {
         url::form_urlencoded::Serializer::new(String::new())
             .append_pair("A", self.encode_capability(SystemCapabilities::AUDIO))
             .append_pair(
@@ -419,11 +411,11 @@ impl Default for SystemProperties {
     }
 }
 
-pub fn set_clipboard<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_clipboard<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let new_content = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -435,11 +427,11 @@ pub fn set_clipboard<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn show_settings<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn show_settings<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     //TODO: should default to the last panel displayed
     let last_panel_pos = 0;
 
@@ -458,11 +450,11 @@ pub fn show_settings<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_use_code_page<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_use_code_page<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let value = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -474,19 +466,19 @@ pub fn set_use_code_page<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn get_use_code_page<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_use_code_page<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(activation.context.system.use_codepage.into())
 }
 
-pub fn set_exact_settings<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_exact_settings<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let value = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -498,33 +490,43 @@ pub fn set_exact_settings<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn get_exact_settings<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_exact_settings<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(activation.context.system.exact_settings.into())
 }
 
-pub fn on_status<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn on_status<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     avm_warn!(activation, "System.onStatus() not implemented");
     Ok(Value::Undefined)
 }
 
-pub fn create<'gc>(
+pub fn create<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Option<Object<'gc>>,
-    fn_proto: Object<'gc>,
-    security: Object<'gc>,
-    capabilities: Object<'gc>,
-    ime: Object<'gc>,
-) -> Object<'gc> {
+    proto: Option<Object<'gc, B>>,
+    fn_proto: Object<'gc, B>,
+    security: Object<'gc, B>,
+    capabilities: Object<'gc, B>,
+    ime: Object<'gc, B>,
+) -> Object<'gc, B> {
     let system = ScriptObject::object(gc_context, proto);
+
+    let OBJECT_DECLS: &[Declaration<B>] = declare_properties! {
+        "exactSettings" => property(get_exact_settings, set_exact_settings);
+        "useCodepage" => property(get_use_code_page, set_use_code_page);
+        "setClipboard" => method(set_clipboard);
+        "showSettings" => method(show_settings);
+        // Pretty sure this is a variable
+        "onStatus" => method(on_status);
+    };
     define_properties_on(OBJECT_DECLS, gc_context, system, fn_proto);
+
     system.define_value(gc_context, "IME", ime.into(), Attribute::empty());
     system.define_value(gc_context, "security", security.into(), Attribute::empty());
     system.define_value(

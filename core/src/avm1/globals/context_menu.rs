@@ -7,17 +7,13 @@ use crate::avm1::{ScriptObject, Value};
 use crate::context_menu;
 use crate::display_object::TDisplayObject;
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "copy" => method(copy; DONT_ENUM | DONT_DELETE);
-    "hideBuiltInItems" => method(hide_builtin_items; DONT_ENUM | DONT_DELETE);
-};
-
-pub fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let callback = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -49,11 +45,11 @@ pub fn constructor<'gc>(
     Ok(this.into())
 }
 
-pub fn copy<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn copy<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let callback = this
         .get("onSelect", activation)?
         .coerce_to_object(activation);
@@ -119,11 +115,11 @@ pub fn copy<'gc>(
     Ok(copy.into())
 }
 
-pub fn hide_builtin_items<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn hide_builtin_items<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let built_in_items = this
         .get("builtInItems", activation)?
         .coerce_to_object(activation);
@@ -137,20 +133,26 @@ pub fn hide_builtin_items<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let object = ScriptObject::object(gc_context, Some(proto));
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "copy" => method(copy; DONT_ENUM | DONT_DELETE);
+        "hideBuiltInItems" => method(hide_builtin_items; DONT_ENUM | DONT_DELETE);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     object.into()
 }
 
-pub fn make_context_menu_state<'gc>(
-    menu: Option<Object<'gc>>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> context_menu::ContextMenuState<'gc> {
+pub fn make_context_menu_state<'gc, B: Backend>(
+    menu: Option<Object<'gc, B>>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> context_menu::ContextMenuState<'gc, B> {
     let mut result = context_menu::ContextMenuState::new();
 
     let root_mc = activation.context.stage.root_clip().as_movie_clip();

@@ -7,6 +7,7 @@ use crate::avm2::script::TranslationUnit;
 use crate::avm2::value::{abc_default_value, Value};
 use crate::avm2::Error;
 use gc_arena::{Collect, CollectionContext, Gc, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 use std::borrow::Cow;
 use std::fmt;
@@ -30,16 +31,16 @@ use swf::avm2::types::{
 /// resolve on the AVM stack, as if you had called a non-native function. If
 /// your function yields `None`, you must ensure that the top-most activation
 /// in the AVM1 runtime will return with the value of this function.
-pub type NativeMethodImpl = for<'gc> fn(
-    &mut Activation<'_, 'gc, '_>,
-    Option<Object<'gc>>,
-    &[Value<'gc>],
-) -> Result<Value<'gc>, Error>;
+pub type NativeMethodImpl<B: Backend> = for<'gc> fn(
+    &mut Activation<'_, 'gc, '_, B>,
+    Option<Object<'gc, B>>,
+    &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error>;
 
 /// Configuration of a single parameter of a method.
 #[derive(Clone, Collect, Debug)]
 #[collect(no_drop)]
-pub struct ParamConfig<'gc> {
+pub struct ParamConfig<'gc, B: Backend> {
     /// The name of the parameter.
     pub param_name: AvmString<'gc>,
 
@@ -47,14 +48,14 @@ pub struct ParamConfig<'gc> {
     pub param_type_name: Multiname<'gc>,
 
     /// The default value for this parameter.
-    pub default_value: Option<Value<'gc>>,
+    pub default_value: Option<Value<'gc, B>>,
 }
 
-impl<'gc> ParamConfig<'gc> {
+impl<'gc, B: Backend> ParamConfig<'gc, B> {
     fn from_abc_param(
         config: &AbcMethodParam,
-        txunit: TranslationUnit<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        txunit: TranslationUnit<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<Self, Error> {
         let param_name = if let Some(name) = &config.name {
             txunit.pool_string(name.0, activation.context.gc_context)?
@@ -94,7 +95,7 @@ impl<'gc> ParamConfig<'gc> {
     pub fn optional(
         name: impl Into<AvmString<'gc>>,
         param_type_name: Multiname<'gc>,
-        default_value: impl Into<Value<'gc>>,
+        default_value: impl Into<Value<'gc, B>>,
     ) -> Self {
         Self {
             param_name: name.into(),
@@ -107,9 +108,9 @@ impl<'gc> ParamConfig<'gc> {
 /// Represents a reference to an AVM2 method and body.
 #[derive(Collect, Clone, Debug)]
 #[collect(no_drop)]
-pub struct BytecodeMethod<'gc> {
+pub struct BytecodeMethod<'gc, B: Backend> {
     /// The translation unit this function was defined in.
-    pub txunit: TranslationUnit<'gc>,
+    pub txunit: TranslationUnit<'gc, B>,
 
     /// The underlying ABC file of the above translation unit.
     #[collect(require_static)]
@@ -122,7 +123,7 @@ pub struct BytecodeMethod<'gc> {
     pub abc_method_body: Option<u32>,
 
     /// The parameter signature of this method.
-    pub signature: Vec<ParamConfig<'gc>>,
+    pub signature: Vec<ParamConfig<'gc, B>>,
 
     /// The return type of this method.
     pub return_type: Multiname<'gc>,
@@ -134,13 +135,13 @@ pub struct BytecodeMethod<'gc> {
     pub is_function: bool,
 }
 
-impl<'gc> BytecodeMethod<'gc> {
+impl<'gc, B: Backend> BytecodeMethod<'gc, B> {
     /// Construct an `BytecodeMethod` from an `AbcFile` and method index.
     pub fn from_method_index(
-        txunit: TranslationUnit<'gc>,
+        txunit: TranslationUnit<'gc, B>,
         abc_method: Index<AbcMethod>,
         is_function: bool,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<Self, Error> {
         let abc = txunit.abc();
         let mut signature = Vec::new();
@@ -193,7 +194,7 @@ impl<'gc> BytecodeMethod<'gc> {
     }
 
     /// Get the underlying translation unit this method was defined in.
-    pub fn translation_unit(&self) -> TranslationUnit<'gc> {
+    pub fn translation_unit(&self) -> TranslationUnit<'gc, B> {
         self.txunit
     }
 
@@ -214,7 +215,7 @@ impl<'gc> BytecodeMethod<'gc> {
     }
 
     /// Get the list of method params for this method.
-    pub fn signature(&self) -> &[ParamConfig<'gc>] {
+    pub fn signature(&self) -> &[ParamConfig<'gc, B>] {
         &self.signature
     }
 
@@ -266,28 +267,28 @@ impl<'gc> BytecodeMethod<'gc> {
 
 /// An uninstantiated method
 #[derive(Clone)]
-pub struct NativeMethod<'gc> {
+pub struct NativeMethod<'gc, B: Backend> {
     /// The function to call to execute the method.
-    pub method: NativeMethodImpl,
+    pub method: NativeMethodImpl<B>,
 
     /// The name of the method.
     pub name: Cow<'static, str>,
 
     /// The parameter signature of the method.
-    pub signature: Vec<ParamConfig<'gc>>,
+    pub signature: Vec<ParamConfig<'gc, B>>,
 
     /// Whether or not this method accepts parameters beyond those
     /// mentioned in the parameter list.
     pub is_variadic: bool,
 }
 
-unsafe impl<'gc> Collect for NativeMethod<'gc> {
+unsafe impl<'gc, B: Backend> Collect for NativeMethod<'gc, B> {
     fn trace(&self, cc: CollectionContext) {
         self.signature.trace(cc);
     }
 }
 
-impl<'gc> fmt::Debug for NativeMethod<'gc> {
+impl<'gc, B: Backend> fmt::Debug for NativeMethod<'gc, B> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("NativeMethod")
             .field("method", &format!("{:p}", &self.method))
@@ -302,26 +303,26 @@ impl<'gc> fmt::Debug for NativeMethod<'gc> {
 /// from an ABC file.
 #[derive(Clone, Collect, Debug)]
 #[collect(no_drop)]
-pub enum Method<'gc> {
+pub enum Method<'gc, B: Backend> {
     /// A native method.
-    Native(Gc<'gc, NativeMethod<'gc>>),
+    Native(Gc<'gc, NativeMethod<'gc, B>>),
 
     /// An ABC-provided method entry.
-    Bytecode(Gc<'gc, BytecodeMethod<'gc>>),
+    Bytecode(Gc<'gc, BytecodeMethod<'gc, B>>),
 }
 
-impl<'gc> From<Gc<'gc, BytecodeMethod<'gc>>> for Method<'gc> {
-    fn from(bm: Gc<'gc, BytecodeMethod<'gc>>) -> Self {
+impl<'gc, B: Backend> From<Gc<'gc, BytecodeMethod<'gc, B>>> for Method<'gc, B> {
+    fn from(bm: Gc<'gc, BytecodeMethod<'gc, B>>) -> Self {
         Self::Bytecode(bm)
     }
 }
 
-impl<'gc> Method<'gc> {
+impl<'gc, B: Backend> Method<'gc, B> {
     /// Define a builtin method with a particular param configuration.
     pub fn from_builtin_and_params(
-        method: NativeMethodImpl,
+        method: NativeMethodImpl<B>,
         name: impl Into<Cow<'static, str>>,
-        signature: Vec<ParamConfig<'gc>>,
+        signature: Vec<ParamConfig<'gc, B>>,
         is_variadic: bool,
         mc: MutationContext<'gc, '_>,
     ) -> Self {
@@ -338,7 +339,7 @@ impl<'gc> Method<'gc> {
 
     /// Define a builtin with no parameter constraints.
     pub fn from_builtin(
-        method: NativeMethodImpl,
+        method: NativeMethodImpl<B>,
         name: impl Into<Cow<'static, str>>,
         mc: MutationContext<'gc, '_>,
     ) -> Self {

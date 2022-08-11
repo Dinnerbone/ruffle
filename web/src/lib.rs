@@ -36,13 +36,13 @@ thread_local! {
     /// issues with lifetimes and type parameters (which cannot be exported with wasm-bindgen).
     static INSTANCES: RefCell<Arena<RefCell<RuffleInstance>>> = RefCell::new(Arena::new());
 
-    static CURRENT_CONTEXT: RefCell<Option<*mut UpdateContext<'static, 'static, 'static>>> = RefCell::new(None);
+    static CURRENT_CONTEXT: RefCell<Option<*mut UpdateContext<'static, 'static, 'static, B>>> = RefCell::new(None);
 }
 
 type AnimationHandler = Closure<dyn FnMut(f64)>;
 
 struct RuffleInstance {
-    core: Arc<Mutex<Player>>,
+    core: Arc<Mutex<Player<B>>>,
     js_player: JavascriptPlayer,
     canvas: HtmlCanvasElement,
     canvas_width: i32,
@@ -1071,16 +1071,16 @@ struct JavascriptMethod {
 impl ExternalInterfaceMethod for JavascriptMethod {
     fn call(
         &self,
-        context: &mut UpdateContext<'_, '_, '_>,
+        context: &mut UpdateContext<'_, '_, '_, B>,
         args: &[ExternalValue],
     ) -> ExternalValue {
         let old_context = CURRENT_CONTEXT.with(|v| {
             v.replace(Some(unsafe {
                 std::mem::transmute::<
                     &mut UpdateContext,
-                    &mut UpdateContext<'static, 'static, 'static>,
+                    &mut UpdateContext<'static, 'static, 'static, B>,
                 >(context)
-            } as *mut UpdateContext))
+            } as *mut UpdateContext<B>))
         });
         let result = if let Some(function) = self.function.dyn_ref::<Function>() {
             let args_array = Array::new();

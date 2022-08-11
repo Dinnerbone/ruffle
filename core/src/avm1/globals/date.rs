@@ -8,6 +8,7 @@ use crate::locale::{get_current_date_time, get_timezone};
 use chrono::{DateTime, Datelike, Duration, LocalResult, TimeZone, Timelike, Utc};
 use gc_arena::{Collect, MutationContext};
 use num_traits::ToPrimitive;
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 
 macro_rules! local_getter {
@@ -55,51 +56,6 @@ macro_rules! setter {
     };
 }
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "getDay" => method(local_getter!(days_from_sunday); DONT_ENUM | DONT_DELETE);
-    "getFullYear" => method(local_getter!(Datelike::year); DONT_ENUM | DONT_DELETE);
-    "getDate" => method(local_getter!(Datelike::day); DONT_ENUM | DONT_DELETE);
-    "getHours" => method(local_getter!(Timelike::hour); DONT_ENUM | DONT_DELETE);
-    "getMilliseconds" => method(local_getter!(DateTime::timestamp_subsec_millis); DONT_ENUM | DONT_DELETE);
-    "getMinutes" => method(local_getter!(Timelike::minute); DONT_ENUM | DONT_DELETE);
-    "getMonth" => method(local_getter!(Datelike::month0); DONT_ENUM | DONT_DELETE);
-    "getSeconds" => method(local_getter!(Timelike::second); DONT_ENUM | DONT_DELETE);
-    "getYear" => method(local_getter!(year_1900_based); DONT_ENUM | DONT_DELETE);
-    "valueOf" => method(utc_getter!(timestamp_millis_f64); DONT_ENUM | DONT_DELETE);
-    "getTime" => method(utc_getter!(timestamp_millis_f64); DONT_ENUM | DONT_DELETE);
-    "getUTCDate" => method(utc_getter!(Datelike::day); DONT_ENUM | DONT_DELETE);
-    "getUTCDay" => method(utc_getter!(days_from_sunday); DONT_ENUM | DONT_DELETE);
-    "getUTCFullYear" => method(utc_getter!(Datelike::year); DONT_ENUM | DONT_DELETE);
-    "getUTCHours" => method(utc_getter!(Timelike::hour); DONT_ENUM | DONT_DELETE);
-    "getUTCMilliseconds" => method(utc_getter!(DateTime::timestamp_subsec_millis); DONT_ENUM | DONT_DELETE);
-    "getUTCMinutes" => method(utc_getter!(Timelike::minute); DONT_ENUM | DONT_DELETE);
-    "getUTCMonth" => method(utc_getter!(Datelike::month0); DONT_ENUM | DONT_DELETE);
-    "getUTCSeconds" => method(utc_getter!(Timelike::second); DONT_ENUM | DONT_DELETE);
-    "getUTCYear" => method(utc_getter!(year_1900_based); DONT_ENUM | DONT_DELETE);
-    "toString" => method(setter!(to_string); DONT_ENUM | DONT_DELETE);
-    "getTimezoneOffset" => method(setter!(get_timezone_offset); DONT_ENUM | DONT_DELETE);
-    "setDate" => method(setter!(set_date); DONT_ENUM | DONT_DELETE);
-    "setUTCDate" => method(setter!(set_utc_date); DONT_ENUM | DONT_DELETE);
-    "setYear" => method(setter!(set_year); DONT_ENUM | DONT_DELETE);
-    "setFullYear" => method(setter!(set_full_year); DONT_ENUM | DONT_DELETE);
-    "setUTCFullYear" => method(setter!(set_utc_full_year); DONT_ENUM | DONT_DELETE);
-    "setHours" => method(setter!(set_hours); DONT_ENUM | DONT_DELETE);
-    "setUTCHours" => method(setter!(set_utc_hours); DONT_ENUM | DONT_DELETE);
-    "setMilliseconds" => method(setter!(set_milliseconds); DONT_ENUM | DONT_DELETE);
-    "setUTCMilliseconds" => method(setter!(set_utc_milliseconds); DONT_ENUM | DONT_DELETE);
-    "setMinutes" => method(setter!(set_minutes); DONT_ENUM | DONT_DELETE);
-    "setUTCMinutes" => method(setter!(set_utc_minutes); DONT_ENUM | DONT_DELETE);
-    "setMonth" => method(setter!(set_month); DONT_ENUM | DONT_DELETE);
-    "setUTCMonth" => method(setter!(set_utc_month); DONT_ENUM | DONT_DELETE);
-    "setSeconds" => method(setter!(set_seconds); DONT_ENUM | DONT_DELETE);
-    "setUTCSeconds" => method(setter!(set_utc_seconds); DONT_ENUM | DONT_DELETE);
-    "setTime" => method(setter!(set_time); DONT_ENUM | DONT_DELETE);
-};
-
-const OBJECT_DECLS: &[Declaration] = declare_properties! {
-    "UTC" => method(create_utc; DONT_ENUM | DONT_DELETE | READ_ONLY);
-};
-
 fn days_from_sunday<T: Datelike>(date: &T) -> u32 {
     date.weekday().num_days_from_sunday()
 }
@@ -136,8 +92,9 @@ struct DateAdjustment<
     'gc: 'activation_a,
     'gc_context: 'activation_a,
     T: TimeZone + 'builder,
+    B: Backend,
 > {
-    activation: &'builder mut Activation<'activation_a, 'gc, 'gc_context>,
+    activation: &'builder mut Activation<'activation_a, 'gc, 'gc_context, B>,
     year_type: YearType,
     timezone: &'builder T,
     year: Option<Option<f64>>,
@@ -150,11 +107,11 @@ struct DateAdjustment<
     ignore_next: bool,
 }
 
-impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
-    DateAdjustment<'builder, 'activation_a, 'gc, 'gc_context, T>
+impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone, B: Backend>
+    DateAdjustment<'builder, 'activation_a, 'gc, 'gc_context, T, B>
 {
     fn new(
-        activation: &'builder mut Activation<'activation_a, 'gc, 'gc_context>,
+        activation: &'builder mut Activation<'activation_a, 'gc, 'gc_context, B>,
         timezone: &'builder T,
     ) -> Self {
         Self {
@@ -178,7 +135,7 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     }
 
     #[allow(dead_code)]
-    fn year(&mut self, value: Option<&Value<'gc>>) -> Result<&mut Self, Error<'gc>> {
+    fn year(&mut self, value: Option<&Value<'gc, B>>) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.year = Some(if let Some(value) = value {
                 Some(value.coerce_to_f64(self.activation)?)
@@ -192,9 +149,9 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     #[allow(dead_code)]
     fn year_or(
         &mut self,
-        value: Option<&Value<'gc>>,
+        value: Option<&Value<'gc, B>>,
         default: f64,
-    ) -> Result<&mut Self, Error<'gc>> {
+    ) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.year = Some(if let Some(value) = value {
                 let value = value.coerce_to_f64(self.activation)?;
@@ -211,7 +168,7 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     }
 
     #[allow(dead_code)]
-    fn year_opt(&mut self, value: Option<&Value<'gc>>) -> Result<&mut Self, Error<'gc>> {
+    fn year_opt(&mut self, value: Option<&Value<'gc, B>>) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.year = match value {
                 Some(&Value::Undefined) | None => {
@@ -225,7 +182,7 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     }
 
     #[allow(dead_code)]
-    fn month(&mut self, value: Option<&Value<'gc>>) -> Result<&mut Self, Error<'gc>> {
+    fn month(&mut self, value: Option<&Value<'gc, B>>) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.month = Some(if let Some(value) = value {
                 Some(value.coerce_to_f64(self.activation)?)
@@ -239,9 +196,9 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     #[allow(dead_code)]
     fn month_or(
         &mut self,
-        value: Option<&Value<'gc>>,
+        value: Option<&Value<'gc, B>>,
         default: f64,
-    ) -> Result<&mut Self, Error<'gc>> {
+    ) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.month = Some(if let Some(value) = value {
                 let value = value.coerce_to_f64(self.activation)?;
@@ -258,7 +215,7 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     }
 
     #[allow(dead_code)]
-    fn month_opt(&mut self, value: Option<&Value<'gc>>) -> Result<&mut Self, Error<'gc>> {
+    fn month_opt(&mut self, value: Option<&Value<'gc, B>>) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.month = match value {
                 Some(&Value::Undefined) | None => {
@@ -272,7 +229,7 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     }
 
     #[allow(dead_code)]
-    fn day(&mut self, value: Option<&Value<'gc>>) -> Result<&mut Self, Error<'gc>> {
+    fn day(&mut self, value: Option<&Value<'gc, B>>) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.day = Some(if let Some(value) = value {
                 Some(value.coerce_to_f64(self.activation)?)
@@ -286,9 +243,9 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     #[allow(dead_code)]
     fn day_or(
         &mut self,
-        value: Option<&Value<'gc>>,
+        value: Option<&Value<'gc, B>>,
         default: f64,
-    ) -> Result<&mut Self, Error<'gc>> {
+    ) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.day = Some(if let Some(value) = value {
                 let value = value.coerce_to_f64(self.activation)?;
@@ -305,7 +262,7 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     }
 
     #[allow(dead_code)]
-    fn day_opt(&mut self, value: Option<&Value<'gc>>) -> Result<&mut Self, Error<'gc>> {
+    fn day_opt(&mut self, value: Option<&Value<'gc, B>>) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.day = match value {
                 Some(&Value::Undefined) | None => {
@@ -319,7 +276,7 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     }
 
     #[allow(dead_code)]
-    fn hour(&mut self, value: Option<&Value<'gc>>) -> Result<&mut Self, Error<'gc>> {
+    fn hour(&mut self, value: Option<&Value<'gc, B>>) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.hour = Some(if let Some(value) = value {
                 Some(value.coerce_to_f64(self.activation)?)
@@ -333,9 +290,9 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     #[allow(dead_code)]
     fn hour_or(
         &mut self,
-        value: Option<&Value<'gc>>,
+        value: Option<&Value<'gc, B>>,
         default: f64,
-    ) -> Result<&mut Self, Error<'gc>> {
+    ) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.hour = Some(if let Some(value) = value {
                 let value = value.coerce_to_f64(self.activation)?;
@@ -352,7 +309,7 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     }
 
     #[allow(dead_code)]
-    fn hour_opt(&mut self, value: Option<&Value<'gc>>) -> Result<&mut Self, Error<'gc>> {
+    fn hour_opt(&mut self, value: Option<&Value<'gc, B>>) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.hour = match value {
                 Some(&Value::Undefined) | None => {
@@ -366,7 +323,7 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     }
 
     #[allow(dead_code)]
-    fn minute(&mut self, value: Option<&Value<'gc>>) -> Result<&mut Self, Error<'gc>> {
+    fn minute(&mut self, value: Option<&Value<'gc, B>>) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.minute = Some(if let Some(value) = value {
                 Some(value.coerce_to_f64(self.activation)?)
@@ -379,9 +336,9 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
 
     fn minute_or(
         &mut self,
-        value: Option<&Value<'gc>>,
+        value: Option<&Value<'gc, B>>,
         default: f64,
-    ) -> Result<&mut Self, Error<'gc>> {
+    ) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.minute = Some(if let Some(value) = value {
                 let value = value.coerce_to_f64(self.activation)?;
@@ -398,7 +355,7 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     }
 
     #[allow(dead_code)]
-    fn minute_opt(&mut self, value: Option<&Value<'gc>>) -> Result<&mut Self, Error<'gc>> {
+    fn minute_opt(&mut self, value: Option<&Value<'gc, B>>) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.minute = match value {
                 Some(&Value::Undefined) | None => {
@@ -412,7 +369,7 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     }
 
     #[allow(dead_code)]
-    fn second(&mut self, value: Option<&Value<'gc>>) -> Result<&mut Self, Error<'gc>> {
+    fn second(&mut self, value: Option<&Value<'gc, B>>) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.second = Some(if let Some(value) = value {
                 Some(value.coerce_to_f64(self.activation)?)
@@ -426,9 +383,9 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     #[allow(dead_code)]
     fn second_or(
         &mut self,
-        value: Option<&Value<'gc>>,
+        value: Option<&Value<'gc, B>>,
         default: f64,
-    ) -> Result<&mut Self, Error<'gc>> {
+    ) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.second = Some(if let Some(value) = value {
                 let value = value.coerce_to_f64(self.activation)?;
@@ -445,7 +402,7 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     }
 
     #[allow(dead_code)]
-    fn second_opt(&mut self, value: Option<&Value<'gc>>) -> Result<&mut Self, Error<'gc>> {
+    fn second_opt(&mut self, value: Option<&Value<'gc, B>>) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.second = match value {
                 Some(&Value::Undefined) | None => {
@@ -459,7 +416,7 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     }
 
     #[allow(dead_code)]
-    fn millisecond(&mut self, value: Option<&Value<'gc>>) -> Result<&mut Self, Error<'gc>> {
+    fn millisecond(&mut self, value: Option<&Value<'gc, B>>) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.millisecond = Some(if let Some(value) = value {
                 Some(value.coerce_to_f64(self.activation)?)
@@ -473,9 +430,9 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     #[allow(dead_code)]
     fn millisecond_or(
         &mut self,
-        value: Option<&Value<'gc>>,
+        value: Option<&Value<'gc, B>>,
         default: f64,
-    ) -> Result<&mut Self, Error<'gc>> {
+    ) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.millisecond = Some(if let Some(value) = value {
                 let value = value.coerce_to_f64(self.activation)?;
@@ -492,7 +449,10 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     }
 
     #[allow(dead_code)]
-    fn millisecond_opt(&mut self, value: Option<&Value<'gc>>) -> Result<&mut Self, Error<'gc>> {
+    fn millisecond_opt(
+        &mut self,
+        value: Option<&Value<'gc, B>>,
+    ) -> Result<&mut Self, Error<'gc, B>> {
         if !self.ignore_next {
             self.millisecond = match value {
                 Some(&Value::Undefined) | None => {
@@ -530,7 +490,7 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
         }
     }
 
-    fn calculate(&mut self, current: DateObject<'gc>) -> Option<DateTime<Utc>> {
+    fn calculate(&mut self, current: DateObject<'gc, B>) -> Option<DateTime<Utc>> {
         if let Some(current) = current.date_time().map(|v| v.with_timezone(self.timezone)) {
             let month_rem = self
                 .month
@@ -569,7 +529,7 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
         None
     }
 
-    fn apply(&mut self, object: DateObject<'gc>) -> f64 {
+    fn apply(&mut self, object: DateObject<'gc, B>) -> f64 {
         let date = self.calculate(object);
         object.set_date_time(self.activation.context.gc_context, date);
         if let Some(date) = date {
@@ -580,11 +540,11 @@ impl<'builder, 'activation_a, 'gc, 'gc_context, T: TimeZone>
     }
 }
 
-fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let this = if let Some(object) = this.as_date_object() {
         object
     } else {
@@ -631,11 +591,11 @@ fn constructor<'gc>(
     Ok(this.into())
 }
 
-fn create_utc<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn create_utc<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if args.len() < 2 {
         return Ok(Value::Undefined);
     }
@@ -661,11 +621,11 @@ fn create_utc<'gc>(
     Ok(timestamp.into())
 }
 
-fn to_string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DateObject<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn to_string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DateObject<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let date = this.date_time();
 
     if let Some(date) = date {
@@ -680,11 +640,11 @@ fn to_string<'gc>(
     }
 }
 
-fn get_timezone_offset<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: DateObject<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_timezone_offset<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DateObject<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let date = if let Some(date) = this.date_time() {
         date.with_timezone(&get_timezone())
     } else {
@@ -696,11 +656,11 @@ fn get_timezone_offset<'gc>(
     Ok(minutes.into())
 }
 
-fn set_date<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DateObject<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_date<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DateObject<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if args.is_empty() {
         this.set_date_time(activation.context.gc_context, None);
         Ok(f64::NAN.into())
@@ -712,11 +672,11 @@ fn set_date<'gc>(
     }
 }
 
-fn set_utc_date<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DateObject<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_utc_date<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DateObject<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if args.is_empty() {
         this.set_date_time(activation.context.gc_context, None);
         Ok(f64::NAN.into())
@@ -728,11 +688,11 @@ fn set_utc_date<'gc>(
     }
 }
 
-fn set_year<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DateObject<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_year<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DateObject<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let timestamp = DateAdjustment::new(activation, &get_timezone())
         .year(args.get(0))?
         .adjust_year(|year| {
@@ -746,22 +706,22 @@ fn set_year<'gc>(
     Ok(timestamp.into())
 }
 
-fn set_hours<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DateObject<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_hours<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DateObject<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let timestamp = DateAdjustment::new(activation, &get_timezone())
         .hour(args.get(0))?
         .apply(this);
     Ok(timestamp.into())
 }
 
-fn set_utc_hours<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DateObject<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_utc_hours<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DateObject<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let timestamp = DateAdjustment::new(activation, &Utc)
         .hour(args.get(0))?
         .minute_opt(args.get(1))?
@@ -771,44 +731,44 @@ fn set_utc_hours<'gc>(
     Ok(timestamp.into())
 }
 
-fn set_milliseconds<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DateObject<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_milliseconds<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DateObject<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let timestamp = DateAdjustment::new(activation, &get_timezone())
         .millisecond(args.get(0))?
         .apply(this);
     Ok(timestamp.into())
 }
 
-fn set_utc_milliseconds<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DateObject<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_utc_milliseconds<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DateObject<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let timestamp = DateAdjustment::new(activation, &Utc)
         .millisecond(args.get(0))?
         .apply(this);
     Ok(timestamp.into())
 }
 
-fn set_minutes<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DateObject<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_minutes<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DateObject<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let timestamp = DateAdjustment::new(activation, &get_timezone())
         .minute_or(args.get(0), -2147483648.0)?
         .apply(this);
     Ok(timestamp.into())
 }
 
-fn set_utc_minutes<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DateObject<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_utc_minutes<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DateObject<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let timestamp = DateAdjustment::new(activation, &Utc)
         .minute_or(args.get(0), -2147483648.0)?
         .second_opt(args.get(1))?
@@ -817,11 +777,11 @@ fn set_utc_minutes<'gc>(
     Ok(timestamp.into())
 }
 
-fn set_month<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DateObject<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_month<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DateObject<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let timestamp = DateAdjustment::new(activation, &get_timezone())
         .month_or(args.get(0), 0.0)?
         .day_opt(args.get(1))?
@@ -829,11 +789,11 @@ fn set_month<'gc>(
     Ok(timestamp.into())
 }
 
-fn set_utc_month<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DateObject<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_utc_month<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DateObject<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let timestamp = DateAdjustment::new(activation, &Utc)
         .month_or(args.get(0), 0.0)?
         .day_opt(args.get(1))?
@@ -841,22 +801,22 @@ fn set_utc_month<'gc>(
     Ok(timestamp.into())
 }
 
-fn set_seconds<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DateObject<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_seconds<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DateObject<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let timestamp = DateAdjustment::new(activation, &get_timezone())
         .second(args.get(0))?
         .apply(this);
     Ok(timestamp.into())
 }
 
-fn set_utc_seconds<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DateObject<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_utc_seconds<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DateObject<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let timestamp = DateAdjustment::new(activation, &Utc)
         .second(args.get(0))?
         .millisecond_opt(args.get(1))?
@@ -864,11 +824,11 @@ fn set_utc_seconds<'gc>(
     Ok(timestamp.into())
 }
 
-fn set_time<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DateObject<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_time<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DateObject<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let new_time = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -884,11 +844,11 @@ fn set_time<'gc>(
     Ok(f64::NAN.into())
 }
 
-fn set_full_year<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DateObject<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_full_year<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DateObject<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let timestamp = DateAdjustment::new(activation, &get_timezone())
         .year(args.get(0))?
         .month_opt(args.get(1))?
@@ -897,11 +857,11 @@ fn set_full_year<'gc>(
     Ok(timestamp.into())
 }
 
-fn set_utc_full_year<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: DateObject<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_utc_full_year<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: DateObject<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let timestamp = DateAdjustment::new(activation, &Utc)
         .year(args.get(0))?
         .month_opt(args.get(1))?
@@ -910,11 +870,11 @@ fn set_utc_full_year<'gc>(
     Ok(timestamp.into())
 }
 
-pub fn create_date_object<'gc>(
+pub fn create_date_object<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    date_proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    date_proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let date = FunctionObject::function(
         gc_context,
         Executable::Native(constructor),
@@ -922,17 +882,64 @@ pub fn create_date_object<'gc>(
         date_proto,
     );
     let object = date.as_script_object().unwrap();
+
+    let OBJECT_DECLS: &[Declaration<B>] = declare_properties! {
+        "UTC" => method(create_utc; DONT_ENUM | DONT_DELETE | READ_ONLY);
+    };
     define_properties_on(OBJECT_DECLS, gc_context, object, fn_proto);
+
     date
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let date = DateObject::with_date_time(gc_context, Some(proto), None);
     let object = date.as_script_object().unwrap();
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "getDay" => method(local_getter!(days_from_sunday); DONT_ENUM | DONT_DELETE);
+        "getFullYear" => method(local_getter!(Datelike::year); DONT_ENUM | DONT_DELETE);
+        "getDate" => method(local_getter!(Datelike::day); DONT_ENUM | DONT_DELETE);
+        "getHours" => method(local_getter!(Timelike::hour); DONT_ENUM | DONT_DELETE);
+        "getMilliseconds" => method(local_getter!(DateTime::timestamp_subsec_millis); DONT_ENUM | DONT_DELETE);
+        "getMinutes" => method(local_getter!(Timelike::minute); DONT_ENUM | DONT_DELETE);
+        "getMonth" => method(local_getter!(Datelike::month0); DONT_ENUM | DONT_DELETE);
+        "getSeconds" => method(local_getter!(Timelike::second); DONT_ENUM | DONT_DELETE);
+        "getYear" => method(local_getter!(year_1900_based); DONT_ENUM | DONT_DELETE);
+        "valueOf" => method(utc_getter!(timestamp_millis_f64); DONT_ENUM | DONT_DELETE);
+        "getTime" => method(utc_getter!(timestamp_millis_f64); DONT_ENUM | DONT_DELETE);
+        "getUTCDate" => method(utc_getter!(Datelike::day); DONT_ENUM | DONT_DELETE);
+        "getUTCDay" => method(utc_getter!(days_from_sunday); DONT_ENUM | DONT_DELETE);
+        "getUTCFullYear" => method(utc_getter!(Datelike::year); DONT_ENUM | DONT_DELETE);
+        "getUTCHours" => method(utc_getter!(Timelike::hour); DONT_ENUM | DONT_DELETE);
+        "getUTCMilliseconds" => method(utc_getter!(DateTime::timestamp_subsec_millis); DONT_ENUM | DONT_DELETE);
+        "getUTCMinutes" => method(utc_getter!(Timelike::minute); DONT_ENUM | DONT_DELETE);
+        "getUTCMonth" => method(utc_getter!(Datelike::month0); DONT_ENUM | DONT_DELETE);
+        "getUTCSeconds" => method(utc_getter!(Timelike::second); DONT_ENUM | DONT_DELETE);
+        "getUTCYear" => method(utc_getter!(year_1900_based); DONT_ENUM | DONT_DELETE);
+        "toString" => method(setter!(to_string); DONT_ENUM | DONT_DELETE);
+        "getTimezoneOffset" => method(setter!(get_timezone_offset); DONT_ENUM | DONT_DELETE);
+        "setDate" => method(setter!(set_date); DONT_ENUM | DONT_DELETE);
+        "setUTCDate" => method(setter!(set_utc_date); DONT_ENUM | DONT_DELETE);
+        "setYear" => method(setter!(set_year); DONT_ENUM | DONT_DELETE);
+        "setFullYear" => method(setter!(set_full_year); DONT_ENUM | DONT_DELETE);
+        "setUTCFullYear" => method(setter!(set_utc_full_year); DONT_ENUM | DONT_DELETE);
+        "setHours" => method(setter!(set_hours); DONT_ENUM | DONT_DELETE);
+        "setUTCHours" => method(setter!(set_utc_hours); DONT_ENUM | DONT_DELETE);
+        "setMilliseconds" => method(setter!(set_milliseconds); DONT_ENUM | DONT_DELETE);
+        "setUTCMilliseconds" => method(setter!(set_utc_milliseconds); DONT_ENUM | DONT_DELETE);
+        "setMinutes" => method(setter!(set_minutes); DONT_ENUM | DONT_DELETE);
+        "setUTCMinutes" => method(setter!(set_utc_minutes); DONT_ENUM | DONT_DELETE);
+        "setMonth" => method(setter!(set_month); DONT_ENUM | DONT_DELETE);
+        "setUTCMonth" => method(setter!(set_utc_month); DONT_ENUM | DONT_DELETE);
+        "setSeconds" => method(setter!(set_seconds); DONT_ENUM | DONT_DELETE);
+        "setUTCSeconds" => method(setter!(set_utc_seconds); DONT_ENUM | DONT_DELETE);
+        "setTime" => method(setter!(set_time); DONT_ENUM | DONT_DELETE);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     date.into()
 }

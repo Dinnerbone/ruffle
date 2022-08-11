@@ -7,14 +7,15 @@ use crate::avm2::value::Value;
 use crate::avm2::Error;
 use fnv::FnvHashMap;
 use gc_arena::{Collect, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 use std::cell::{Ref, RefMut};
 
 /// A class instance allocator that allocates Dictionary objects.
-pub fn dictionary_allocator<'gc>(
-    class: ClassObject<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Object<'gc>, Error> {
+pub fn dictionary_allocator<'gc, B: Backend>(
+    class: ClassObject<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Object<'gc, B>, Error> {
     let base = ScriptObjectData::new(class);
 
     Ok(DictionaryObject(GcCell::allocate(
@@ -34,21 +35,21 @@ pub fn dictionary_allocator<'gc>(
 /// keys are objects instead of strings.
 #[derive(Clone, Collect, Debug, Copy)]
 #[collect(no_drop)]
-pub struct DictionaryObject<'gc>(GcCell<'gc, DictionaryObjectData<'gc>>);
+pub struct DictionaryObject<'gc, B: Backend>(GcCell<'gc, DictionaryObjectData<'gc, B>>);
 
 #[derive(Clone, Collect, Debug)]
 #[collect(no_drop)]
-pub struct DictionaryObjectData<'gc> {
+pub struct DictionaryObjectData<'gc, B: Backend> {
     /// Base script object
-    base: ScriptObjectData<'gc>,
+    base: ScriptObjectData<'gc, B>,
 
     /// Object key storage
-    object_space: FnvHashMap<Object<'gc>, Value<'gc>>,
+    object_space: FnvHashMap<Object<'gc, B>, Value<'gc, B>>,
 }
 
-impl<'gc> DictionaryObject<'gc> {
+impl<'gc, B: Backend> DictionaryObject<'gc, B> {
     /// Retrieve a value in the dictionary's object space.
-    pub fn get_property_by_object(self, name: Object<'gc>) -> Value<'gc> {
+    pub fn get_property_by_object(self, name: Object<'gc, B>) -> Value<'gc, B> {
         self.0
             .read()
             .object_space
@@ -60,29 +61,31 @@ impl<'gc> DictionaryObject<'gc> {
     /// Set a value in the dictionary's object space.
     pub fn set_property_by_object(
         self,
-        name: Object<'gc>,
-        value: Value<'gc>,
+        name: Object<'gc, B>,
+        value: Value<'gc, B>,
         mc: MutationContext<'gc, '_>,
     ) {
         self.0.write(mc).object_space.insert(name, value);
     }
 
     /// Delete a value from the dictionary's object space.
-    pub fn delete_property_by_object(self, name: Object<'gc>, mc: MutationContext<'gc, '_>) {
+    pub fn delete_property_by_object(self, name: Object<'gc, B>, mc: MutationContext<'gc, '_>) {
         self.0.write(mc).object_space.remove(&name);
     }
 
-    pub fn has_property_by_object(self, name: Object<'gc>) -> bool {
+    pub fn has_property_by_object(self, name: Object<'gc, B>) -> bool {
         self.0.read().object_space.get(&name).is_some()
     }
 }
 
-impl<'gc> TObject<'gc> for DictionaryObject<'gc> {
-    fn base(&self) -> Ref<ScriptObjectData<'gc>> {
+impl<'gc, B: Backend> TObject<'gc> for DictionaryObject<'gc, B> {
+    type B = B;
+
+    fn base(&self) -> Ref<ScriptObjectData<'gc, B>> {
         Ref::map(self.0.read(), |read| &read.base)
     }
 
-    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc>> {
+    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc, B>> {
         RefMut::map(self.0.write(mc), |write| &mut write.base)
     }
 
@@ -90,18 +93,18 @@ impl<'gc> TObject<'gc> for DictionaryObject<'gc> {
         self.0.as_ptr() as *const ObjectPtr
     }
 
-    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc>, Error> {
+    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc, B>, Error> {
         Ok(Object::from(*self).into())
     }
 
-    fn as_dictionary_object(self) -> Option<DictionaryObject<'gc>> {
+    fn as_dictionary_object(self) -> Option<DictionaryObject<'gc, B>> {
         Some(self)
     }
 
     fn get_next_enumerant(
         self,
         last_index: u32,
-        _activation: &mut Activation<'_, 'gc, '_>,
+        _activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<Option<u32>, Error> {
         let read = self.0.read();
         let num_enumerants = read.base.num_enumerants();
@@ -117,8 +120,8 @@ impl<'gc> TObject<'gc> for DictionaryObject<'gc> {
     fn get_enumerant_name(
         self,
         index: u32,
-        _activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        _activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         let read = self.0.read();
         let object_space_len = read.object_space.keys().len() as u32;
         if object_space_len >= index {

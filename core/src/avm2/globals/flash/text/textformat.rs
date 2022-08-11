@@ -9,15 +9,16 @@ use crate::avm2::value::Value;
 use crate::avm2::Error;
 use crate::html::TextFormat;
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::ecma_conversions::round_to_even;
 use ruffle_types::string::{AvmString, WStr};
 
 /// Implements `flash.text.TextFormat`'s instance constructor.
-pub fn instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         activation.super_init(this, &[])?;
 
@@ -94,11 +95,11 @@ pub fn instance_init<'gc>(
 }
 
 /// Implements `flash.text.TextFormat`'s class constructor.
-pub fn class_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn class_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok(Value::Undefined)
 }
 
@@ -131,10 +132,10 @@ macro_rules! setter {
     };
 }
 
-fn align<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+fn align<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &TextFormat,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     Ok(text_format
         .align
         .as_ref()
@@ -146,10 +147,10 @@ fn align<'gc>(
         }))
 }
 
-fn set_align<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn set_align<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &mut TextFormat,
-    value: &Value<'gc>,
+    value: &Value<'gc, B>,
 ) -> Result<(), Error> {
     let value = match value {
         Value::Undefined | Value::Null => {
@@ -176,20 +177,20 @@ fn set_align<'gc>(
     Ok(())
 }
 
-fn block_indent<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+fn block_indent<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &TextFormat,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     Ok(text_format
         .block_indent
         .as_ref()
         .map_or(Value::Null, |&block_indent| block_indent.into()))
 }
 
-fn set_block_indent<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn set_block_indent<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &mut TextFormat,
-    value: &Value<'gc>,
+    value: &Value<'gc, B>,
 ) -> Result<(), Error> {
     text_format.block_indent = match value {
         Value::Undefined | Value::Null => None,
@@ -198,20 +199,20 @@ fn set_block_indent<'gc>(
     Ok(())
 }
 
-fn bold<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+fn bold<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &TextFormat,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     Ok(text_format
         .bold
         .as_ref()
         .map_or(Value::Null, |&bold| bold.into()))
 }
 
-fn set_bold<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+fn set_bold<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &mut TextFormat,
-    value: &Value<'gc>,
+    value: &Value<'gc, B>,
 ) -> Result<(), Error> {
     text_format.bold = match value {
         Value::Undefined | Value::Null => None,
@@ -220,20 +221,20 @@ fn set_bold<'gc>(
     Ok(())
 }
 
-fn bullet<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+fn bullet<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &TextFormat,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     Ok(text_format
         .bullet
         .as_ref()
         .map_or(Value::Null, |&bullet| bullet.into()))
 }
 
-fn set_bullet<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+fn set_bullet<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &mut TextFormat,
-    value: &Value<'gc>,
+    value: &Value<'gc, B>,
 ) -> Result<(), Error> {
     text_format.bullet = match value {
         Value::Undefined | Value::Null => None,
@@ -242,20 +243,20 @@ fn set_bullet<'gc>(
     Ok(())
 }
 
-fn color<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+fn color<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &TextFormat,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     Ok(text_format
         .color
         .as_ref()
         .map_or(Value::Null, |color| (color.to_rgba() as i32).into()))
 }
 
-fn set_color<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn set_color<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &mut TextFormat,
-    value: &Value<'gc>,
+    value: &Value<'gc, B>,
 ) -> Result<(), Error> {
     text_format.color = match value {
         Value::Undefined | Value::Null => None,
@@ -264,19 +265,19 @@ fn set_color<'gc>(
     Ok(())
 }
 
-fn font<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn font<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &TextFormat,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     Ok(text_format.font.as_ref().map_or(Value::Null, |font| {
         AvmString::new(activation.context.gc_context, font.as_wstr()).into()
     }))
 }
 
-fn set_font<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn set_font<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &mut TextFormat,
-    value: &Value<'gc>,
+    value: &Value<'gc, B>,
 ) -> Result<(), Error> {
     text_format.font = match value {
         Value::Undefined | Value::Null => None,
@@ -285,20 +286,20 @@ fn set_font<'gc>(
     Ok(())
 }
 
-fn indent<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+fn indent<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &TextFormat,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     Ok(text_format
         .indent
         .as_ref()
         .map_or(Value::Null, |&indent| indent.into()))
 }
 
-fn set_indent<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn set_indent<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &mut TextFormat,
-    value: &Value<'gc>,
+    value: &Value<'gc, B>,
 ) -> Result<(), Error> {
     text_format.indent = match value {
         Value::Undefined | Value::Null => None,
@@ -307,20 +308,20 @@ fn set_indent<'gc>(
     Ok(())
 }
 
-fn italic<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+fn italic<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &TextFormat,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     Ok(text_format
         .italic
         .as_ref()
         .map_or(Value::Null, |&italic| italic.into()))
 }
 
-fn set_italic<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+fn set_italic<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &mut TextFormat,
-    value: &Value<'gc>,
+    value: &Value<'gc, B>,
 ) -> Result<(), Error> {
     text_format.italic = match value {
         Value::Undefined | Value::Null => None,
@@ -329,20 +330,20 @@ fn set_italic<'gc>(
     Ok(())
 }
 
-fn kerning<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+fn kerning<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &TextFormat,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     Ok(text_format
         .kerning
         .as_ref()
         .map_or(Value::Null, |&kerning| kerning.into()))
 }
 
-fn set_kerning<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+fn set_kerning<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &mut TextFormat,
-    value: &Value<'gc>,
+    value: &Value<'gc, B>,
 ) -> Result<(), Error> {
     text_format.kerning = match value {
         Value::Undefined | Value::Null => None,
@@ -351,20 +352,20 @@ fn set_kerning<'gc>(
     Ok(())
 }
 
-fn leading<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+fn leading<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &TextFormat,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     Ok(text_format
         .leading
         .as_ref()
         .map_or(Value::Null, |&leading| leading.into()))
 }
 
-fn set_leading<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn set_leading<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &mut TextFormat,
-    value: &Value<'gc>,
+    value: &Value<'gc, B>,
 ) -> Result<(), Error> {
     text_format.leading = match value {
         Value::Undefined | Value::Null => None,
@@ -373,20 +374,20 @@ fn set_leading<'gc>(
     Ok(())
 }
 
-fn left_margin<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+fn left_margin<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &TextFormat,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     Ok(text_format
         .left_margin
         .as_ref()
         .map_or(Value::Null, |&left_margin| left_margin.into()))
 }
 
-fn set_left_margin<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn set_left_margin<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &mut TextFormat,
-    value: &Value<'gc>,
+    value: &Value<'gc, B>,
 ) -> Result<(), Error> {
     text_format.left_margin = match value {
         Value::Undefined | Value::Null => None,
@@ -395,20 +396,20 @@ fn set_left_margin<'gc>(
     Ok(())
 }
 
-fn letter_spacing<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+fn letter_spacing<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &TextFormat,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     Ok(text_format
         .letter_spacing
         .as_ref()
         .map_or(Value::Null, |&letter_spacing| letter_spacing.into()))
 }
 
-fn set_letter_spacing<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn set_letter_spacing<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &mut TextFormat,
-    value: &Value<'gc>,
+    value: &Value<'gc, B>,
 ) -> Result<(), Error> {
     text_format.letter_spacing = match value {
         Value::Undefined | Value::Null => None,
@@ -417,20 +418,20 @@ fn set_letter_spacing<'gc>(
     Ok(())
 }
 
-fn right_margin<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+fn right_margin<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &TextFormat,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     Ok(text_format
         .right_margin
         .as_ref()
         .map_or(Value::Null, |&right_margin| right_margin.into()))
 }
 
-fn set_right_margin<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn set_right_margin<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &mut TextFormat,
-    value: &Value<'gc>,
+    value: &Value<'gc, B>,
 ) -> Result<(), Error> {
     text_format.right_margin = match value {
         Value::Undefined | Value::Null => None,
@@ -439,20 +440,20 @@ fn set_right_margin<'gc>(
     Ok(())
 }
 
-fn size<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+fn size<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &TextFormat,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     Ok(text_format
         .size
         .as_ref()
         .map_or(Value::Null, |&size| size.into()))
 }
 
-fn set_size<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn set_size<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &mut TextFormat,
-    value: &Value<'gc>,
+    value: &Value<'gc, B>,
 ) -> Result<(), Error> {
     text_format.size = match value {
         Value::Undefined | Value::Null => None,
@@ -461,10 +462,10 @@ fn set_size<'gc>(
     Ok(())
 }
 
-fn tab_stops<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn tab_stops<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &TextFormat,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     text_format
         .tab_stops
         .as_ref()
@@ -474,10 +475,10 @@ fn tab_stops<'gc>(
         })
 }
 
-fn set_tab_stops<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn set_tab_stops<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &mut TextFormat,
-    value: &Value<'gc>,
+    value: &Value<'gc, B>,
 ) -> Result<(), Error> {
     text_format.tab_stops = match value {
         Value::Undefined | Value::Null => None,
@@ -504,19 +505,19 @@ fn set_tab_stops<'gc>(
     Ok(())
 }
 
-fn target<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn target<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &TextFormat,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     Ok(text_format.target.as_ref().map_or(Value::Null, |target| {
         AvmString::new(activation.context.gc_context, target.as_wstr()).into()
     }))
 }
 
-fn set_target<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn set_target<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &mut TextFormat,
-    value: &Value<'gc>,
+    value: &Value<'gc, B>,
 ) -> Result<(), Error> {
     text_format.target = match value {
         Value::Undefined | Value::Null => None,
@@ -525,20 +526,20 @@ fn set_target<'gc>(
     Ok(())
 }
 
-fn underline<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+fn underline<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &TextFormat,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     Ok(text_format
         .underline
         .as_ref()
         .map_or(Value::Null, |&underline| underline.into()))
 }
 
-fn set_underline<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
+fn set_underline<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &mut TextFormat,
-    value: &Value<'gc>,
+    value: &Value<'gc, B>,
 ) -> Result<(), Error> {
     text_format.underline = match value {
         Value::Undefined | Value::Null => None,
@@ -547,19 +548,19 @@ fn set_underline<'gc>(
     Ok(())
 }
 
-fn url<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn url<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &TextFormat,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     Ok(text_format.url.as_ref().map_or(Value::Null, |url| {
         AvmString::new(activation.context.gc_context, url.as_wstr()).into()
     }))
 }
 
-fn set_url<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn set_url<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     text_format: &mut TextFormat,
-    value: &Value<'gc>,
+    value: &Value<'gc, B>,
 ) -> Result<(), Error> {
     text_format.url = match value {
         Value::Undefined | Value::Null => None,
@@ -569,7 +570,7 @@ fn set_url<'gc>(
 }
 
 /// Construct `TextFormat`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::package("flash.text"), "TextFormat"),
         Some(QName::new(Namespace::public(), "Object").into()),
@@ -583,10 +584,10 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
 
     write.set_attributes(ClassAttributes::SEALED);
 
-    const PUBLIC_INSTANCE_PROPERTIES: &[(
+    let public_instance_properties: &[(
         &str,
-        Option<NativeMethodImpl>,
-        Option<NativeMethodImpl>,
+        Option<NativeMethodImpl<B>>,
+        Option<NativeMethodImpl<B>>,
     )] = &[
         ("align", Some(getter!(align)), Some(setter!(set_align))),
         (
@@ -639,7 +640,7 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
         ),
         ("url", Some(getter!(url)), Some(setter!(set_url))),
     ];
-    write.define_public_builtin_instance_properties(mc, PUBLIC_INSTANCE_PROPERTIES);
+    write.define_public_builtin_instance_properties(mc, public_instance_properties);
 
     class
 }

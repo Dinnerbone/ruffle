@@ -8,27 +8,30 @@ use crate::avm2::object::Object;
 use crate::avm2::value::Value;
 use crate::avm2::Error;
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 
 /// Emulates attempts to execute bodiless methods.
-pub fn bodiless_method<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn bodiless_method<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Err("Cannot execute non-native method without body".into())
 }
 
 /// Implements `flash.events.IEventDispatcher`'s class constructor.
-pub fn class_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn class_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok(Value::Undefined)
 }
 
 /// Construct `IEventDispatcher`'s class.
-pub fn create_interface<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_interface<'gc, B: Backend>(
+    mc: MutationContext<'gc, '_>,
+) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::package("flash.events"), "IEventDispatcher"),
         None,
@@ -45,14 +48,14 @@ pub fn create_interface<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<
 
     write.set_attributes(ClassAttributes::INTERFACE);
 
-    const PUBLIC_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] = &[
+    let public_instance_methods: &[(&str, NativeMethodImpl<B>)] = &[
         ("addEventListener", bodiless_method),
         ("dispatchEvent", bodiless_method),
         ("hasEventListener", bodiless_method),
         ("removeEventListener", bodiless_method),
         ("willTrigger", bodiless_method),
     ];
-    write.define_public_builtin_instance_methods(mc, PUBLIC_INSTANCE_METHODS);
+    write.define_public_builtin_instance_methods(mc, public_instance_methods);
 
     class
 }

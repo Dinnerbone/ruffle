@@ -10,26 +10,27 @@ use crate::avm2::Error;
 use crate::display_object::TDisplayObject;
 use crate::drawing::Drawing;
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::shape_utils::DrawCommand;
 use ruffle_types::string::WStr;
 use std::f64::consts::FRAC_1_SQRT_2;
 use swf::{Color, FillStyle, Fixed8, LineCapStyle, LineJoinStyle, LineStyle, Twips};
 
 /// Implements `flash.display.Graphics`'s instance constructor.
-fn instance_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn instance_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Err("Graphics cannot be constructed directly.".into())
 }
 
 /// Implements `flash.display.Graphics`'s native instance constructor.
-fn native_instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn native_instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         activation.super_init(this, &[])?;
     }
@@ -38,11 +39,11 @@ fn native_instance_init<'gc>(
 }
 
 /// Implements `flash.display.Graphics`'s class constructor.
-fn class_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn class_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok(Value::Undefined)
 }
 
@@ -53,11 +54,11 @@ fn color_from_args(rgb: u32, alpha: f64) -> Color {
 }
 
 /// Implements `Graphics.beginFill`.
-fn begin_fill<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn begin_fill<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this.and_then(|t| t.as_display_object()) {
         let color = args
             .get(0)
@@ -79,11 +80,11 @@ fn begin_fill<'gc>(
 }
 
 /// Implements `Graphics.clear`
-fn clear<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn clear<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this.and_then(|t| t.as_display_object()) {
         if let Some(mut draw) = this.as_drawing(activation.context.gc_context) {
             draw.clear()
@@ -94,11 +95,11 @@ fn clear<'gc>(
 }
 
 /// Implements `Graphics.curveTo`.
-fn curve_to<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn curve_to<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this.and_then(|t| t.as_display_object()) {
         let x1 = Twips::from_pixels(
             args.get(0)
@@ -134,11 +135,11 @@ fn curve_to<'gc>(
 }
 
 /// Implements `Graphics.endFill`.
-fn end_fill<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn end_fill<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this.and_then(|t| t.as_display_object()) {
         if let Some(mut draw) = this.as_drawing(activation.context.gc_context) {
             draw.set_fill_style(None);
@@ -148,9 +149,9 @@ fn end_fill<'gc>(
     Ok(Value::Undefined)
 }
 
-fn caps_to_cap_style<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    caps: Value<'gc>,
+fn caps_to_cap_style<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    caps: Value<'gc, B>,
 ) -> Result<LineCapStyle, Error> {
     if let Value::Null = caps {
         return Ok(LineCapStyle::None);
@@ -166,9 +167,9 @@ fn caps_to_cap_style<'gc>(
     }
 }
 
-fn joints_to_join_style<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    joints: Value<'gc>,
+fn joints_to_join_style<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    joints: Value<'gc, B>,
     miter_limit: f64,
 ) -> Result<LineJoinStyle, Error> {
     if let Value::Null = joints {
@@ -198,11 +199,11 @@ fn scale_mode_to_allow_scale_bits(scale_mode: &WStr) -> Result<(bool, bool), Err
 }
 
 /// Implements `Graphics.lineStyle`.
-fn line_style<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn line_style<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this.and_then(|t| t.as_display_object()) {
         let thickness = args
             .get(0)
@@ -269,11 +270,11 @@ fn line_style<'gc>(
 }
 
 /// Implements `Graphics.lineTo`.
-fn line_to<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn line_to<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this.and_then(|t| t.as_display_object()) {
         let x = Twips::from_pixels(
             args.get(0)
@@ -297,11 +298,11 @@ fn line_to<'gc>(
 }
 
 /// Implements `Graphics.moveTo`.
-fn move_to<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn move_to<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this.and_then(|t| t.as_display_object()) {
         let x = Twips::from_pixels(
             args.get(0)
@@ -325,11 +326,11 @@ fn move_to<'gc>(
 }
 
 /// Implements `Graphics.drawRect`.
-fn draw_rect<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn draw_rect<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this.and_then(|t| t.as_display_object()) {
         let x = Twips::from_pixels(
             args.get(0)
@@ -636,11 +637,11 @@ fn draw_round_rect_internal(
 }
 
 /// Implements `Graphics.drawRoundRect`.
-fn draw_round_rect<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn draw_round_rect<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this.and_then(|t| t.as_display_object()) {
         let x = args
             .get(0)
@@ -690,11 +691,11 @@ fn draw_round_rect<'gc>(
 }
 
 /// Implements `Graphics.drawCircle`.
-fn draw_circle<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn draw_circle<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this.and_then(|t| t.as_display_object()) {
         let x = args
             .get(0)
@@ -729,11 +730,11 @@ fn draw_circle<'gc>(
 }
 
 /// Implements `Graphics.drawEllipse`.
-fn draw_ellipse<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn draw_ellipse<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this.and_then(|t| t.as_display_object()) {
         let x = args
             .get(0)
@@ -765,7 +766,7 @@ fn draw_ellipse<'gc>(
 }
 
 /// Construct `Graphics`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::package("flash.display"), "Graphics"),
         Some(QName::new(Namespace::public(), "Object").into()),
@@ -784,7 +785,7 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
         mc,
     ));
 
-    const PUBLIC_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] = &[
+    let public_instance_methods: &[(&str, NativeMethodImpl<B>)] = &[
         ("beginFill", begin_fill),
         ("clear", clear),
         ("curveTo", curve_to),
@@ -797,7 +798,7 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
         ("drawCircle", draw_circle),
         ("drawEllipse", draw_ellipse),
     ];
-    write.define_public_builtin_instance_methods(mc, PUBLIC_INSTANCE_METHODS);
+    write.define_public_builtin_instance_methods(mc, public_instance_methods);
 
     class
 }

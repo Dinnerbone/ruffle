@@ -7,13 +7,14 @@ use crate::avm2::object::{ClassObject, Object, ObjectPtr, TObject};
 use crate::avm2::value::Value;
 use crate::avm2::Error;
 use gc_arena::{Collect, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use std::cell::{Ref, RefMut};
 
 /// A class instance allocator that allocates AppDomain objects.
-pub fn appdomain_allocator<'gc>(
-    class: ClassObject<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Object<'gc>, Error> {
+pub fn appdomain_allocator<'gc, B: Backend>(
+    class: ClassObject<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Object<'gc, B>, Error> {
     let domain = activation.domain();
     let base = ScriptObjectData::new(class);
 
@@ -26,30 +27,30 @@ pub fn appdomain_allocator<'gc>(
 
 #[derive(Clone, Collect, Debug, Copy)]
 #[collect(no_drop)]
-pub struct DomainObject<'gc>(GcCell<'gc, DomainObjectData<'gc>>);
+pub struct DomainObject<'gc, B: Backend>(GcCell<'gc, DomainObjectData<'gc, B>>);
 
 #[derive(Clone, Collect, Debug)]
 #[collect(no_drop)]
-pub struct DomainObjectData<'gc> {
+pub struct DomainObjectData<'gc, B: Backend> {
     /// Base script object
-    base: ScriptObjectData<'gc>,
+    base: ScriptObjectData<'gc, B>,
 
     /// The domain this object holds
-    domain: Domain<'gc>,
+    domain: Domain<'gc, B>,
 }
 
-impl<'gc> DomainObject<'gc> {
+impl<'gc, B: Backend> DomainObject<'gc, B> {
     /// Create a new object for a given domain.
     ///
     /// This function will call instance initializers. You do not need to do so
     /// yourself.
     pub fn from_domain(
-        activation: &mut Activation<'_, 'gc, '_>,
-        domain: Domain<'gc>,
-    ) -> Result<Object<'gc>, Error> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        domain: Domain<'gc, B>,
+    ) -> Result<Object<'gc, B>, Error> {
         let class = activation.avm2().classes().application_domain;
         let base = ScriptObjectData::new(class);
-        let mut this: Object<'gc> = DomainObject(GcCell::allocate(
+        let mut this: Object<'gc, B> = DomainObject(GcCell::allocate(
             activation.context.gc_context,
             DomainObjectData { base, domain },
         ))
@@ -62,12 +63,14 @@ impl<'gc> DomainObject<'gc> {
     }
 }
 
-impl<'gc> TObject<'gc> for DomainObject<'gc> {
-    fn base(&self) -> Ref<ScriptObjectData<'gc>> {
+impl<'gc, B: Backend> TObject<'gc> for DomainObject<'gc, B> {
+    type B = B;
+
+    fn base(&self) -> Ref<ScriptObjectData<'gc, B>> {
         Ref::map(self.0.read(), |read| &read.base)
     }
 
-    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc>> {
+    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc, B>> {
         RefMut::map(self.0.write(mc), |write| &mut write.base)
     }
 
@@ -75,12 +78,12 @@ impl<'gc> TObject<'gc> for DomainObject<'gc> {
         self.0.as_ptr() as *const ObjectPtr
     }
 
-    fn as_application_domain(&self) -> Option<Domain<'gc>> {
+    fn as_application_domain(&self) -> Option<Domain<'gc, B>> {
         Some(self.0.read().domain)
     }
 
-    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc>, Error> {
-        let this: Object<'gc> = Object::DomainObject(*self);
+    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc, B>, Error> {
+        let this: Object<'gc, B> = Object::DomainObject(*self);
 
         Ok(this.into())
     }

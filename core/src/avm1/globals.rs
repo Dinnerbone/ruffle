@@ -7,6 +7,7 @@ use crate::avm1::{Object, ScriptObject, TObject, Value};
 use crate::display_object::{DisplayObject, Lists, TDisplayObject, TDisplayObjectContainer};
 use gc_arena::Collect;
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 use ruffle_types::string::{AvmString, WStr, WString};
 use std::str;
 
@@ -62,29 +63,11 @@ mod video;
 mod xml;
 mod xml_node;
 
-const GLOBAL_DECLS: &[Declaration] = declare_properties! {
-    "trace" => method(trace; DONT_ENUM);
-    "isFinite" => method(is_finite; DONT_ENUM);
-    "isNaN" => method(is_nan; DONT_ENUM);
-    "parseInt" => method(parse_int; DONT_ENUM);
-    "parseFloat" => method(parse_float; DONT_ENUM);
-    "ASSetPropFlags" => method(object::as_set_prop_flags; DONT_ENUM);
-    "clearInterval" => method(clear_interval; DONT_ENUM);
-    "setInterval" => method(set_interval; DONT_ENUM);
-    "clearTimeout" => method(clear_timeout; DONT_ENUM);
-    "setTimeout" => method(set_timeout; DONT_ENUM);
-    "updateAfterEvent" => method(update_after_event; DONT_ENUM);
-    "escape" => method(escape; DONT_ENUM);
-    "unescape" => method(unescape; DONT_ENUM);
-    "NaN" => property(get_nan; DONT_ENUM);
-    "Infinity" => property(get_infinity; DONT_ENUM);
-};
-
-pub fn trace<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn trace<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // Unlike `Action::Trace`, `_global.trace` always coerces
     // undefined to "" in SWF6 and below. It also doesn't log
     // anything outside of the Flash editor's trace window.
@@ -96,11 +79,11 @@ pub fn trace<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn is_finite<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn is_finite<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(val) = args.get(0) {
         Ok(val.coerce_to_f64(activation)?.is_finite().into())
     } else {
@@ -108,11 +91,11 @@ pub fn is_finite<'gc>(
     }
 }
 
-pub fn is_nan<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn is_nan<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(val) = args.get(0) {
         Ok(val.coerce_to_f64(activation)?.is_nan().into())
     } else {
@@ -120,11 +103,11 @@ pub fn is_nan<'gc>(
     }
 }
 
-pub fn parse_int<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn parse_int<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // ECMA-262 violation: parseInt() == undefined // not NaN
     if args.is_empty() {
         return Ok(Value::Undefined);
@@ -230,11 +213,11 @@ pub fn parse_int<'gc>(
     }
 }
 
-pub fn get_infinity<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_infinity<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if activation.swf_version() > 4 {
         Ok(f64::INFINITY.into())
     } else {
@@ -242,11 +225,11 @@ pub fn get_infinity<'gc>(
     }
 }
 
-pub fn get_nan<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_nan<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if activation.swf_version() > 4 {
         Ok(f64::NAN.into())
     } else {
@@ -254,11 +237,11 @@ pub fn get_nan<'gc>(
     }
 }
 
-pub fn parse_float<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn parse_float<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(value) = args.get(0) {
         let string = value.coerce_to_string(activation)?;
         Ok(crate::avm1::value::parse_float_impl(&string, false).into())
@@ -267,28 +250,28 @@ pub fn parse_float<'gc>(
     }
 }
 
-pub fn set_interval<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_interval<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     create_timer(activation, this, args, false)
 }
 
-pub fn set_timeout<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_timeout<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     create_timer(activation, this, args, true)
 }
 
-pub fn create_timer<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
+pub fn create_timer<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
     is_timeout: bool,
-) -> Result<Value<'gc>, Error<'gc>> {
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // `setInterval` was added in Flash Player 6 but is not version-gated.
     use crate::timer::TimerCallback;
 
@@ -331,11 +314,11 @@ pub fn create_timer<'gc>(
     Ok(id.into())
 }
 
-pub fn clear_interval<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn clear_interval<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let id = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -347,11 +330,11 @@ pub fn clear_interval<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn clear_timeout<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn clear_timeout<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let id = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -363,21 +346,21 @@ pub fn clear_timeout<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn update_after_event<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn update_after_event<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     *activation.context.needs_render = true;
 
     Ok(Value::Undefined)
 }
 
-pub fn escape<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn escape<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let s = if let Some(val) = args.get(0) {
         val.coerce_to_string(activation)?
     } else {
@@ -406,11 +389,11 @@ pub fn escape<'gc>(
     Ok(AvmString::new(activation.context.gc_context, WString::from_buf(buffer)).into())
 }
 
-pub fn unescape<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn unescape<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let s = if let Some(val) = args.get(0) {
         val.coerce_to_string(activation)?
     } else {
@@ -466,73 +449,73 @@ pub fn unescape<'gc>(
 /// user-modifiable.
 #[derive(Collect, Clone)]
 #[collect(no_drop)]
-pub struct SystemPrototypes<'gc> {
-    pub button: Object<'gc>,
-    pub object: Object<'gc>,
-    pub object_constructor: Object<'gc>,
-    pub function: Object<'gc>,
-    pub movie_clip: Object<'gc>,
-    pub sound: Object<'gc>,
-    pub text_field: Object<'gc>,
-    pub text_format: Object<'gc>,
-    pub array: Object<'gc>,
-    pub array_constructor: Object<'gc>,
-    pub xml_node: Object<'gc>,
-    pub xml_constructor: Object<'gc>,
-    pub string: Object<'gc>,
-    pub number: Object<'gc>,
-    pub boolean: Object<'gc>,
-    pub matrix: Object<'gc>,
-    pub matrix_constructor: Object<'gc>,
-    pub point: Object<'gc>,
-    pub point_constructor: Object<'gc>,
-    pub rectangle: Object<'gc>,
-    pub rectangle_constructor: Object<'gc>,
-    pub transform: Object<'gc>,
-    pub transform_constructor: Object<'gc>,
-    pub shared_object: Object<'gc>,
-    pub shared_object_constructor: Object<'gc>,
-    pub color_transform: Object<'gc>,
-    pub color_transform_constructor: Object<'gc>,
-    pub context_menu: Object<'gc>,
-    pub context_menu_constructor: Object<'gc>,
-    pub context_menu_item: Object<'gc>,
-    pub context_menu_item_constructor: Object<'gc>,
-    pub bitmap_filter: Object<'gc>,
-    pub bitmap_filter_constructor: Object<'gc>,
-    pub blur_filter: Object<'gc>,
-    pub blur_filter_constructor: Object<'gc>,
-    pub bevel_filter: Object<'gc>,
-    pub bevel_filter_constructor: Object<'gc>,
-    pub glow_filter: Object<'gc>,
-    pub glow_filter_constructor: Object<'gc>,
-    pub drop_shadow_filter: Object<'gc>,
-    pub drop_shadow_filter_constructor: Object<'gc>,
-    pub color_matrix_filter: Object<'gc>,
-    pub color_matrix_filter_constructor: Object<'gc>,
-    pub displacement_map_filter: Object<'gc>,
-    pub displacement_map_filter_constructor: Object<'gc>,
-    pub convolution_filter: Object<'gc>,
-    pub convolution_filter_constructor: Object<'gc>,
-    pub gradient_bevel_filter: Object<'gc>,
-    pub gradient_bevel_filter_constructor: Object<'gc>,
-    pub gradient_glow_filter: Object<'gc>,
-    pub gradient_glow_filter_constructor: Object<'gc>,
-    pub date: Object<'gc>,
-    pub date_constructor: Object<'gc>,
-    pub bitmap_data: Object<'gc>,
-    pub bitmap_data_constructor: Object<'gc>,
-    pub video: Object<'gc>,
-    pub video_constructor: Object<'gc>,
+pub struct SystemPrototypes<'gc, B: Backend> {
+    pub button: Object<'gc, B>,
+    pub object: Object<'gc, B>,
+    pub object_constructor: Object<'gc, B>,
+    pub function: Object<'gc, B>,
+    pub movie_clip: Object<'gc, B>,
+    pub sound: Object<'gc, B>,
+    pub text_field: Object<'gc, B>,
+    pub text_format: Object<'gc, B>,
+    pub array: Object<'gc, B>,
+    pub array_constructor: Object<'gc, B>,
+    pub xml_node: Object<'gc, B>,
+    pub xml_constructor: Object<'gc, B>,
+    pub string: Object<'gc, B>,
+    pub number: Object<'gc, B>,
+    pub boolean: Object<'gc, B>,
+    pub matrix: Object<'gc, B>,
+    pub matrix_constructor: Object<'gc, B>,
+    pub point: Object<'gc, B>,
+    pub point_constructor: Object<'gc, B>,
+    pub rectangle: Object<'gc, B>,
+    pub rectangle_constructor: Object<'gc, B>,
+    pub transform: Object<'gc, B>,
+    pub transform_constructor: Object<'gc, B>,
+    pub shared_object: Object<'gc, B>,
+    pub shared_object_constructor: Object<'gc, B>,
+    pub color_transform: Object<'gc, B>,
+    pub color_transform_constructor: Object<'gc, B>,
+    pub context_menu: Object<'gc, B>,
+    pub context_menu_constructor: Object<'gc, B>,
+    pub context_menu_item: Object<'gc, B>,
+    pub context_menu_item_constructor: Object<'gc, B>,
+    pub bitmap_filter: Object<'gc, B>,
+    pub bitmap_filter_constructor: Object<'gc, B>,
+    pub blur_filter: Object<'gc, B>,
+    pub blur_filter_constructor: Object<'gc, B>,
+    pub bevel_filter: Object<'gc, B>,
+    pub bevel_filter_constructor: Object<'gc, B>,
+    pub glow_filter: Object<'gc, B>,
+    pub glow_filter_constructor: Object<'gc, B>,
+    pub drop_shadow_filter: Object<'gc, B>,
+    pub drop_shadow_filter_constructor: Object<'gc, B>,
+    pub color_matrix_filter: Object<'gc, B>,
+    pub color_matrix_filter_constructor: Object<'gc, B>,
+    pub displacement_map_filter: Object<'gc, B>,
+    pub displacement_map_filter_constructor: Object<'gc, B>,
+    pub convolution_filter: Object<'gc, B>,
+    pub convolution_filter_constructor: Object<'gc, B>,
+    pub gradient_bevel_filter: Object<'gc, B>,
+    pub gradient_bevel_filter_constructor: Object<'gc, B>,
+    pub gradient_glow_filter: Object<'gc, B>,
+    pub gradient_glow_filter_constructor: Object<'gc, B>,
+    pub date: Object<'gc, B>,
+    pub date_constructor: Object<'gc, B>,
+    pub bitmap_data: Object<'gc, B>,
+    pub bitmap_data_constructor: Object<'gc, B>,
+    pub video: Object<'gc, B>,
+    pub video_constructor: Object<'gc, B>,
 }
 
 /// Initialize default global scope and builtins for an AVM1 instance.
-pub fn create_globals<'gc>(
+pub fn create_globals<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
 ) -> (
-    SystemPrototypes<'gc>,
-    Object<'gc>,
-    as_broadcaster::BroadcasterFunctions<'gc>,
+    SystemPrototypes<'gc, B>,
+    Object<'gc, B>,
+    as_broadcaster::BroadcasterFunctions<'gc, B>,
 ) {
     let object_proto = ScriptObject::object_cell(gc_context, None);
     let function_proto = function::create_proto(gc_context, object_proto);
@@ -1126,6 +1109,24 @@ pub fn create_globals<'gc>(
         Attribute::DONT_ENUM,
     );
 
+    let GLOBAL_DECLS: &[Declaration<B>] = declare_properties! {
+        "trace" => method(trace; DONT_ENUM);
+        "isFinite" => method(is_finite; DONT_ENUM);
+        "isNaN" => method(is_nan; DONT_ENUM);
+        "parseInt" => method(parse_int; DONT_ENUM);
+        "parseFloat" => method(parse_float; DONT_ENUM);
+        "ASSetPropFlags" => method(object::as_set_prop_flags; DONT_ENUM);
+        "clearInterval" => method(clear_interval; DONT_ENUM);
+        "setInterval" => method(set_interval; DONT_ENUM);
+        "clearTimeout" => method(clear_timeout; DONT_ENUM);
+        "setTimeout" => method(set_timeout; DONT_ENUM);
+        "updateAfterEvent" => method(update_after_event; DONT_ENUM);
+        "escape" => method(escape; DONT_ENUM);
+        "unescape" => method(unescape; DONT_ENUM);
+        "NaN" => property(get_nan; DONT_ENUM);
+        "Infinity" => property(get_infinity; DONT_ENUM);
+    };
+
     define_properties_on(GLOBAL_DECLS, gc_context, globals, function_proto);
 
     (
@@ -1207,11 +1208,11 @@ const AVM_MAX_DEPTH: i32 = 2_130_706_428;
 /// What is the derivation of this number...?
 const AVM_MAX_REMOVE_DEPTH: i32 = 2_130_706_416;
 
-fn get_depth<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_depth<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(display_object) = this.as_display_object() {
         if activation.swf_version() >= 6 {
             let depth = display_object.depth().wrapping_sub(AVM_DEPTH_BIAS);
@@ -1221,9 +1222,9 @@ fn get_depth<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn remove_display_object<'gc>(
-    this: DisplayObject<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
+pub fn remove_display_object<'gc, B: Backend>(
+    this: DisplayObject<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
 ) {
     let depth = this.depth().wrapping_sub(0);
     // Can only remove positive depths (when offset by the AVM depth bias).
@@ -1243,7 +1244,7 @@ pub fn remove_display_object<'gc>(
 mod tests {
     use super::*;
 
-    fn setup<'gc>(activation: &mut Activation<'_, 'gc, '_>) -> Object<'gc> {
+    fn setup<'gc, B: Backend>(activation: &mut Activation<'_, 'gc, '_, B>) -> Object<'gc, B> {
         create_globals(activation.context.gc_context).1
     }
 

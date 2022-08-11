@@ -3,22 +3,23 @@ use crate::avm1::{Object, ScriptObject, TObject};
 use crate::bitmap::color_transform_params::ColorTransformParams;
 use crate::impl_custom_object;
 use gc_arena::{Collect, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use std::fmt;
 
 /// A ColorTransform
 #[derive(Clone, Copy, Collect)]
 #[collect(no_drop)]
-pub struct ColorTransformObject<'gc>(GcCell<'gc, ColorTransformData<'gc>>);
+pub struct ColorTransformObject<'gc, B: Backend>(GcCell<'gc, ColorTransformData<'gc, B>>);
 
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct ColorTransformData<'gc> {
+pub struct ColorTransformData<'gc, B: Backend> {
     /// The underlying script object.
-    base: ScriptObject<'gc>,
+    base: ScriptObject<'gc, B>,
     params: ColorTransformParams,
 }
 
-impl fmt::Debug for ColorTransformObject<'_> {
+impl<B: Backend> fmt::Debug for ColorTransformObject<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let this = self.0.read();
         f.debug_struct("ColorTransform")
@@ -34,10 +35,10 @@ impl fmt::Debug for ColorTransformObject<'_> {
     }
 }
 
-impl<'gc> ColorTransformObject<'gc> {
+impl<'gc, B: Backend> ColorTransformObject<'gc, B> {
     pub fn empty_color_transform_object(
         gc_context: MutationContext<'gc, '_>,
-        proto: Option<Object<'gc>>,
+        proto: Option<Object<'gc, B>>,
     ) -> Self {
         ColorTransformObject(GcCell::allocate(
             gc_context,
@@ -90,8 +91,10 @@ impl<'gc> ColorTransformObject<'gc> {
     );
 }
 
-impl<'gc> TObject<'gc> for ColorTransformObject<'gc> {
-    impl_custom_object!(base {
+impl<'gc, B: Backend> TObject<'gc> for ColorTransformObject<'gc, B> {
+    type B = B;
+
+    impl_custom_object!(B, base {
         bare_object(as_color_transform_object -> ColorTransformObject::empty_color_transform_object);
     });
 }

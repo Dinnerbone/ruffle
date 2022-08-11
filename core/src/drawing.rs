@@ -1,6 +1,7 @@
 use crate::context::RenderContext;
 use gc_arena::Collect;
 use ruffle_types::backend::render::{BitmapInfo, BitmapSource, ShapeHandle};
+use ruffle_types::backend::Backend;
 use ruffle_types::bounding_box::BoundingBox;
 use ruffle_types::shape_utils::{DistilledShape, DrawCommand, DrawPath};
 use std::cell::Cell;
@@ -207,7 +208,7 @@ impl Drawing {
         id
     }
 
-    pub fn render(&self, context: &mut RenderContext) {
+    pub fn render<B: Backend>(&self, context: &mut RenderContext<B>) {
         if self.dirty.get() {
             self.dirty.set(false);
             let mut paths = Vec::with_capacity(self.paths.len());

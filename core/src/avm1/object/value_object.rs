@@ -5,29 +5,30 @@ use crate::avm1::object::TObject;
 use crate::avm1::{Object, ScriptObject, Value};
 use crate::impl_custom_object;
 use gc_arena::{Collect, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use std::fmt;
 
 /// An Object that serves as a box for a primitive value.
 #[derive(Clone, Copy, Collect)]
 #[collect(no_drop)]
-pub struct ValueObject<'gc>(GcCell<'gc, ValueObjectData<'gc>>);
+pub struct ValueObject<'gc, B: Backend>(GcCell<'gc, ValueObjectData<'gc, B>>);
 
 /// The internal data for a boxed value.
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct ValueObjectData<'gc> {
+pub struct ValueObjectData<'gc, B: Backend> {
     /// Base implementation of ScriptObject.
-    base: ScriptObject<'gc>,
+    base: ScriptObject<'gc, B>,
 
     /// The value being boxed.
     ///
     /// It is a logic error for this to be another object. All extant
     /// constructors for `ValueObject` guard against this by returning the
     /// original object if an attempt is made to box objects.
-    value: Value<'gc>,
+    value: Value<'gc, B>,
 }
 
-impl<'gc> ValueObject<'gc> {
+impl<'gc, B: Backend> ValueObject<'gc, B> {
     /// Box a value into a `ValueObject`.
     ///
     /// If this function is given an object to box, then this function returns
@@ -37,7 +38,10 @@ impl<'gc> ValueObject<'gc> {
     /// selects the correct prototype for it from the system prototypes list.
     ///
     /// Prefer using `coerce_to_object` instead of calling this function directly.
-    pub fn boxed(activation: &mut Activation<'_, 'gc, '_>, value: Value<'gc>) -> Object<'gc> {
+    pub fn boxed(
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        value: Value<'gc, B>,
+    ) -> Object<'gc, B> {
         if let Value::Object(ob) = value {
             ob
         } else {
@@ -81,8 +85,8 @@ impl<'gc> ValueObject<'gc> {
     /// Construct an empty box to be filled by a constructor.
     pub fn empty_box(
         gc_context: MutationContext<'gc, '_>,
-        proto: Option<Object<'gc>>,
-    ) -> Object<'gc> {
+        proto: Option<Object<'gc, B>>,
+    ) -> Object<'gc, B> {
         ValueObject(GcCell::allocate(
             gc_context,
             ValueObjectData {
@@ -94,17 +98,17 @@ impl<'gc> ValueObject<'gc> {
     }
 
     /// Retrieve the boxed value.
-    pub fn unbox(self) -> Value<'gc> {
+    pub fn unbox(self) -> Value<'gc, B> {
         self.0.read().value
     }
 
     /// Change the value in the box.
-    pub fn replace_value(&mut self, gc_context: MutationContext<'gc, '_>, value: Value<'gc>) {
+    pub fn replace_value(&mut self, gc_context: MutationContext<'gc, '_>, value: Value<'gc, B>) {
         self.0.write(gc_context).value = value;
     }
 }
 
-impl fmt::Debug for ValueObject<'_> {
+impl<B: Backend> fmt::Debug for ValueObject<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let this = self.0.read();
         f.debug_struct("ValueObject")
@@ -114,8 +118,10 @@ impl fmt::Debug for ValueObject<'_> {
     }
 }
 
-impl<'gc> TObject<'gc> for ValueObject<'gc> {
-    impl_custom_object!(base {
+impl<'gc, B: Backend> TObject<'gc> for ValueObject<'gc, B> {
+    type B = B;
+
+    impl_custom_object!(B, base {
         bare_object(as_value_object -> ValueObject::empty_box);
     });
 }

@@ -23,6 +23,7 @@ use crate::vminterface::AvmObject;
 use chrono::Utc;
 use gc_arena::{Collect, Gc, GcCell, MutationContext};
 use ruffle_types::backend::ui::MouseCursor;
+use ruffle_types::backend::Backend;
 use ruffle_types::events::{ButtonKeyCode, KeyCode};
 use ruffle_types::shape_utils::DrawCommand;
 use ruffle_types::string::{utils as string_utils, AvmString, WStr, WString};
@@ -57,13 +58,13 @@ pub enum AutoSizeMode {
 /// (SWF19 DefineEditText pp. 171-174)
 #[derive(Clone, Debug, Collect, Copy)]
 #[collect(no_drop)]
-pub struct EditText<'gc>(GcCell<'gc, EditTextData<'gc>>);
+pub struct EditText<'gc, B: Backend>(GcCell<'gc, EditTextData<'gc, B>>);
 
 #[derive(Clone, Debug, Collect)]
 #[collect(no_drop)]
-pub struct EditTextData<'gc> {
+pub struct EditTextData<'gc, B: Backend> {
     /// DisplayObject and InteractiveObject common properties.
-    base: InteractiveObjectBase<'gc>,
+    base: InteractiveObjectBase<'gc, B>,
 
     /// Static data shared among all instances of this `EditText`.
     static_data: Gc<'gc, EditTextStatic>,
@@ -129,13 +130,13 @@ pub struct EditTextData<'gc> {
     bounds: BoundingBox,
 
     /// The AVM1 object handle
-    object: Option<AvmObject<'gc>>,
+    object: Option<AvmObject<'gc, B>>,
 
     /// The variable path that this text field is bound to (AVM1 only).
     variable: Option<String>,
 
     /// The display object that the variable binding is bound to.
-    bound_stage_object: Option<Avm1StageObject<'gc>>,
+    bound_stage_object: Option<Avm1StageObject<'gc, B>>,
 
     /// Whether this text field is firing is variable binding (to prevent infinite loops).
     firing_variable_binding: bool,
@@ -207,10 +208,10 @@ fn get_line_data(layout: &[LayoutBox]) -> Vec<LineData> {
     line_data
 }
 
-impl<'gc> EditText<'gc> {
+impl<'gc, B: Backend> EditText<'gc, B> {
     /// Creates a new `EditText` from an SWF `DefineEditText` tag.
     pub fn from_swf_tag(
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         swf_movie: Arc<SwfMovie>,
         swf_tag: swf::EditText,
     ) -> Self {
@@ -349,7 +350,7 @@ impl<'gc> EditText<'gc> {
 
     /// Create a new, dynamic `EditText`.
     pub fn new(
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         swf_movie: Arc<SwfMovie>,
         x: f64,
         y: f64,
@@ -415,7 +416,7 @@ impl<'gc> EditText<'gc> {
     pub fn set_text(
         self,
         text: &WStr,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         let mut edit_text = self.0.write(context.gc_context);
         let default_format = edit_text.text_spans.default_format().clone();
@@ -439,7 +440,7 @@ impl<'gc> EditText<'gc> {
     pub fn set_html_text(
         self,
         text: &WStr,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         if self.is_html() {
             let mut write = self.0.write(context.gc_context);
@@ -463,7 +464,7 @@ impl<'gc> EditText<'gc> {
         self.0.read().text_spans.default_format().clone()
     }
 
-    pub fn set_new_text_format(self, tf: TextFormat, context: &mut UpdateContext<'_, 'gc, '_>) {
+    pub fn set_new_text_format(self, tf: TextFormat, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         self.0
             .write(context.gc_context)
             .text_spans
@@ -480,7 +481,7 @@ impl<'gc> EditText<'gc> {
         from: usize,
         to: usize,
         tf: TextFormat,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
     ) {
         // TODO: Convert to byte indices
         self.0
@@ -494,7 +495,7 @@ impl<'gc> EditText<'gc> {
         self.0.read().is_editable
     }
 
-    pub fn set_editable(self, is_editable: bool, context: &mut UpdateContext<'_, 'gc, '_>) {
+    pub fn set_editable(self, is_editable: bool, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         self.0.write(context.gc_context).is_editable = is_editable;
     }
 
@@ -506,12 +507,12 @@ impl<'gc> EditText<'gc> {
         self.0.read().is_password
     }
 
-    pub fn set_password(self, is_password: bool, context: &mut UpdateContext<'_, 'gc, '_>) {
+    pub fn set_password(self, is_password: bool, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         self.0.write(context.gc_context).is_password = is_password;
         self.relayout(context);
     }
 
-    pub fn set_multiline(self, is_multiline: bool, context: &mut UpdateContext<'_, 'gc, '_>) {
+    pub fn set_multiline(self, is_multiline: bool, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         self.0.write(context.gc_context).is_multiline = is_multiline;
         self.relayout(context);
     }
@@ -520,7 +521,7 @@ impl<'gc> EditText<'gc> {
         self.0.read().is_selectable
     }
 
-    pub fn set_selectable(self, is_selectable: bool, context: &mut UpdateContext<'_, 'gc, '_>) {
+    pub fn set_selectable(self, is_selectable: bool, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         self.0.write(context.gc_context).is_selectable = is_selectable;
     }
 
@@ -528,7 +529,7 @@ impl<'gc> EditText<'gc> {
         self.0.read().is_word_wrap
     }
 
-    pub fn set_word_wrap(self, is_word_wrap: bool, context: &mut UpdateContext<'_, 'gc, '_>) {
+    pub fn set_word_wrap(self, is_word_wrap: bool, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         self.0.write(context.gc_context).is_word_wrap = is_word_wrap;
         self.relayout(context);
     }
@@ -537,7 +538,7 @@ impl<'gc> EditText<'gc> {
         self.0.read().autosize
     }
 
-    pub fn set_autosize(self, asm: AutoSizeMode, context: &mut UpdateContext<'_, 'gc, '_>) {
+    pub fn set_autosize(self, asm: AutoSizeMode, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         self.0.write(context.gc_context).autosize = asm;
         self.relayout(context);
     }
@@ -584,7 +585,7 @@ impl<'gc> EditText<'gc> {
 
     pub fn set_is_device_font(
         self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         is_device_font: bool,
     ) {
         self.0.write(context.gc_context).is_device_font = is_device_font;
@@ -595,7 +596,7 @@ impl<'gc> EditText<'gc> {
         self.0.read().is_html
     }
 
-    pub fn set_is_html(self, context: &mut UpdateContext<'_, 'gc, '_>, is_html: bool) {
+    pub fn set_is_html(self, context: &mut UpdateContext<'_, 'gc, '_, B>, is_html: bool) {
         self.0.write(context.gc_context).is_html = is_html;
     }
 
@@ -604,7 +605,7 @@ impl<'gc> EditText<'gc> {
         from: usize,
         to: usize,
         text: &WStr,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
     ) {
         self.0
             .write(context.gc_context)
@@ -659,7 +660,7 @@ impl<'gc> EditText<'gc> {
     pub fn set_variable(
         self,
         variable: Option<String>,
-        activation: &mut Avm1Activation<'_, 'gc, '_>,
+        activation: &mut Avm1Activation<'_, 'gc, '_, B>,
     ) {
         // Clear previous binding.
         if let Some(stage_object) = self
@@ -760,7 +761,7 @@ impl<'gc> EditText<'gc> {
     /// the text, and no higher-level representation. Specifically, CSS should
     /// have already been calculated and applied to HTML trees lowered into the
     /// text-span representation.
-    fn relayout(self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn relayout(self, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         let mut edit_text = self.0.write(context.gc_context);
         let autosize = edit_text.autosize;
         let is_word_wrap = edit_text.is_word_wrap;
@@ -816,7 +817,7 @@ impl<'gc> EditText<'gc> {
     /// Measure the width and height of the `EditText`'s current text load.
     ///
     /// The returned tuple should be interpreted as width, then height.
-    pub fn measure_text(self, _context: &mut UpdateContext<'_, 'gc, '_>) -> (Twips, Twips) {
+    pub fn measure_text(self, _context: &mut UpdateContext<'_, 'gc, '_, B>) -> (Twips, Twips) {
         let edit_text = self.0.read();
 
         (
@@ -895,7 +896,7 @@ impl<'gc> EditText<'gc> {
     }
 
     /// Render a layout box, plus its children.
-    fn render_layout_box(self, context: &mut RenderContext<'_, 'gc>, lbox: &LayoutBox<'gc>) {
+    fn render_layout_box(self, context: &mut RenderContext<'_, 'gc, B>, lbox: &LayoutBox<'gc>) {
         let origin = lbox.bounds().origin();
         context.transform_stack.push(&Transform {
             matrix: Matrix::translate(origin.x(), origin.y()),
@@ -1018,7 +1019,7 @@ impl<'gc> EditText<'gc> {
     /// This is called when the text field is created, and, if the text field is in the unbound list, anytime a display object is created.
     pub fn try_bind_text_field_variable(
         self,
-        activation: &mut Avm1Activation<'_, 'gc, '_>,
+        activation: &mut Avm1Activation<'_, 'gc, '_, B>,
         set_initial_value: bool,
     ) -> bool {
         if let Some(var_path) = self.variable() {
@@ -1092,13 +1093,13 @@ impl<'gc> EditText<'gc> {
     /// Unsets a bound display object from this text field.
     /// Does not change the unbound text field list.
     /// Caller is responsible for adding this text field to the unbound list, if necessary.
-    pub fn clear_bound_stage_object(self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    pub fn clear_bound_stage_object(self, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         self.0.write(context.gc_context).bound_stage_object = None;
     }
 
     /// Propagates a text change to the bound display object.
     ///
-    pub fn propagate_text_binding(self, activation: &mut Avm1Activation<'_, 'gc, '_>) {
+    pub fn propagate_text_binding(self, activation: &mut Avm1Activation<'_, 'gc, '_, B>) {
         if !self.0.read().firing_variable_binding {
             self.0
                 .write(activation.context.gc_context)
@@ -1166,7 +1167,7 @@ impl<'gc> EditText<'gc> {
         self.0.read().hscroll
     }
 
-    pub fn set_hscroll(self, hscroll: f64, context: &mut UpdateContext<'_, 'gc, '_>) {
+    pub fn set_hscroll(self, hscroll: f64, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         self.0.write(context.gc_context).hscroll = hscroll;
     }
 
@@ -1174,7 +1175,7 @@ impl<'gc> EditText<'gc> {
         self.0.read().scroll
     }
 
-    pub fn set_scroll(self, scroll: f64, context: &mut UpdateContext<'_, 'gc, '_>) {
+    pub fn set_scroll(self, scroll: f64, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         // derived experimentally. Not exact: overflows somewhere above 767100486418432.9
         // Checked in SWF 6, AVM1. Same in AVM2.
         const SCROLL_OVERFLOW_LIMIT: f64 = 767100486418433.0;
@@ -1234,7 +1235,7 @@ impl<'gc> EditText<'gc> {
         None
     }
 
-    pub fn text_input(self, character: char, context: &mut UpdateContext<'_, 'gc, '_>) {
+    pub fn text_input(self, character: char, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         if !self.0.read().is_editable {
             return;
         }
@@ -1312,8 +1313,8 @@ impl<'gc> EditText<'gc> {
     /// TODO: Add explicit text control events (#4452).
     pub fn handle_text_control_event(
         self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        event: ClipEvent,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        event: ClipEvent<B>,
     ) -> ClipEventResult {
         if let ClipEvent::KeyPress { key_code } = event {
             let mut edit_text = self.0.write(context.gc_context);
@@ -1362,7 +1363,7 @@ impl<'gc> EditText<'gc> {
         ClipEventResult::NotHandled
     }
 
-    fn initialize_as_broadcaster(&self, activation: &mut Avm1Activation<'_, 'gc, '_>) {
+    fn initialize_as_broadcaster(&self, activation: &mut Avm1Activation<'_, 'gc, '_, B>) {
         if let Avm1Value::Object(object) = self.object() {
             activation.context.avm1.broadcaster_functions().initialize(
                 activation.context.gc_context,
@@ -1383,7 +1384,7 @@ impl<'gc> EditText<'gc> {
         }
     }
 
-    fn on_changed(&self, activation: &mut Avm1Activation<'_, 'gc, '_>) {
+    fn on_changed(&self, activation: &mut Avm1Activation<'_, 'gc, '_, B>) {
         if let Avm1Value::Object(object) = self.object() {
             let _ = object.call_method(
                 "broadcastMessage".into(),
@@ -1395,10 +1396,14 @@ impl<'gc> EditText<'gc> {
     }
 
     /// Construct the text field's AVM1 representation.
-    fn construct_as_avm1_object(&self, context: &mut UpdateContext<'_, 'gc, '_>, run_frame: bool) {
+    fn construct_as_avm1_object(
+        &self,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        run_frame: bool,
+    ) {
         let mut text = self.0.write(context.gc_context);
         if text.object.is_none() {
-            let object: Avm1Object<'gc> = Avm1StageObject::for_display_object(
+            let object: Avm1Object<'gc, B> = Avm1StageObject::for_display_object(
                 context.gc_context,
                 (*self).into(),
                 Some(context.avm1.prototypes().text_field),
@@ -1428,8 +1433,8 @@ impl<'gc> EditText<'gc> {
     /// Construct the text field's AVM2 representation.
     fn construct_as_avm2_object(
         &self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        display_object: DisplayObject<'gc>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        display_object: DisplayObject<'gc, B>,
     ) {
         let textfield_constr = context.avm2.classes().textfield;
         let mut activation = Avm2Activation::from_nothing(context.reborrow());
@@ -1440,7 +1445,7 @@ impl<'gc> EditText<'gc> {
             textfield_constr,
         ) {
             Ok(object) => {
-                let object: Avm2Object<'gc> = object.into();
+                let object: Avm2Object<'gc, B> = object.into();
                 self.0.write(activation.context.gc_context).object = Some(object.into())
             }
             Err(e) => log::error!(
@@ -1451,16 +1456,21 @@ impl<'gc> EditText<'gc> {
     }
 }
 
-impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
-    fn base(&self) -> Ref<DisplayObjectBase<'gc>> {
+impl<'gc, B: Backend> TDisplayObject<'gc> for EditText<'gc, B> {
+    type B = B;
+
+    fn base(&self) -> Ref<DisplayObjectBase<'gc, B>> {
         Ref::map(self.0.read(), |r| &r.base.base)
     }
 
-    fn base_mut<'a>(&'a self, mc: MutationContext<'gc, '_>) -> RefMut<'a, DisplayObjectBase<'gc>> {
+    fn base_mut<'a>(
+        &'a self,
+        mc: MutationContext<'gc, '_>,
+    ) -> RefMut<'a, DisplayObjectBase<'gc, B>> {
         RefMut::map(self.0.write(mc), |w| &mut w.base.base)
     }
 
-    fn instantiate(&self, gc_context: MutationContext<'gc, '_>) -> DisplayObject<'gc> {
+    fn instantiate(&self, gc_context: MutationContext<'gc, '_>) -> DisplayObject<'gc, B> {
         Self(GcCell::allocate(gc_context, self.0.read().clone())).into()
     }
 
@@ -1477,28 +1487,28 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
     }
 
     /// Construct objects placed on this frame.
-    fn construct_frame(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn construct_frame(&self, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         if context.avm_type() == AvmType::Avm2 && matches!(self.object2(), Avm2Value::Undefined) {
             self.construct_as_avm2_object(context, (*self).into());
         }
     }
 
-    fn run_frame(&self, _context: &mut UpdateContext) {
+    fn run_frame(&self, _context: &mut UpdateContext<B>) {
         // Noop
     }
 
-    fn as_edit_text(&self) -> Option<EditText<'gc>> {
+    fn as_edit_text(&self) -> Option<EditText<'gc, B>> {
         Some(*self)
     }
 
-    fn as_interactive(self) -> Option<InteractiveObject<'gc>> {
+    fn as_interactive(self) -> Option<InteractiveObject<'gc, B>> {
         Some(self.into())
     }
 
     fn post_instantiation(
         &self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        _init_object: Option<Avm1Object<'gc>>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        _init_object: Option<Avm1Object<'gc, B>>,
         _instantiated_by: Instantiator,
         run_frame: bool,
     ) {
@@ -1519,7 +1529,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
         }
     }
 
-    fn object(&self) -> Avm1Value<'gc> {
+    fn object(&self) -> Avm1Value<'gc, B> {
         self.0
             .read()
             .object
@@ -1528,7 +1538,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
             .unwrap_or(Avm1Value::Undefined)
     }
 
-    fn object2(&self) -> Avm2Value<'gc> {
+    fn object2(&self) -> Avm2Value<'gc, B> {
         self.0
             .read()
             .object
@@ -1537,7 +1547,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
             .unwrap_or(Avm2Value::Undefined)
     }
 
-    fn set_object2(&mut self, mc: MutationContext<'gc, '_>, to: Avm2Object<'gc>) {
+    fn set_object2(&mut self, mc: MutationContext<'gc, '_>, to: Avm2Object<'gc, B>) {
         self.0.write(mc).object = Some(to.into());
     }
 
@@ -1619,7 +1629,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
         self.redraw_border(gc_context);
     }
 
-    fn render_self(&self, context: &mut RenderContext<'_, 'gc>) {
+    fn render_self(&self, context: &mut RenderContext<'_, 'gc, B>) {
         if !self.world_bounds().intersects(&context.stage.view_bounds()) {
             // Off-screen; culled
             return;
@@ -1712,7 +1722,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
         false
     }
 
-    fn unload(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn unload(&self, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         let had_focus = self.0.read().has_focus;
         if had_focus {
             let tracker = context.focus_tracker;
@@ -1759,20 +1769,22 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
     }
 }
 
-impl<'gc> TInteractiveObject<'gc> for EditText<'gc> {
-    fn ibase(&self) -> Ref<InteractiveObjectBase<'gc>> {
+impl<'gc, B: Backend> TInteractiveObject<'gc> for EditText<'gc, B> {
+    type B = B;
+
+    fn ibase(&self) -> Ref<InteractiveObjectBase<'gc, B>> {
         Ref::map(self.0.read(), |r| &r.base)
     }
 
-    fn ibase_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<InteractiveObjectBase<'gc>> {
+    fn ibase_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<InteractiveObjectBase<'gc, B>> {
         RefMut::map(self.0.write(mc), |w| &mut w.base)
     }
 
-    fn as_displayobject(self) -> DisplayObject<'gc> {
+    fn as_displayobject(self) -> DisplayObject<'gc, B> {
         self.into()
     }
 
-    fn filter_clip_event(self, event: ClipEvent) -> ClipEventResult {
+    fn filter_clip_event(self, event: ClipEvent<B>) -> ClipEventResult {
         if event != ClipEvent::Press {
             return ClipEventResult::NotHandled;
         }
@@ -1782,8 +1794,8 @@ impl<'gc> TInteractiveObject<'gc> for EditText<'gc> {
 
     fn event_dispatch(
         self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        event: ClipEvent<'gc>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        event: ClipEvent<'gc, B>,
     ) -> ClipEventResult {
         let tracker = context.focus_tracker;
         tracker.set(Some(self.into()), context);
@@ -1804,10 +1816,10 @@ impl<'gc> TInteractiveObject<'gc> for EditText<'gc> {
 
     fn mouse_pick(
         &self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         point: (Twips, Twips),
         _require_button_mode: bool,
-    ) -> Option<InteractiveObject<'gc>> {
+    ) -> Option<InteractiveObject<'gc, B>> {
         // The button is hovered if the mouse is over any child nodes.
         if self.visible()
             && self.mouse_enabled()
@@ -1820,7 +1832,7 @@ impl<'gc> TInteractiveObject<'gc> for EditText<'gc> {
         }
     }
 
-    fn mouse_cursor(self, _context: &mut UpdateContext<'_, 'gc, '_>) -> MouseCursor {
+    fn mouse_cursor(self, _context: &mut UpdateContext<'_, 'gc, '_, B>) -> MouseCursor {
         MouseCursor::IBeam
     }
 }

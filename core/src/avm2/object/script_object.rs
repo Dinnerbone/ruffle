@@ -8,16 +8,17 @@ use crate::avm2::vtable::VTable;
 use crate::avm2::{Error, QName};
 use fnv::FnvHashMap;
 use gc_arena::{Collect, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 use std::cell::{Ref, RefMut};
 use std::collections::hash_map::Entry;
 use std::fmt::Debug;
 
 /// A class instance allocator that allocates `ScriptObject`s.
-pub fn scriptobject_allocator<'gc>(
-    class: ClassObject<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Object<'gc>, Error> {
+pub fn scriptobject_allocator<'gc, B: Backend>(
+    class: ClassObject<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Object<'gc, B>, Error> {
     let base = ScriptObjectData::new(class);
 
     Ok(ScriptObject(GcCell::allocate(activation.context.gc_context, base)).into())
@@ -26,7 +27,7 @@ pub fn scriptobject_allocator<'gc>(
 /// Default implementation of `avm2::Object`.
 #[derive(Clone, Collect, Copy)]
 #[collect(no_drop)]
-pub struct ScriptObject<'gc>(GcCell<'gc, ScriptObjectData<'gc>>);
+pub struct ScriptObject<'gc, B: Backend>(GcCell<'gc, ScriptObjectData<'gc, B>>);
 
 /// Base data common to all `TObject` implementations.
 ///
@@ -35,36 +36,38 @@ pub struct ScriptObject<'gc>(GcCell<'gc, ScriptObjectData<'gc>>);
 /// struct.
 #[derive(Clone, Collect, Debug)]
 #[collect(no_drop)]
-pub struct ScriptObjectData<'gc> {
+pub struct ScriptObjectData<'gc, B: Backend> {
     /// Values stored on this object.
-    values: FnvHashMap<AvmString<'gc>, Value<'gc>>,
+    values: FnvHashMap<AvmString<'gc>, Value<'gc, B>>,
 
     /// Slots stored on this object.
-    slots: Vec<Value<'gc>>,
+    slots: Vec<Value<'gc, B>>,
 
     /// Methods stored on this object.
-    bound_methods: Vec<Option<FunctionObject<'gc>>>,
+    bound_methods: Vec<Option<FunctionObject<'gc, B>>>,
 
     /// Implicit prototype of this script object.
-    proto: Option<Object<'gc>>,
+    proto: Option<Object<'gc, B>>,
 
     /// The class object that this is an instance of.
     /// If `none`, this is not an ES4 object at all.
-    instance_of: Option<ClassObject<'gc>>,
+    instance_of: Option<ClassObject<'gc, B>>,
 
     /// The table used for non-dynamic property lookups.
-    vtable: Option<VTable<'gc>>,
+    vtable: Option<VTable<'gc, B>>,
 
     /// Enumeratable property names.
     enumerants: Vec<AvmString<'gc>>,
 }
 
-impl<'gc> TObject<'gc> for ScriptObject<'gc> {
-    fn base(&self) -> Ref<ScriptObjectData<'gc>> {
+impl<'gc, B: Backend> TObject<'gc> for ScriptObject<'gc, B> {
+    type B = B;
+
+    fn base(&self) -> Ref<ScriptObjectData<'gc, B>> {
         self.0.read()
     }
 
-    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc>> {
+    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc, B>> {
         self.0.write(mc)
     }
 
@@ -72,12 +75,12 @@ impl<'gc> TObject<'gc> for ScriptObject<'gc> {
         self.0.as_ptr() as *const ObjectPtr
     }
 
-    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc>, Error> {
+    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc, B>, Error> {
         Ok(Value::Object(Object::from(*self)))
     }
 }
 
-impl<'gc> ScriptObject<'gc> {
+impl<'gc, B: Backend> ScriptObject<'gc, B> {
     /// Construct an instance with a possibly-none class and proto chain.
     /// NOTE: this is a low-level function.
     /// This should *not* be used unless you really need
@@ -93,9 +96,9 @@ impl<'gc> ScriptObject<'gc> {
     /// is technically also equivalent and faster, but not recommended outside lower-level Core code)
     pub fn custom_object(
         mc: MutationContext<'gc, '_>,
-        class: Option<ClassObject<'gc>>,
-        proto: Option<Object<'gc>>,
-    ) -> Object<'gc> {
+        class: Option<ClassObject<'gc, B>>,
+        proto: Option<Object<'gc, B>>,
+    ) -> Object<'gc, B> {
         ScriptObject(GcCell::allocate(
             mc,
             ScriptObjectData::custom_new(proto, class),
@@ -105,7 +108,7 @@ impl<'gc> ScriptObject<'gc> {
 
     /// A special case for `newcatch` implementation. Basically a variable (q)name
     /// which maps to slot 1.
-    pub fn catch_scope(mc: MutationContext<'gc, '_>, qname: &QName<'gc>) -> Object<'gc> {
+    pub fn catch_scope(mc: MutationContext<'gc, '_>, qname: &QName<'gc>) -> Object<'gc, B> {
         // TODO: use a proper ClassObject here; purposefully crafted bytecode
         // can observe (the lack of) it.
         let mut base = ScriptObjectData::custom_new(None, None);
@@ -117,10 +120,10 @@ impl<'gc> ScriptObject<'gc> {
     }
 }
 
-impl<'gc> ScriptObjectData<'gc> {
+impl<'gc, B: Backend> ScriptObjectData<'gc, B> {
     /// Create new object data of a given class.
     /// This is a low-level function used to implement things like object allocators.
-    pub fn new(instance_of: ClassObject<'gc>) -> Self {
+    pub fn new(instance_of: ClassObject<'gc, B>) -> Self {
         Self::custom_new(Some(instance_of.prototype()), Some(instance_of))
     }
 
@@ -129,7 +132,10 @@ impl<'gc> ScriptObjectData<'gc> {
     /// This should *not* be used, unless you really need
     /// to do something weird or lazily initialize the object.
     /// You shouldn't let scripts observe this weirdness.
-    pub fn custom_new(proto: Option<Object<'gc>>, instance_of: Option<ClassObject<'gc>>) -> Self {
+    pub fn custom_new(
+        proto: Option<Object<'gc, B>>,
+        instance_of: Option<ClassObject<'gc, B>>,
+    ) -> Self {
         ScriptObjectData {
             values: Default::default(),
             slots: Vec::new(),
@@ -144,8 +150,8 @@ impl<'gc> ScriptObjectData<'gc> {
     pub fn get_property_local(
         &self,
         multiname: &Multiname<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         if !multiname.contains_public_namespace() {
             return Err(format!(
                 "Non-public property {} not found on Object",
@@ -190,8 +196,8 @@ impl<'gc> ScriptObjectData<'gc> {
     pub fn set_property_local(
         &mut self,
         multiname: &Multiname<'gc>,
-        value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        value: Value<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         if self
             .instance_of()
@@ -242,8 +248,8 @@ impl<'gc> ScriptObjectData<'gc> {
     pub fn init_property_local(
         &mut self,
         multiname: &Multiname<'gc>,
-        value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        value: Value<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         self.set_property_local(multiname, value, activation)
     }
@@ -260,7 +266,7 @@ impl<'gc> ScriptObjectData<'gc> {
         }
     }
 
-    pub fn get_slot(&self, id: u32) -> Result<Value<'gc>, Error> {
+    pub fn get_slot(&self, id: u32) -> Result<Value<'gc, B>, Error> {
         self.slots
             .get(id as usize)
             .cloned()
@@ -271,7 +277,7 @@ impl<'gc> ScriptObjectData<'gc> {
     pub fn set_slot(
         &mut self,
         id: u32,
-        value: Value<'gc>,
+        value: Value<'gc, B>,
         _mc: MutationContext<'gc, '_>,
     ) -> Result<(), Error> {
         if let Some(slot) = self.slots.get_mut(id as usize) {
@@ -286,7 +292,7 @@ impl<'gc> ScriptObjectData<'gc> {
     pub fn init_slot(
         &mut self,
         id: u32,
-        value: Value<'gc>,
+        value: Value<'gc, B>,
         _mc: MutationContext<'gc, '_>,
     ) -> Result<(), Error> {
         if let Some(slot) = self.slots.get_mut(id as usize) {
@@ -312,7 +318,7 @@ impl<'gc> ScriptObjectData<'gc> {
 
     /// Set a slot by its index. This does extend the array if needed.
     /// This should only be used during AVM initialization, not at runtime.
-    pub fn install_const_slot_late(&mut self, id: u32, value: Value<'gc>) {
+    pub fn install_const_slot_late(&mut self, id: u32, value: Value<'gc, B>) {
         if self.slots.len() < id as usize + 1 {
             self.slots.resize(id as usize + 1, Value::Undefined);
         }
@@ -322,7 +328,7 @@ impl<'gc> ScriptObjectData<'gc> {
     }
 
     /// Retrieve a bound method from the method table.
-    pub fn get_bound_method(&self, id: u32) -> Option<FunctionObject<'gc>> {
+    pub fn get_bound_method(&self, id: u32) -> Option<FunctionObject<'gc, B>> {
         self.bound_methods.get(id as usize).and_then(|v| *v)
     }
 
@@ -352,11 +358,11 @@ impl<'gc> ScriptObjectData<'gc> {
         self.has_trait(name) || self.has_own_dynamic_property(name)
     }
 
-    pub fn proto(&self) -> Option<Object<'gc>> {
+    pub fn proto(&self) -> Option<Object<'gc, B>> {
         self.proto
     }
 
-    pub fn set_proto(&mut self, proto: Object<'gc>) {
+    pub fn set_proto(&mut self, proto: Object<'gc, B>) {
         self.proto = Some(proto)
     }
 
@@ -368,7 +374,7 @@ impl<'gc> ScriptObjectData<'gc> {
         }
     }
 
-    pub fn get_enumerant_name(&self, index: u32) -> Option<Value<'gc>> {
+    pub fn get_enumerant_name(&self, index: u32) -> Option<Value<'gc, B>> {
         // NOTE: AVM2 object enumeration is one of the weakest parts of an
         // otherwise well-designed VM. Notably, because of the way they
         // implemented `hasnext` and `hasnext2`, all enumerants start from ONE.
@@ -413,7 +419,7 @@ impl<'gc> ScriptObjectData<'gc> {
     }
 
     /// Install a method into the object.
-    pub fn install_bound_method(&mut self, disp_id: u32, function: FunctionObject<'gc>) {
+    pub fn install_bound_method(&mut self, disp_id: u32, function: FunctionObject<'gc, B>) {
         if self.bound_methods.len() <= disp_id as usize {
             self.bound_methods
                 .resize_with(disp_id as usize + 1, Default::default);
@@ -423,27 +429,27 @@ impl<'gc> ScriptObjectData<'gc> {
     }
 
     /// Get the class object for this object, if it has one.
-    pub fn instance_of(&self) -> Option<ClassObject<'gc>> {
+    pub fn instance_of(&self) -> Option<ClassObject<'gc, B>> {
         self.instance_of
     }
 
     /// Get the vtable for this object, if it has one.
-    pub fn vtable(&self) -> Option<VTable<'gc>> {
+    pub fn vtable(&self) -> Option<VTable<'gc, B>> {
         self.vtable
     }
 
     /// Set the class object for this object.
-    pub fn set_instance_of(&mut self, instance_of: ClassObject<'gc>, vtable: VTable<'gc>) {
+    pub fn set_instance_of(&mut self, instance_of: ClassObject<'gc, B>, vtable: VTable<'gc, B>) {
         self.instance_of = Some(instance_of);
         self.vtable = Some(vtable);
     }
 
-    pub fn set_vtable(&mut self, vtable: VTable<'gc>) {
+    pub fn set_vtable(&mut self, vtable: VTable<'gc, B>) {
         self.vtable = Some(vtable);
     }
 }
 
-impl<'gc> Debug for ScriptObject<'gc> {
+impl<'gc, B: Backend> Debug for ScriptObject<'gc, B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         let mut fmt = f.debug_struct("ScriptObject");
 

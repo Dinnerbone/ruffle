@@ -1095,8 +1095,8 @@ fn test_swf_with_hooks(
     num_frames: u32,
     simulated_input_path: &str,
     expected_output_path: &str,
-    before_start: impl FnOnce(Arc<Mutex<Player>>) -> Result<(), Error>,
-    before_end: impl FnOnce(Arc<Mutex<Player>>) -> Result<(), Error>,
+    before_start: impl FnOnce(Arc<Mutex<Player<B>>>) -> Result<(), Error>,
+    before_end: impl FnOnce(Arc<Mutex<Player<B>>>) -> Result<(), Error>,
     check_img: bool,
     frame_time_sleep: bool,
 ) -> Result<(), Error> {
@@ -1192,9 +1192,9 @@ fn test_swf_approx(
 fn run_swf(
     swf_path: &str,
     num_frames: u32,
-    before_start: impl FnOnce(Arc<Mutex<Player>>) -> Result<(), Error>,
+    before_start: impl FnOnce(Arc<Mutex<Player<B>>>) -> Result<(), Error>,
     mut injector: InputInjector,
-    before_end: impl FnOnce(Arc<Mutex<Player>>) -> Result<(), Error>,
+    before_end: impl FnOnce(Arc<Mutex<Player<B>>>) -> Result<(), Error>,
     mut check_img: bool,
     frame_time_sleep: bool,
 ) -> Result<String, Error> {
@@ -1354,17 +1354,20 @@ impl ExternalInterfaceTestProvider {
     }
 }
 
-fn do_trace(context: &mut UpdateContext<'_, '_, '_>, args: &[ExternalValue]) -> ExternalValue {
+fn do_trace(context: &mut UpdateContext<'_, '_, '_, B>, args: &[ExternalValue]) -> ExternalValue {
     context.avm_trace(&format!("[ExternalInterface] trace: {:?}", args));
     "Traced!".into()
 }
 
-fn do_ping(context: &mut UpdateContext<'_, '_, '_>, _args: &[ExternalValue]) -> ExternalValue {
+fn do_ping(context: &mut UpdateContext<'_, '_, '_, B>, _args: &[ExternalValue]) -> ExternalValue {
     context.avm_trace("[ExternalInterface] ping");
     "Pong!".into()
 }
 
-fn do_reentry(context: &mut UpdateContext<'_, '_, '_>, _args: &[ExternalValue]) -> ExternalValue {
+fn do_reentry(
+    context: &mut UpdateContext<'_, '_, '_, B>,
+    _args: &[ExternalValue],
+) -> ExternalValue {
     context.avm_trace("[ExternalInterface] starting reentry");
     if let Some(callback) = context.external_interface.get_callback("callWith") {
         callback.call(

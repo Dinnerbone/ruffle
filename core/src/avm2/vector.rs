@@ -5,6 +5,7 @@ use crate::avm2::object::{ClassObject, Object};
 use crate::avm2::value::Value;
 use crate::avm2::Error;
 use gc_arena::Collect;
+use ruffle_types::backend::Backend;
 use std::cmp::{max, min};
 use std::ops::{Index, RangeBounds};
 use std::slice::SliceIndex;
@@ -20,9 +21,9 @@ use std::slice::SliceIndex;
 /// attempts to modify the length fail.
 #[derive(Collect, Debug, Clone)]
 #[collect(no_drop)]
-pub struct VectorStorage<'gc> {
+pub struct VectorStorage<'gc, B: Backend> {
     /// The storage for vector values.
-    storage: Vec<Value<'gc>>,
+    storage: Vec<Value<'gc, B>>,
 
     /// Whether or not the array length is fixed.
     is_fixed: bool,
@@ -35,15 +36,15 @@ pub struct VectorStorage<'gc> {
     /// incorrectly typed values to the given type if possible. Values that do
     /// not coerce are replaced with the default value for the given value
     /// type.
-    value_type: ClassObject<'gc>,
+    value_type: ClassObject<'gc, B>,
 }
 
-impl<'gc> VectorStorage<'gc> {
+impl<'gc, B: Backend> VectorStorage<'gc, B> {
     pub fn new(
         length: usize,
         is_fixed: bool,
-        value_type: ClassObject<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        value_type: ClassObject<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Self {
         let storage = Vec::new();
 
@@ -65,9 +66,9 @@ impl<'gc> VectorStorage<'gc> {
     /// The values are assumed to already have been coerced to the value type
     /// given.
     pub fn from_values(
-        storage: Vec<Value<'gc>>,
+        storage: Vec<Value<'gc, B>>,
         is_fixed: bool,
-        value_type: ClassObject<'gc>,
+        value_type: ClassObject<'gc, B>,
     ) -> Self {
         VectorStorage {
             storage,
@@ -95,7 +96,7 @@ impl<'gc> VectorStorage<'gc> {
     pub fn resize(
         &mut self,
         new_length: usize,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         if self.is_fixed {
             return Err("RangeError: Vector is fixed".into());
@@ -107,7 +108,7 @@ impl<'gc> VectorStorage<'gc> {
     }
 
     /// Get the default value for this vector.
-    pub fn default(&self, activation: &mut Activation<'_, 'gc, '_>) -> Value<'gc> {
+    pub fn default(&self, activation: &mut Activation<'_, 'gc, '_, B>) -> Value<'gc, B> {
         if Object::ptr_eq(self.value_type, activation.avm2().classes().int) {
             Value::Integer(0)
         } else if Object::ptr_eq(self.value_type, activation.avm2().classes().uint) {
@@ -120,7 +121,7 @@ impl<'gc> VectorStorage<'gc> {
     }
 
     /// Get the value type this vector coerces things to.
-    pub fn value_type(&self) -> ClassObject<'gc> {
+    pub fn value_type(&self) -> ClassObject<'gc, B> {
         self.value_type
     }
 
@@ -143,7 +144,7 @@ impl<'gc> VectorStorage<'gc> {
     }
 
     /// Retrieve a value from the vector.
-    pub fn get(&self, pos: usize) -> Result<Value<'gc>, Error> {
+    pub fn get(&self, pos: usize) -> Result<Value<'gc, B>, Error> {
         self.storage
             .get(pos)
             .cloned()
@@ -162,8 +163,8 @@ impl<'gc> VectorStorage<'gc> {
     pub fn set(
         &mut self,
         pos: usize,
-        value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        value: Value<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         if !self.is_fixed && pos == self.length() {
             self.storage.resize(pos + 1, self.default(activation));
@@ -183,7 +184,7 @@ impl<'gc> VectorStorage<'gc> {
     /// the vector (and thus it is unwise to reenter the AVM2 runtime to coerce
     /// things). You must use the associated `coerce` fn before storing things
     /// in the vector.
-    pub fn push(&mut self, value: Value<'gc>) -> Result<(), Error> {
+    pub fn push(&mut self, value: Value<'gc, B>) -> Result<(), Error> {
         if self.is_fixed {
             return Err("RangeError: Vector is fixed".into());
         }
@@ -196,7 +197,10 @@ impl<'gc> VectorStorage<'gc> {
     /// Pop a value off the end of the vector.
     ///
     /// This function returns an error if the vector is fixed.
-    pub fn pop(&mut self, activation: &mut Activation<'_, 'gc, '_>) -> Result<Value<'gc>, Error> {
+    pub fn pop(
+        &mut self,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         if self.is_fixed {
             return Err("RangeError: Vector is fixed".into());
         }
@@ -221,7 +225,7 @@ impl<'gc> VectorStorage<'gc> {
     /// the vector (and thus it is unwise to reenter the AVM2 runtime to coerce
     /// things). You must use the associated `coerce` fn before storing things
     /// in the vector.
-    pub fn unshift(&mut self, value: Value<'gc>) -> Result<(), Error> {
+    pub fn unshift(&mut self, value: Value<'gc, B>) -> Result<(), Error> {
         if self.is_fixed {
             return Err("RangeError: Vector is fixed".into());
         }
@@ -234,7 +238,10 @@ impl<'gc> VectorStorage<'gc> {
     /// Pop a value off the start of the vector.
     ///
     /// This function returns an error if the vector is fixed.
-    pub fn shift(&mut self, activation: &mut Activation<'_, 'gc, '_>) -> Result<Value<'gc>, Error> {
+    pub fn shift(
+        &mut self,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         if self.is_fixed {
             return Err("RangeError: Vector is fixed".into());
         }
@@ -268,7 +275,7 @@ impl<'gc> VectorStorage<'gc> {
     ///
     /// Negative bounds are supported and treated as indexing from the end of
     /// the array, backwards.
-    pub fn insert(&mut self, position: i32, value: Value<'gc>) -> Result<(), Error> {
+    pub fn insert(&mut self, position: i32, value: Value<'gc, B>) -> Result<(), Error> {
         if self.is_fixed {
             return Err("RangeError: Vector is fixed".into());
         }
@@ -291,7 +298,7 @@ impl<'gc> VectorStorage<'gc> {
     /// Negative bounds are supported and treated as indexing from the end of
     /// the array, backwards. Negative arrays are *not* subject to the bounds
     /// check error.
-    pub fn remove(&mut self, position: i32) -> Result<Value<'gc>, Error> {
+    pub fn remove(&mut self, position: i32) -> Result<Value<'gc, B>, Error> {
         if self.is_fixed {
             return Err("RangeError: Vector is fixed".into());
         }
@@ -321,23 +328,23 @@ impl<'gc> VectorStorage<'gc> {
     /// Iterate over vector values.
     pub fn iter<'a>(
         &'a self,
-    ) -> impl DoubleEndedIterator<Item = Value<'gc>> + ExactSizeIterator<Item = Value<'gc>> + 'a
+    ) -> impl DoubleEndedIterator<Item = Value<'gc, B>> + ExactSizeIterator<Item = Value<'gc, B>> + 'a
     {
         self.storage.iter().cloned()
     }
 
     /// Replace this vector's storage with new values.
-    pub fn replace_storage(&mut self, new_storage: Vec<Value<'gc>>) {
+    pub fn replace_storage(&mut self, new_storage: Vec<Value<'gc, B>>) {
         self.storage = new_storage;
     }
 
     pub fn splice<R>(
         &mut self,
         range: R,
-        replace_with: Vec<Value<'gc>>,
-    ) -> Result<Vec<Value<'gc>>, Error>
+        replace_with: Vec<Value<'gc, B>>,
+    ) -> Result<Vec<Value<'gc, B>>, Error>
     where
-        R: Clone + SliceIndex<[Value<'gc>], Output = [Value<'gc>]> + RangeBounds<usize>,
+        R: Clone + SliceIndex<[Value<'gc, B>], Output = [Value<'gc, B>]> + RangeBounds<usize>,
     {
         if self.is_fixed && self.storage.index(range.clone()).len() != replace_with.len() {
             return Err("RangeError: Vector is fixed".into());

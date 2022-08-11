@@ -7,29 +7,15 @@ use crate::avm1::object::value_object::ValueObject;
 use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{Object, TObject, Value};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "toString" => method(to_string; DONT_ENUM | DONT_DELETE);
-    "valueOf" => method(value_of; DONT_ENUM | DONT_DELETE);
-};
-
-const OBJECT_DECLS: &[Declaration] = declare_properties! {
-    "MAX_VALUE" => float(f64::MAX; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    // Note this is actually the smallest positive denormalized f64.
-    // Rust doesn't provide a constant for this (`MIN_POSITIVE` is a normal f64).
-    "MIN_VALUE" => float(5e-324; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "NaN" => float(f64::NAN; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "NEGATIVE_INFINITY" => float(f64::NEG_INFINITY; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "POSITIVE_INFINITY" => float(f64::INFINITY; DONT_ENUM | DONT_DELETE | READ_ONLY);
-};
-
 /// `Number` constructor
-pub fn number<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn number<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let value = if let Some(val) = args.get(0) {
         val.coerce_to_f64(activation)?
     } else {
@@ -45,11 +31,11 @@ pub fn number<'gc>(
 }
 
 /// `Number` function
-pub fn number_function<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn number_function<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let value = if let Some(val) = args.get(0) {
         val.coerce_to_f64(activation)?
     } else {
@@ -60,11 +46,11 @@ pub fn number_function<'gc>(
     Ok(value.into())
 }
 
-pub fn create_number_object<'gc>(
+pub fn create_number_object<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    number_proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    number_proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let number = FunctionObject::constructor(
         gc_context,
         Executable::Native(number),
@@ -73,27 +59,44 @@ pub fn create_number_object<'gc>(
         number_proto,
     );
     let object = number.as_script_object().unwrap();
+
+    let OBJECT_DECLS: &[Declaration<B>] = declare_properties! {
+        "MAX_VALUE" => float(f64::MAX; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        // Note this is actually the smallest positive denormalized f64.
+        // Rust doesn't provide a constant for this (`MIN_POSITIVE` is a normal f64).
+        "MIN_VALUE" => float(5e-324; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "NaN" => float(f64::NAN; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "NEGATIVE_INFINITY" => float(f64::NEG_INFINITY; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "POSITIVE_INFINITY" => float(f64::INFINITY; DONT_ENUM | DONT_DELETE | READ_ONLY);
+    };
     define_properties_on(OBJECT_DECLS, gc_context, object, fn_proto);
+
     number
 }
 
 /// Creates `Number.prototype`.
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let number_proto = ValueObject::empty_box(gc_context, Some(proto));
     let object = number_proto.as_script_object().unwrap();
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "toString" => method(to_string; DONT_ENUM | DONT_DELETE);
+        "valueOf" => method(value_of; DONT_ENUM | DONT_DELETE);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     number_proto
 }
 
-fn to_string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn to_string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // Boxed value must be a number. No coercion.
     let this = if let Some(vbox) = this.as_value_object() {
         if let Value::Number(n) = vbox.unbox() {
@@ -163,11 +166,11 @@ fn to_string<'gc>(
     }
 }
 
-fn value_of<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn value_of<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(vbox) = this.as_value_object() {
         if let Value::Number(n) = vbox.unbox() {
             return Ok(n.into());

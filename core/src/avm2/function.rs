@@ -7,71 +7,72 @@ use crate::avm2::scope::ScopeChain;
 use crate::avm2::value::Value;
 use crate::avm2::Error;
 use gc_arena::{Collect, Gc};
+use ruffle_types::backend::Backend;
 use std::fmt;
 
 /// Represents code written in AVM2 bytecode that can be executed by some
 /// means.
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct BytecodeExecutable<'gc> {
+pub struct BytecodeExecutable<'gc, B: Backend> {
     /// The method code to execute from a given ABC file.
-    method: Gc<'gc, BytecodeMethod<'gc>>,
+    method: Gc<'gc, BytecodeMethod<'gc, B>>,
 
     /// The scope this method was defined in.
-    scope: ScopeChain<'gc>,
+    scope: ScopeChain<'gc, B>,
 
     /// The receiver that this function is always called with.
     ///
     /// If `None`, then the receiver provided by the caller is used. A
     /// `Some` value indicates a bound executable.
-    receiver: Option<Object<'gc>>,
+    receiver: Option<Object<'gc, B>>,
 
     /// The bound superclass for this method.
     ///
     /// The `superclass` is the class that defined this method. If `None`,
     /// then there is no defining superclass and `super` operations should fall
     /// back to the `receiver`.
-    bound_superclass: Option<ClassObject<'gc>>,
+    bound_superclass: Option<ClassObject<'gc, B>>,
 }
 
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct NativeExecutable<'gc> {
+pub struct NativeExecutable<'gc, B: Backend> {
     /// The method associated with the executable.
-    method: Gc<'gc, NativeMethod<'gc>>,
+    method: Gc<'gc, NativeMethod<'gc, B>>,
 
     /// The scope this method was defined in.
-    scope: ScopeChain<'gc>,
+    scope: ScopeChain<'gc, B>,
 
     /// The bound reciever for this method.
-    bound_receiver: Option<Object<'gc>>,
+    bound_receiver: Option<Object<'gc, B>>,
 
     /// The bound superclass for this method.
     ///
     /// The `superclass` is the class that defined this method. If `None`,
     /// then there is no defining superclass and `super` operations should fall
     /// back to the `receiver`.
-    bound_superclass: Option<ClassObject<'gc>>,
+    bound_superclass: Option<ClassObject<'gc, B>>,
 }
 
 /// Represents code that can be executed by some means.
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub enum Executable<'gc> {
+pub enum Executable<'gc, B: Backend> {
     /// Code defined in Ruffle's binary.
-    Native(NativeExecutable<'gc>),
+    Native(NativeExecutable<'gc, B>),
 
     /// Code defined in a loaded ABC file.
-    Action(BytecodeExecutable<'gc>),
+    Action(BytecodeExecutable<'gc, B>),
 }
 
-impl<'gc> Executable<'gc> {
+impl<'gc, B: Backend> Executable<'gc, B> {
     /// Convert a method into an executable.
     pub fn from_method(
-        method: Method<'gc>,
-        scope: ScopeChain<'gc>,
-        receiver: Option<Object<'gc>>,
-        superclass: Option<ClassObject<'gc>>,
+        method: Method<'gc, B>,
+        scope: ScopeChain<'gc, B>,
+        receiver: Option<Object<'gc, B>>,
+        superclass: Option<ClassObject<'gc, B>>,
     ) -> Self {
         match method {
             Method::Native(method) => Self::Native(NativeExecutable {
@@ -102,11 +103,11 @@ impl<'gc> Executable<'gc> {
     /// declared on the function.
     pub fn exec(
         &self,
-        unbound_receiver: Option<Object<'gc>>,
-        mut arguments: &[Value<'gc>],
-        activation: &mut Activation<'_, 'gc, '_>,
-        callee: Object<'gc>,
-    ) -> Result<Value<'gc>, Error> {
+        unbound_receiver: Option<Object<'gc, B>>,
+        mut arguments: &[Value<'gc, B>],
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        callee: Object<'gc, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         match self {
             Executable::Native(bm) => {
                 let method = bm.method.method;
@@ -166,7 +167,7 @@ impl<'gc> Executable<'gc> {
     }
 }
 
-impl<'gc> fmt::Debug for Executable<'gc> {
+impl<'gc, B: Backend> fmt::Debug for Executable<'gc, B> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Action(be) => fmt

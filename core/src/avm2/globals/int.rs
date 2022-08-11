@@ -9,13 +9,14 @@ use crate::avm2::object::{primitive_allocator, FunctionObject, Object, TObject};
 use crate::avm2::value::Value;
 use crate::avm2::{AvmString, Error};
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 
 /// Implements `int`'s instance initializer.
-fn instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut prim) = this.as_primitive_mut(activation.context.gc_context) {
             if matches!(*prim, Value::Undefined | Value::Null) {
@@ -33,11 +34,11 @@ fn instance_init<'gc>(
 }
 
 /// Implements `int`'s native instance initializer.
-fn native_instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn native_instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         activation.super_init(this, args)?;
     }
@@ -46,11 +47,11 @@ fn native_instance_init<'gc>(
 }
 
 /// Implements `int`'s class initializer.
-fn class_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn class_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let scope = activation.create_scopechain();
         let gc_context = activation.context.gc_context;
@@ -129,11 +130,11 @@ fn class_init<'gc>(
 }
 
 /// Implements `int.toExponential`
-fn to_exponential<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn to_exponential<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(this) = this.as_primitive() {
             if let Value::Integer(number) = *this {
@@ -163,11 +164,11 @@ fn to_exponential<'gc>(
 }
 
 /// Implements `int.toFixed`
-fn to_fixed<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn to_fixed<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(this) = this.as_primitive() {
             if let Value::Integer(number) = *this {
@@ -194,11 +195,11 @@ fn to_fixed<'gc>(
 }
 
 /// Implements `int.toPrecision`
-fn to_precision<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn to_precision<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(this) = this.as_primitive() {
             if let Value::Integer(number) = *this {
@@ -221,11 +222,11 @@ fn to_precision<'gc>(
 }
 
 /// Implements `int.toString`
-fn to_string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn to_string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(this) = this.as_primitive() {
             if let Value::Integer(number) = *this {
@@ -248,11 +249,11 @@ fn to_string<'gc>(
 }
 
 /// Implements `int.valueOf`
-fn value_of<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn value_of<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(this) = this.as_primitive() {
             return Ok(*this);
@@ -263,7 +264,7 @@ fn value_of<'gc>(
 }
 
 /// Construct `int`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::public(), "int"),
         Some(QName::new(Namespace::public(), "Object").into()),
@@ -283,14 +284,14 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
     const CLASS_CONSTANTS: &[(&str, i32)] = &[("MAX_VALUE", i32::MAX), ("MIN_VALUE", i32::MIN)];
     write.define_public_constant_int_class_traits(CLASS_CONSTANTS);
 
-    const AS3_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] = &[
+    let as3_instance_methods: &[(&str, NativeMethodImpl<B>)] = &[
         ("toExponential", to_exponential),
         ("toFixed", to_fixed),
         ("toPrecision", to_precision),
         ("toString", to_string),
         ("valueOf", value_of),
     ];
-    write.define_as3_builtin_instance_methods(mc, AS3_INSTANCE_METHODS);
+    write.define_as3_builtin_instance_methods(mc, as3_instance_methods);
 
     class
 }

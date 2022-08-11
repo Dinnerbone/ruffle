@@ -10,6 +10,7 @@ use crate::avm2::object::{ArrayObject, FunctionObject, Object, TObject};
 use crate::avm2::value::Value;
 use crate::avm2::Error;
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::ecma_conversions::f64_to_wrapping_i32;
 use ruffle_types::string::{AvmString, Units};
 use serde::Serialize;
@@ -17,11 +18,11 @@ use serde_json::{Map as JsonObject, Value as JsonValue};
 use std::borrow::Cow;
 use std::ops::Deref;
 
-fn deserialize_json_inner<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn deserialize_json_inner<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     json: JsonValue,
-    reviver: Option<Object<'gc>>,
-) -> Result<Value<'gc>, Error> {
+    reviver: Option<Object<'gc, B>>,
+) -> Result<Value<'gc, B>, Error> {
     Ok(match json {
         JsonValue::Null => Value::Null,
         JsonValue::String(s) => AvmString::new_utf8(activation.context.gc_context, s).into(),
@@ -53,7 +54,7 @@ fn deserialize_json_inner<'gc>(
             obj.into()
         }
         JsonValue::Array(js_arr) => {
-            let mut arr: Vec<Option<Value<'gc>>> = Vec::with_capacity(js_arr.len());
+            let mut arr: Vec<Option<Value<'gc, B>>> = Vec::with_capacity(js_arr.len());
             for (key, val) in js_arr.iter().enumerate() {
                 let val = deserialize_json_inner(activation, val.clone(), reviver)?;
                 let mapped_val = match reviver {
@@ -69,11 +70,11 @@ fn deserialize_json_inner<'gc>(
     })
 }
 
-fn deserialize_json<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn deserialize_json<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     json: JsonValue,
-    reviver: Option<Object<'gc>>,
-) -> Result<Value<'gc>, Error> {
+    reviver: Option<Object<'gc, B>>,
+) -> Result<Value<'gc, B>, Error> {
     let val = deserialize_json_inner(activation, json, reviver)?;
     match reviver {
         None => Ok(val),
@@ -81,19 +82,19 @@ fn deserialize_json<'gc>(
     }
 }
 
-enum Replacer<'gc> {
-    Function(FunctionObject<'gc>),
-    PropList(ArrayObject<'gc>),
+enum Replacer<'gc, B: Backend> {
+    Function(FunctionObject<'gc, B>),
+    PropList(ArrayObject<'gc, B>),
 }
 
-struct AvmSerializer<'gc> {
+struct AvmSerializer<'gc, B: Backend> {
     /// This object stack will be used to detect circular references and return an error instead of a panic.
-    obj_stack: Vec<Object<'gc>>,
-    replacer: Option<Replacer<'gc>>,
+    obj_stack: Vec<Object<'gc, B>>,
+    replacer: Option<Replacer<'gc, B>>,
 }
 
-impl<'gc> AvmSerializer<'gc> {
-    fn new(replacer: Option<Replacer<'gc>>) -> Self {
+impl<'gc, B: Backend> AvmSerializer<'gc, B> {
+    fn new(replacer: Option<Replacer<'gc, B>>) -> Self {
         Self {
             obj_stack: Vec::new(),
             replacer,
@@ -113,10 +114,10 @@ impl<'gc> AvmSerializer<'gc> {
     /// only used if either the `toJSON` step or replacer function step happens, so we only need to evaluate the key there.
     fn map_value(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         key: impl Fn() -> AvmString<'gc>,
-        value: Value<'gc>,
-    ) -> Result<Value<'gc>, Error> {
+        value: Value<'gc, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         let (eval_key, value) = if value.is_primitive() {
             (None, value)
         } else {
@@ -148,8 +149,8 @@ impl<'gc> AvmSerializer<'gc> {
 
     fn serialize_object(
         &mut self,
-        activation: &mut Activation<'_, 'gc, '_>,
-        obj: Object<'gc>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        obj: Object<'gc, B>,
     ) -> Result<JsonValue, Error> {
         let mut js_obj = JsonObject::new();
         // If the user supplied a PropList, we use that to find properties on the object.
@@ -195,8 +196,8 @@ impl<'gc> AvmSerializer<'gc> {
     /// Note that this doesn't actually check if the object passed can be iterated using ArrayIter, it just assumes it can.
     fn serialize_iterable(
         &mut self,
-        activation: &mut Activation<'_, 'gc, '_>,
-        iterable: Object<'gc>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        iterable: Object<'gc, B>,
     ) -> Result<JsonValue, Error> {
         let mut js_arr = Vec::new();
         let mut iter = ArrayIter::new(activation, iterable)?;
@@ -212,8 +213,8 @@ impl<'gc> AvmSerializer<'gc> {
 
     fn serialize_value(
         &mut self,
-        activation: &mut Activation<'_, 'gc, '_>,
-        value: Value<'gc>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        value: Value<'gc, B>,
     ) -> Result<JsonValue, Error> {
         Ok(match value {
             Value::Null => JsonValue::Null,
@@ -249,8 +250,8 @@ impl<'gc> AvmSerializer<'gc> {
     /// Same thing as serialize_value, but maps the value before calling it.
     fn serialize(
         &mut self,
-        activation: &mut Activation<'_, 'gc, '_>,
-        value: Value<'gc>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        value: Value<'gc, B>,
     ) -> Result<JsonValue, Error> {
         let mapped = self.map_value(activation, || "".into(), value)?;
         self.serialize_value(activation, mapped)
@@ -258,29 +259,29 @@ impl<'gc> AvmSerializer<'gc> {
 }
 
 /// Implements `JSON`'s instance initializer.
-pub fn instance_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn instance_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Err("ArgumentError: Error #2012: JSON class cannot be instantiated.".into())
 }
 
 /// Implements `JSON`'s class initializer.
-pub fn class_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn class_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok(Value::Undefined)
 }
 
 /// Implements `JSON.parse`.
-pub fn parse<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn parse<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let input = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -292,11 +293,11 @@ pub fn parse<'gc>(
 }
 
 /// Implements `JSON.stringify`.
-pub fn stringify<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn stringify<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let val = args.get(0).unwrap_or(&Value::Undefined);
     let replacer = args.get(1).unwrap_or(&Value::Undefined).as_object();
     let spaces = args.get(2).unwrap_or(&Value::Undefined);
@@ -354,7 +355,7 @@ pub fn stringify<'gc>(
 }
 
 /// Construct `JSON`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::public(), "JSON"),
         Some(QName::new(Namespace::public(), "Object").into()),
@@ -365,8 +366,8 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
 
     let mut write = class.write(mc);
 
-    const PUBLIC_CLASS_METHODS: &[(&str, NativeMethodImpl)] =
+    let public_class_methods: &[(&str, NativeMethodImpl<B>)] =
         &[("parse", parse), ("stringify", stringify)];
-    write.define_public_builtin_class_methods(mc, PUBLIC_CLASS_METHODS);
+    write.define_public_builtin_class_methods(mc, public_class_methods);
     class
 }

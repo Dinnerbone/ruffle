@@ -10,56 +10,58 @@ use crate::avm1::{Object, ScriptObject, TObject, Value};
 use crate::avm_warn;
 use gc_arena::MutationContext;
 use ruffle_types::backend::navigator::{NavigationMethod, Request};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "load" => method(load; DONT_ENUM | DONT_DELETE);
-    "send" => method(send; DONT_ENUM | DONT_DELETE);
-    "sendAndLoad" => method(send_and_load; DONT_ENUM | DONT_DELETE);
-    "decode" => method(decode; DONT_ENUM | DONT_DELETE);
-    "getBytesLoaded" => method(get_bytes_loaded; DONT_ENUM | DONT_DELETE);
-    "getBytesTotal" => method(get_bytes_total; DONT_ENUM | DONT_DELETE);
-    "toString" => method(to_string; DONT_ENUM | DONT_DELETE);
-    "contentType" => string("application/x-www-form-urlencoded"; DONT_ENUM | DONT_DELETE);
-    "onLoad" => method(on_load; DONT_ENUM | DONT_DELETE);
-    "onData" => method(on_data; DONT_ENUM | DONT_DELETE);
-    "addRequestHeader" => method(add_request_header; DONT_ENUM | DONT_DELETE);
-};
-
 /// Implements `LoadVars`
-pub fn constructor<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // No-op constructor
     Ok(this.into())
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let object = ScriptObject::object(gc_context, Some(proto));
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "load" => method(load; DONT_ENUM | DONT_DELETE);
+        "send" => method(send; DONT_ENUM | DONT_DELETE);
+        "sendAndLoad" => method(send_and_load; DONT_ENUM | DONT_DELETE);
+        "decode" => method(decode; DONT_ENUM | DONT_DELETE);
+        "getBytesLoaded" => method(get_bytes_loaded; DONT_ENUM | DONT_DELETE);
+        "getBytesTotal" => method(get_bytes_total; DONT_ENUM | DONT_DELETE);
+        "toString" => method(to_string; DONT_ENUM | DONT_DELETE);
+        "contentType" => string("application/x-www-form-urlencoded"; DONT_ENUM | DONT_DELETE);
+        "onLoad" => method(on_load; DONT_ENUM | DONT_DELETE);
+        "onData" => method(on_data; DONT_ENUM | DONT_DELETE);
+        "addRequestHeader" => method(add_request_header; DONT_ENUM | DONT_DELETE);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     object.into()
 }
 
-fn add_request_header<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn add_request_header<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     avm_warn!(activation, "LoadVars.addRequestHeader: Unimplemented");
     Ok(Value::Undefined)
 }
 
-fn decode<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn decode<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // Spec says added in SWF 7, but not version gated.
     // Decode the query string into properties on this object.
     if let Some(data) = args.get(0) {
@@ -74,29 +76,29 @@ fn decode<'gc>(
     Ok(Value::Undefined)
 }
 
-fn get_bytes_loaded<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_bytes_loaded<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // Forwards to undocumented property on the object.
     this.get("_bytesLoaded", activation)
 }
 
-fn get_bytes_total<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_bytes_total<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // Forwards to undocumented property on the object.
     this.get("_bytesTotal", activation)
 }
 
-fn load<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn load<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let url = match args.get(0) {
         Some(val) => val.coerce_to_string(activation)?,
         None => return Ok(false.into()),
@@ -107,11 +109,11 @@ fn load<'gc>(
     Ok(true.into())
 }
 
-fn on_data<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn on_data<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // Default implementation forwards to decode and onLoad.
     let success = match args.get(0).unwrap_or(&Value::Undefined) {
         Value::Undefined | Value::Null => false,
@@ -137,20 +139,20 @@ fn on_data<'gc>(
     Ok(Value::Undefined)
 }
 
-fn on_load<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn on_load<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // Default implementation: no-op?
     Ok(Value::Undefined)
 }
 
-fn send<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn send<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // `send` navigates the browser to a URL with the given query parameter.
     let url = match args.get(0) {
         Some(url) => url.coerce_to_string(activation)?,
@@ -195,11 +197,11 @@ fn send<'gc>(
     Ok(true.into())
 }
 
-fn send_and_load<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn send_and_load<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let url_val = args.get(0).cloned().unwrap_or(Value::Undefined);
     let url = url_val.coerce_to_string(activation)?;
     let target = match args.get(1) {
@@ -218,11 +220,11 @@ fn send_and_load<'gc>(
     Ok(true.into())
 }
 
-fn to_string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn to_string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     use indexmap::IndexMap;
 
     let mut form_values = IndexMap::new();
@@ -249,12 +251,12 @@ fn to_string<'gc>(
     Ok(AvmString::new_utf8(activation.context.gc_context, query_string).into())
 }
 
-fn spawn_load_var_fetch<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    loader_object: Object<'gc>,
+fn spawn_load_var_fetch<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    loader_object: Object<'gc, B>,
     url: AvmString<'gc>,
-    send_object: Option<(Object<'gc>, NavigationMethod)>,
-) -> Result<Value<'gc>, Error<'gc>> {
+    send_object: Option<(Object<'gc, B>, NavigationMethod)>,
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let request = if let Some((send_object, method)) = send_object {
         // Send properties from `send_object`.
         activation.object_into_request(send_object, url, Some(method))

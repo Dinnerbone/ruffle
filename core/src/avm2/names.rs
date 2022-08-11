@@ -5,6 +5,7 @@ use crate::avm2::script::TranslationUnit;
 use crate::avm2::value::Value;
 use crate::avm2::Error;
 use gc_arena::{Collect, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::either::Either;
 use ruffle_types::string::{AvmString, WStr, WString};
 use std::fmt::Debug;
@@ -31,8 +32,8 @@ pub enum Namespace<'gc> {
 impl<'gc> Namespace<'gc> {
     /// Read a namespace declaration from the ABC constant pool and copy it to
     /// a namespace value.
-    pub fn from_abc_namespace(
-        translation_unit: TranslationUnit<'gc>,
+    pub fn from_abc_namespace<B: Backend>(
+        translation_unit: TranslationUnit<'gc, B>,
         namespace_index: Index<AbcNamespace>,
         mc: MutationContext<'gc, '_>,
     ) -> Result<Self, Error> {
@@ -172,8 +173,8 @@ impl<'gc> QName<'gc> {
     ///
     /// This function returns an Err if the multiname does not exist or is not
     /// a `QName`.
-    pub fn from_abc_multiname(
-        translation_unit: TranslationUnit<'gc>,
+    pub fn from_abc_multiname<B: Backend>(
+        translation_unit: TranslationUnit<'gc, B>,
         multiname_index: Index<AbcMultiname>,
         mc: MutationContext<'gc, '_>,
     ) -> Result<Self, Error> {
@@ -318,8 +319,8 @@ pub struct Multiname<'gc> {
 impl<'gc> Multiname<'gc> {
     /// Read a namespace set from the ABC constant pool, and return a list of
     /// copied namespaces.
-    fn abc_namespace_set(
-        translation_unit: TranslationUnit<'gc>,
+    fn abc_namespace_set<B: Backend>(
+        translation_unit: TranslationUnit<'gc, B>,
         namespace_set_index: Index<AbcNamespaceSet>,
         mc: MutationContext<'gc, '_>,
     ) -> Result<Vec<Namespace<'gc>>, Error> {
@@ -350,11 +351,11 @@ impl<'gc> Multiname<'gc> {
     ///
     /// Intended for use by code that wants to inspect the late-bound name's
     /// value first before using standard namespace lookup.
-    pub fn from_multiname_late(
-        translation_unit: TranslationUnit<'gc>,
+    pub fn from_multiname_late<B: Backend>(
+        translation_unit: TranslationUnit<'gc, B>,
         abc_multiname: &AbcMultiname,
-        name: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        name: Value<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<Self, Error> {
         match abc_multiname {
             AbcMultiname::MultinameL { namespace_set }
@@ -379,10 +380,10 @@ impl<'gc> Multiname<'gc> {
     /// Type parameters may themselves be typenames, but not the base type.
     /// This is valid: `Vector.<Vector.<int>>`, but this is not:
     /// `Vector.<int>.<int>`
-    fn resolve_multiname_params(
-        translation_unit: TranslationUnit<'gc>,
+    fn resolve_multiname_params<B: Backend>(
+        translation_unit: TranslationUnit<'gc, B>,
         abc_multiname: &AbcMultiname,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<Self, Error> {
         Ok(match abc_multiname {
             AbcMultiname::QName { namespace, name } | AbcMultiname::QNameA { namespace, name } => {
@@ -445,7 +446,7 @@ impl<'gc> Multiname<'gc> {
 
     /// Retrieve a given multiname index from the ABC file, yielding an error
     /// if the multiname index is zero.
-    pub fn resolve_multiname_index(
+    pub fn resolve_multiname_index<B: Backend>(
         abc: &AbcFile,
         multiname_index: Index<AbcMultiname>,
     ) -> Result<&AbcMultiname, Error> {
@@ -464,10 +465,10 @@ impl<'gc> Multiname<'gc> {
 
     /// Read a multiname from the ABC constant pool, copying it into the most
     /// general form of multiname.
-    pub fn from_abc_multiname(
-        translation_unit: TranslationUnit<'gc>,
+    pub fn from_abc_multiname<B: Backend>(
+        translation_unit: TranslationUnit<'gc, B>,
         multiname_index: Index<AbcMultiname>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<Self, Error> {
         let abc = translation_unit.abc();
         let abc_multiname = Self::resolve_multiname_index(&abc, multiname_index)?;
@@ -511,8 +512,8 @@ impl<'gc> Multiname<'gc> {
     ///
     /// Multiname index zero is also treated as an error, you must check for it
     /// and substitute it with whatever default is called for by AVM2.
-    pub fn from_abc_multiname_static(
-        translation_unit: TranslationUnit<'gc>,
+    pub fn from_abc_multiname_static<B: Backend>(
+        translation_unit: TranslationUnit<'gc, B>,
         multiname_index: Index<AbcMultiname>,
         mc: MutationContext<'gc, '_>,
     ) -> Result<Self, Error> {

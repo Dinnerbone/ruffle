@@ -11,6 +11,7 @@ use crate::vminterface::AvmObject;
 use gc_arena::{Collect, GcCell, MutationContext};
 use ruffle_types::backend::render::BitmapInfo;
 use ruffle_types::backend::video::{EncodedFrame, VideoStreamHandle};
+use ruffle_types::backend::Backend;
 use ruffle_types::bounding_box::BoundingBox;
 use ruffle_types::tag_utils::{SwfMovie, SwfSlice};
 use ruffle_types::vminterface::AvmType;
@@ -31,12 +32,12 @@ use ruffle_types::display_object::stage::StageQuality;
 /// framerate.
 #[derive(Clone, Debug, Collect, Copy)]
 #[collect(no_drop)]
-pub struct Video<'gc>(GcCell<'gc, VideoData<'gc>>);
+pub struct Video<'gc, B: Backend>(GcCell<'gc, VideoData<'gc, B>>);
 
 #[derive(Clone, Debug, Collect)]
 #[collect(no_drop)]
-pub struct VideoData<'gc> {
-    base: DisplayObjectBase<'gc>,
+pub struct VideoData<'gc, B: Backend> {
+    base: DisplayObjectBase<'gc, B>,
 
     /// The source of the video data (e.g. an external file, a SWF bitstream)
     source: GcCell<'gc, VideoSource>,
@@ -49,7 +50,7 @@ pub struct VideoData<'gc> {
     decoded_frame: Option<(u32, BitmapInfo)>,
 
     /// AVM representation of this video player.
-    object: Option<AvmObject<'gc>>,
+    object: Option<AvmObject<'gc, B>>,
 
     /// List of frames which can be independently seeked to.
     ///
@@ -93,7 +94,7 @@ pub enum VideoSource {
     },
 }
 
-impl<'gc> Video<'gc> {
+impl<'gc, B: Backend> Video<'gc, B> {
     /// Construct a Video object that is tied to a SWF file's video stream.
     pub fn from_swf_tag(
         movie: Arc<SwfMovie>,
@@ -126,7 +127,11 @@ impl<'gc> Video<'gc> {
     ///
     /// This function yields an error if this video player is not playing an
     /// embedded SWF video.
-    pub fn preload_swf_frame(&mut self, tag: VideoFrame, context: &mut UpdateContext<'_, 'gc, '_>) {
+    pub fn preload_swf_frame(
+        &mut self,
+        tag: VideoFrame,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+    ) {
         match (*self
             .0
             .write(context.gc_context)
@@ -161,7 +166,7 @@ impl<'gc> Video<'gc> {
     /// snapping it to the last independently seekable frame. Then, all frames
     /// from that keyframe up to the (wrapped) requested frame are decoded in
     /// order. This matches Flash Player behavior.
-    pub fn seek(self, context: &mut UpdateContext<'_, 'gc, '_>, mut frame_id: u32) {
+    pub fn seek(self, context: &mut UpdateContext<'_, 'gc, '_, B>, mut frame_id: u32) {
         let read = self.0.read();
         if let VideoStream::Uninstantiated(_) = &read.stream {
             drop(read);
@@ -233,7 +238,7 @@ impl<'gc> Video<'gc> {
     /// This function makes no attempt to ensure that the proposed seek is
     /// valid, hence the fact that it's not `pub`. To do a seek that accounts
     /// for keyframes, see `Video.seek`.
-    fn seek_internal(self, context: &mut UpdateContext<'_, 'gc, '_>, frame_id: u32) {
+    fn seek_internal(self, context: &mut UpdateContext<'_, 'gc, '_, B>, frame_id: u32) {
         let read = self.0.read();
         let source = read.source;
         let stream = if let VideoStream::Instantiated(stream) = &read.stream {
@@ -283,16 +288,21 @@ impl<'gc> Video<'gc> {
     }
 }
 
-impl<'gc> TDisplayObject<'gc> for Video<'gc> {
-    fn base(&self) -> Ref<DisplayObjectBase<'gc>> {
+impl<'gc, B: Backend> TDisplayObject<'gc> for Video<'gc, B> {
+    type B = B;
+
+    fn base(&self) -> Ref<DisplayObjectBase<'gc, B>> {
         Ref::map(self.0.read(), |r| &r.base)
     }
 
-    fn base_mut<'a>(&'a self, mc: MutationContext<'gc, '_>) -> RefMut<'a, DisplayObjectBase<'gc>> {
+    fn base_mut<'a>(
+        &'a self,
+        mc: MutationContext<'gc, '_>,
+    ) -> RefMut<'a, DisplayObjectBase<'gc, B>> {
         RefMut::map(self.0.write(mc), |w| &mut w.base)
     }
 
-    fn instantiate(&self, gc_context: MutationContext<'gc, '_>) -> DisplayObject<'gc> {
+    fn instantiate(&self, gc_context: MutationContext<'gc, '_>) -> DisplayObject<'gc, B> {
         Self(GcCell::allocate(gc_context, self.0.read().clone())).into()
     }
 
@@ -300,14 +310,14 @@ impl<'gc> TDisplayObject<'gc> for Video<'gc> {
         self.0.as_ptr() as *const DisplayObjectPtr
     }
 
-    fn as_video(self) -> Option<Video<'gc>> {
+    fn as_video(self) -> Option<Video<'gc, B>> {
         Some(self)
     }
 
     fn post_instantiation(
         &self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        _init_object: Option<Avm1Object<'gc>>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        _init_object: Option<Avm1Object<'gc, B>>,
         _instantiated_by: Instantiator,
         run_frame: bool,
     ) {
@@ -401,7 +411,7 @@ impl<'gc> TDisplayObject<'gc> for Video<'gc> {
         }
     }
 
-    fn construct_frame(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn construct_frame(&self, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         let vm_type = context.avm_type();
         if vm_type == AvmType::Avm2 && matches!(self.object2(), Avm2Value::Undefined) {
             let video_constr = context.avm2.classes().video;
@@ -412,7 +422,7 @@ impl<'gc> TDisplayObject<'gc> for Video<'gc> {
                 video_constr,
             ) {
                 Ok(object) => {
-                    let object: Avm2Object<'gc> = object.into();
+                    let object: Avm2Object<'gc, B> = object.into();
                     self.0.write(context.gc_context).object = Some(object.into())
                 }
                 Err(e) => log::error!("Got {} when constructing AVM2 side of video player", e),
@@ -439,7 +449,7 @@ impl<'gc> TDisplayObject<'gc> for Video<'gc> {
         bounding_box
     }
 
-    fn render(&self, context: &mut RenderContext) {
+    fn render(&self, context: &mut RenderContext<B>) {
         if !self.world_bounds().intersects(&context.stage.view_bounds()) {
             // Off-screen; culled
             return;
@@ -486,7 +496,7 @@ impl<'gc> TDisplayObject<'gc> for Video<'gc> {
         context.transform_stack.pop();
     }
 
-    fn set_object2(&mut self, mc: MutationContext<'gc, '_>, to: Avm2Object<'gc>) {
+    fn set_object2(&mut self, mc: MutationContext<'gc, '_>, to: Avm2Object<'gc, B>) {
         self.0.write(mc).object = Some(to.into());
     }
 }

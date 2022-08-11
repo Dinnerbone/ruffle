@@ -9,14 +9,15 @@ use crate::avm2::value::Value;
 use crate::avm2::Error;
 use crate::avm2::{activation::Activation, array::ArrayStorage};
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::{AvmString, WString};
 
 /// Implements `RegExp`'s instance initializer.
-pub fn instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         activation.super_init(this, &[])?;
 
@@ -51,11 +52,11 @@ pub fn instance_init<'gc>(
     Ok(Value::Undefined)
 }
 
-fn class_call<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn class_call<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let this_class = activation.subclass_object().unwrap();
 
     if args.len() == 1 {
@@ -68,20 +69,20 @@ fn class_call<'gc>(
 }
 
 /// Implements `RegExp`'s class initializer.
-pub fn class_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn class_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok(Value::Undefined)
 }
 
 /// Implements `RegExp.dotall`
-pub fn dotall<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn dotall<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(regexp) = this.as_regexp() {
             return Ok(regexp.flags().contains(RegExpFlags::DOTALL).into());
@@ -92,11 +93,11 @@ pub fn dotall<'gc>(
 }
 
 /// Implements `RegExp.extended`
-pub fn extended<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn extended<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(regexp) = this.as_regexp() {
             return Ok(regexp.flags().contains(RegExpFlags::EXTENDED).into());
@@ -107,11 +108,11 @@ pub fn extended<'gc>(
 }
 
 /// Implements `RegExp.global`
-pub fn global<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn global<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(regexp) = this.as_regexp() {
             return Ok(regexp.flags().contains(RegExpFlags::GLOBAL).into());
@@ -122,11 +123,11 @@ pub fn global<'gc>(
 }
 
 /// Implements `RegExp.ignoreCase`
-pub fn ignore_case<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn ignore_case<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(regexp) = this.as_regexp() {
             return Ok(regexp.flags().contains(RegExpFlags::IGNORE_CASE).into());
@@ -137,11 +138,11 @@ pub fn ignore_case<'gc>(
 }
 
 /// Implements `RegExp.multiline`
-pub fn multiline<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn multiline<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(regexp) = this.as_regexp() {
             return Ok(regexp.flags().contains(RegExpFlags::MULTILINE).into());
@@ -152,11 +153,11 @@ pub fn multiline<'gc>(
 }
 
 /// Implements `RegExp.lastIndex`'s getter
-pub fn last_index<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn last_index<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(re) = this.as_regexp() {
             return Ok(re.last_index().into());
@@ -167,11 +168,11 @@ pub fn last_index<'gc>(
 }
 
 /// Implements `RegExp.lastIndex`'s setter
-pub fn set_last_index<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn set_last_index<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut re) = this.as_regexp_mut(activation.context.gc_context) {
             let i = args
@@ -186,11 +187,11 @@ pub fn set_last_index<'gc>(
 }
 
 /// Implements `RegExp.source`
-pub fn source<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn source<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(re) = this.as_regexp() {
             return Ok(re.source().into());
@@ -201,11 +202,11 @@ pub fn source<'gc>(
 }
 
 /// Implements `RegExp.exec`
-pub fn exec<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn exec<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut re) = this.as_regexp_mut(activation.context.gc_context) {
             let text = args
@@ -251,11 +252,11 @@ pub fn exec<'gc>(
 }
 
 /// Implements `RegExp.test`
-pub fn test<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn test<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut re) = this.as_regexp_mut(activation.context.gc_context) {
             let text = args
@@ -270,7 +271,7 @@ pub fn test<'gc>(
 }
 
 /// Construct `RegExp`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::public(), "RegExp"),
         Some(QName::new(Namespace::public(), "Object").into()),
@@ -300,10 +301,10 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
         mc,
     ));
 
-    const PUBLIC_INSTANCE_PROPERTIES: &[(
+    let PUBLIC_INSTANCE_PROPERTIES: &[(
         &str,
-        Option<NativeMethodImpl>,
-        Option<NativeMethodImpl>,
+        Option<NativeMethodImpl<B>>,
+        Option<NativeMethodImpl<B>>,
     )] = &[
         ("dotall", Some(dotall), None),
         ("extended", Some(extended), None),
@@ -315,7 +316,7 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
     ];
     write.define_public_builtin_instance_properties(mc, PUBLIC_INSTANCE_PROPERTIES);
 
-    const AS3_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] = &[("exec", exec), ("test", test)];
+    let AS3_INSTANCE_METHODS: &[(&str, NativeMethodImpl<B>)] = &[("exec", exec), ("test", test)];
     write.define_as3_builtin_instance_methods(mc, AS3_INSTANCE_METHODS);
 
     class

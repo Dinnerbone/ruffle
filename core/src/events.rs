@@ -1,4 +1,5 @@
 use crate::display_object::InteractiveObject;
+use ruffle_types::backend::Backend;
 use ruffle_types::events::{ButtonKeyCode, MouseWheelDelta};
 use swf::ClipEventFlag;
 
@@ -28,7 +29,7 @@ pub enum ClipEventResult {
 ///  * AVM2 additionally supports bubble/capture, which AVM1 and
 ///    `InteractiveObject` itself does not support
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum ClipEvent<'gc> {
+pub enum ClipEvent<'gc, B: Backend> {
     Construct,
     Data,
 
@@ -39,7 +40,7 @@ pub enum ClipEvent<'gc> {
     /// AVM1 and AVM2. In AVM2, it is dispatched identically to `RollOut`, with
     /// the only difference being that the `buttonDown` flag is set to true.
     DragOut {
-        to: Option<InteractiveObject<'gc>>,
+        to: Option<InteractiveObject<'gc, B>>,
     },
 
     /// Mouse moved into of a display object while the primary button is held
@@ -50,7 +51,7 @@ pub enum ClipEvent<'gc> {
     /// with the only difference being that the `buttonDown` flag is set to
     /// true.
     DragOver {
-        from: Option<InteractiveObject<'gc>>,
+        from: Option<InteractiveObject<'gc, B>>,
     },
     EnterFrame,
     Initialize,
@@ -105,7 +106,7 @@ pub enum ClipEvent<'gc> {
     ///
     /// The parameter `to` is the current object that is now under the cursor.
     RollOut {
-        to: Option<InteractiveObject<'gc>>,
+        to: Option<InteractiveObject<'gc, B>>,
     },
 
     /// Mouse moved into a display object.
@@ -118,7 +119,7 @@ pub enum ClipEvent<'gc> {
     /// The parameter `from` is the previous object that was under the cursor
     /// before this one.
     RollOver {
-        from: Option<InteractiveObject<'gc>>,
+        from: Option<InteractiveObject<'gc, B>>,
     },
 
     /// Mouse button was released inside a previously-pressed display object.
@@ -146,7 +147,7 @@ pub enum ClipEvent<'gc> {
     },
 }
 
-impl<'gc> ClipEvent<'gc> {
+impl<'gc, B: Backend> ClipEvent<'gc, B> {
     /// Method names for button event handles.
     pub const BUTTON_EVENT_METHODS: [&'static str; 7] = [
         "onDragOver",

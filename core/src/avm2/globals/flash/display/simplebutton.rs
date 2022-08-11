@@ -10,15 +10,16 @@ use crate::avm2::value::Value;
 use crate::avm2::Error;
 use crate::display_object::{Avm2Button, ButtonTracking, TDisplayObject};
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::vminterface::Instantiator;
 use swf::ButtonState;
 
 /// Implements `flash.display.SimpleButton`'s instance constructor.
-pub fn instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         activation.super_init(this, &[])?;
 
@@ -67,20 +68,20 @@ pub fn instance_init<'gc>(
 }
 
 /// Implements `flash.display.SimpleButton`'s class constructor.
-pub fn class_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn class_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok(Value::Undefined)
 }
 
 /// Implements `downState`'s getter.
-pub fn down_state<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn down_state<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(btn) = this
         .and_then(|this| this.as_display_object())
         .and_then(|this| this.as_avm2_button())
@@ -95,11 +96,11 @@ pub fn down_state<'gc>(
 }
 
 /// Implements `downState`'s setter.
-pub fn set_down_state<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn set_down_state<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(btn) = this
         .and_then(|this| this.as_display_object())
         .and_then(|this| this.as_avm2_button())
@@ -118,11 +119,11 @@ pub fn set_down_state<'gc>(
 }
 
 /// Implements `overState`'s getter.
-pub fn over_state<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn over_state<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(btn) = this
         .and_then(|this| this.as_display_object())
         .and_then(|this| this.as_avm2_button())
@@ -137,11 +138,11 @@ pub fn over_state<'gc>(
 }
 
 /// Implements `overState`'s setter.
-pub fn set_over_state<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn set_over_state<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(btn) = this
         .and_then(|this| this.as_display_object())
         .and_then(|this| this.as_avm2_button())
@@ -160,11 +161,11 @@ pub fn set_over_state<'gc>(
 }
 
 /// Implements `hitTestState`'s getter.
-pub fn hit_test_state<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn hit_test_state<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(btn) = this
         .and_then(|this| this.as_display_object())
         .and_then(|this| this.as_avm2_button())
@@ -179,11 +180,11 @@ pub fn hit_test_state<'gc>(
 }
 
 /// Implements `hitTestState`'s setter.
-pub fn set_hit_test_state<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn set_hit_test_state<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(btn) = this
         .and_then(|this| this.as_display_object())
         .and_then(|this| this.as_avm2_button())
@@ -202,11 +203,11 @@ pub fn set_hit_test_state<'gc>(
 }
 
 /// Implements `upState`'s getter.
-pub fn up_state<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn up_state<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(btn) = this
         .and_then(|this| this.as_display_object())
         .and_then(|this| this.as_avm2_button())
@@ -221,11 +222,11 @@ pub fn up_state<'gc>(
 }
 
 /// Implements `upState`'s setter.
-pub fn set_up_state<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn set_up_state<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(btn) = this
         .and_then(|this| this.as_display_object())
         .and_then(|this| this.as_avm2_button())
@@ -244,11 +245,11 @@ pub fn set_up_state<'gc>(
 }
 
 /// Implements `trackAsMenu`'s getter
-pub fn track_as_menu<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn track_as_menu<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(btn) = this
         .and_then(|this| this.as_display_object())
         .and_then(|this| this.as_avm2_button())
@@ -260,11 +261,11 @@ pub fn track_as_menu<'gc>(
 }
 
 /// Implements `trackAsMenu`'s setter
-pub fn set_track_as_menu<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn set_track_as_menu<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(btn) = this
         .and_then(|this| this.as_display_object())
         .and_then(|this| this.as_avm2_button())
@@ -284,11 +285,11 @@ pub fn set_track_as_menu<'gc>(
 }
 
 /// Implements `enabled`'s getter
-pub fn enabled<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn enabled<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(btn) = this
         .and_then(|this| this.as_display_object())
         .and_then(|this| this.as_avm2_button())
@@ -300,11 +301,11 @@ pub fn enabled<'gc>(
 }
 
 /// Implements `enabled`'s setter
-pub fn set_enabled<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn set_enabled<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(btn) = this
         .and_then(|this| this.as_display_object())
         .and_then(|this| this.as_avm2_button())
@@ -322,11 +323,11 @@ pub fn set_enabled<'gc>(
 }
 
 /// Implements `useHandCursor`'s getter
-pub fn use_hand_cursor<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn use_hand_cursor<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(btn) = this
         .and_then(|this| this.as_display_object())
         .and_then(|this| this.as_avm2_button())
@@ -338,11 +339,11 @@ pub fn use_hand_cursor<'gc>(
 }
 
 /// Implements `useHandCursor`'s setter
-pub fn set_use_hand_cursor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn set_use_hand_cursor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(btn) = this
         .and_then(|this| this.as_display_object())
         .and_then(|this| this.as_avm2_button())
@@ -360,7 +361,7 @@ pub fn set_use_hand_cursor<'gc>(
 }
 
 /// Construct `SimpleButton`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::package("flash.display"), "SimpleButton"),
         Some(QName::new(Namespace::package("flash.display"), "InteractiveObject").into()),
@@ -373,10 +374,10 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
 
     write.set_attributes(ClassAttributes::SEALED);
 
-    const PUBLIC_INSTANCE_PROPERTIES: &[(
+    let public_instance_properties: &[(
         &str,
-        Option<NativeMethodImpl>,
-        Option<NativeMethodImpl>,
+        Option<NativeMethodImpl<B>>,
+        Option<NativeMethodImpl<B>>,
     )] = &[
         ("downState", Some(down_state), Some(set_down_state)),
         ("enabled", Some(enabled), Some(set_enabled)),
@@ -399,7 +400,7 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
             Some(set_sound_transform),
         ),
     ];
-    write.define_public_builtin_instance_properties(mc, PUBLIC_INSTANCE_PROPERTIES);
+    write.define_public_builtin_instance_properties(mc, public_instance_properties);
 
     class
 }

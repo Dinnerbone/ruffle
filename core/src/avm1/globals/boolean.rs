@@ -7,19 +7,15 @@ use crate::avm1::object::value_object::ValueObject;
 use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{Object, TObject, Value};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "toString" => method(to_string; DONT_ENUM | DONT_DELETE);
-    "valueOf" => method(value_of; DONT_ENUM | DONT_DELETE);
-};
-
 /// `Boolean` constructor
-pub fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // Called from a constructor, populate `this`.
     if let Some(mut vbox) = this.as_value_object() {
         let cons_value = args
@@ -32,11 +28,11 @@ pub fn constructor<'gc>(
 }
 
 /// `Boolean` function
-pub fn boolean_function<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn boolean_function<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // If called as a function, return the value.
     // Boolean() with no argument returns undefined.
     Ok(args
@@ -45,11 +41,11 @@ pub fn boolean_function<'gc>(
         .map_or(Value::Undefined, Value::Bool))
 }
 
-pub fn create_boolean_object<'gc>(
+pub fn create_boolean_object<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    boolean_proto: Object<'gc>,
-    fn_proto: Option<Object<'gc>>,
-) -> Object<'gc> {
+    boolean_proto: Object<'gc, B>,
+    fn_proto: Option<Object<'gc, B>>,
+) -> Object<'gc, B> {
     FunctionObject::constructor(
         gc_context,
         Executable::Native(constructor),
@@ -60,22 +56,28 @@ pub fn create_boolean_object<'gc>(
 }
 
 /// Creates `Boolean.prototype`.
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let boolean_proto = ValueObject::empty_box(gc_context, Some(proto));
     let object = boolean_proto.as_script_object().unwrap();
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "toString" => method(to_string; DONT_ENUM | DONT_DELETE);
+        "valueOf" => method(value_of; DONT_ENUM | DONT_DELETE);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     boolean_proto
 }
 
-pub fn to_string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn to_string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(vbox) = this.as_value_object() {
         // Must be a bool.
         // Boolean.prototype.toString.call(x) returns undefined for non-bools.
@@ -87,11 +89,11 @@ pub fn to_string<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn value_of<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn value_of<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(vbox) = this.as_value_object() {
         // Must be a bool.
         // Boolean.prototype.valueOf.call(x) returns undefined for non-bools.

@@ -3,6 +3,7 @@
 use crate::avm1::activation::Activation;
 use crate::avm1::error::Error;
 use crate::avm_warn;
+use ruffle_types::backend::Backend;
 use ruffle_types::string::WStr;
 
 /// Parse an FSCommand URL.
@@ -20,11 +21,11 @@ pub fn parse(url: &WStr) -> Option<&WStr> {
     }
 }
 
-pub fn handle<'gc>(
+pub fn handle<'gc, B: Backend>(
     command: &WStr,
     args: &WStr,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<(), Error<'gc>> {
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<(), Error<'gc, B>> {
     let command = command.to_utf8_lossy();
     let args = args.to_utf8_lossy();
 

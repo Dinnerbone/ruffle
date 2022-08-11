@@ -6,27 +6,28 @@
 
 use crate::avm1;
 use gc_arena::Collect;
+use ruffle_types::backend::Backend;
 use serde::Serialize;
 
 #[derive(Collect, Default)]
 #[collect(no_drop)]
-pub struct ContextMenuState<'gc> {
+pub struct ContextMenuState<'gc, B: Backend> {
     info: Vec<ContextMenuItem>,
-    callbacks: Vec<ContextMenuCallback<'gc>>,
+    callbacks: Vec<ContextMenuCallback<'gc, B>>,
 }
 
-impl<'gc> ContextMenuState<'gc> {
+impl<'gc, B: Backend> ContextMenuState<'gc, B> {
     pub fn new() -> Self {
         Self::default()
     }
-    pub fn push(&mut self, item: ContextMenuItem, callback: ContextMenuCallback<'gc>) {
+    pub fn push(&mut self, item: ContextMenuItem, callback: ContextMenuCallback<'gc, B>) {
         self.info.push(item);
         self.callbacks.push(callback);
     }
     pub fn info(&self) -> &Vec<ContextMenuItem> {
         &self.info
     }
-    pub fn callback(&self, index: usize) -> &ContextMenuCallback<'gc> {
+    pub fn callback(&self, index: usize) -> &ContextMenuCallback<'gc, B> {
         &self.callbacks[index]
     }
 }
@@ -43,7 +44,7 @@ pub struct ContextMenuItem {
 
 #[derive(Collect)]
 #[collect(no_drop)]
-pub enum ContextMenuCallback<'gc> {
+pub enum ContextMenuCallback<'gc, B: Backend> {
     Zoom,
     Quality,
     Play,
@@ -53,7 +54,7 @@ pub enum ContextMenuCallback<'gc> {
     Back,
     Print,
     Avm1 {
-        item: avm1::Object<'gc>,
-        callback: avm1::Object<'gc>,
+        item: avm1::Object<'gc, B>,
+        callback: avm1::Object<'gc, B>,
     },
 }

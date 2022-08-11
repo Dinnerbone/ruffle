@@ -9,6 +9,7 @@ use crate::avm2::value::Value;
 use crate::avm2::Error;
 use gc_arena::{GcCell, MutationContext};
 use rand::Rng;
+use ruffle_types::backend::Backend;
 
 macro_rules! math_wrap_std {
     ($std:expr) => {
@@ -23,26 +24,26 @@ macro_rules! math_wrap_std {
 }
 
 /// Implements `Math`'s instance initializer.
-pub fn instance_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn instance_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     // TODO: Replace with actual error type.
     Err("TypeError: Error #1076: Math is not a constructor.".into())
 }
 
 /// Implements `Math`'s class initializer.
-pub fn class_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn class_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok(Value::Undefined)
 }
 
 /// Construct `Math`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::public(), "Math"),
         Some(QName::new(Namespace::public(), "Object").into()),
@@ -67,7 +68,7 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
     ];
     write.define_public_constant_number_class_traits(CONSTANTS);
 
-    const PUBLIC_CLASS_METHODS: &[(&str, NativeMethodImpl)] = &[
+    let PUBLIC_CLASS_METHODS: &[(&str, NativeMethodImpl<B>)] = &[
         ("atan2", atan2),
         ("max", max),
         ("min", min),
@@ -92,11 +93,11 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
     class
 }
 
-fn round<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn round<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(x) = args.get(0) {
         let x = x.coerce_to_number(activation)?;
         // Note that Flash Math.round always rounds toward infinity,
@@ -107,11 +108,11 @@ fn round<'gc>(
     Ok(f64::NAN.into())
 }
 
-fn atan2<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn atan2<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let y = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -123,11 +124,11 @@ fn atan2<'gc>(
     Ok(f64::atan2(y, x).into())
 }
 
-fn max<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn max<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let mut cur_max = f64::NEG_INFINITY;
     for arg in args {
         let val = arg.coerce_to_number(activation)?;
@@ -140,11 +141,11 @@ fn max<'gc>(
     Ok(cur_max.into())
 }
 
-fn min<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn min<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let mut cur_min = f64::INFINITY;
     for arg in args {
         let val = arg.coerce_to_number(activation)?;
@@ -157,11 +158,11 @@ fn min<'gc>(
     Ok(cur_min.into())
 }
 
-fn pow<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn pow<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let n = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -173,10 +174,10 @@ fn pow<'gc>(
     Ok(f64::powf(n, p).into())
 }
 
-pub fn random<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn random<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok(activation.context.rng.gen_range(0.0f64..1.0f64).into())
 }

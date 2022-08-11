@@ -14,6 +14,7 @@ use crate::avm2::{ArrayObject as Avm2ArrayObject, Error as Avm2Error, Object as 
 
 use crate::context::UpdateContext;
 use gc_arena::Collect;
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 use std::collections::BTreeMap;
 
@@ -121,10 +122,10 @@ impl From<Vec<Value>> for Value {
 }
 
 impl Value {
-    pub fn from_avm1<'gc>(
-        activation: &mut Avm1Activation<'_, 'gc, '_>,
-        value: Avm1Value<'gc>,
-    ) -> Result<Value, Avm1Error<'gc>> {
+    pub fn from_avm1<'gc, B: Backend>(
+        activation: &mut Avm1Activation<'_, 'gc, '_, B>,
+        value: Avm1Value<'gc, B>,
+    ) -> Result<Value, Avm1Error<'gc, B>> {
         Ok(match value {
             Avm1Value::Undefined | Avm1Value::Null => Value::Null,
             Avm1Value::Bool(value) => value.into(),
@@ -133,7 +134,7 @@ impl Value {
             Avm1Value::Object(object) => {
                 if object.as_array_object().is_some() {
                     let length = object.length(activation)?;
-                    let values: Result<Vec<_>, Avm1Error<'gc>> = (0..length)
+                    let values: Result<Vec<_>, Avm1Error<'gc, B>> = (0..length)
                         .map(|i| {
                             let element = object.get_element(activation, i);
                             Value::from_avm1(activation, element)
@@ -153,7 +154,10 @@ impl Value {
         })
     }
 
-    pub fn into_avm1<'gc>(self, activation: &mut Avm1Activation<'_, 'gc, '_>) -> Avm1Value<'gc> {
+    pub fn into_avm1<'gc, B: Backend>(
+        self,
+        activation: &mut Avm1Activation<'_, 'gc, '_, B>,
+    ) -> Avm1Value<'gc, B> {
         match self {
             Value::Null => Avm1Value::Null,
             Value::Bool(value) => Avm1Value::Bool(value),
@@ -183,9 +187,9 @@ impl Value {
         }
     }
 
-    pub fn from_avm2<'gc>(
-        activation: &mut Avm2Activation<'_, 'gc, '_>,
-        value: Avm2Value<'gc>,
+    pub fn from_avm2<'gc, B: Backend>(
+        activation: &mut Avm2Activation<'_, 'gc, '_, B>,
+        value: Avm2Value<'gc, B>,
     ) -> Result<Value, Avm2Error> {
         Ok(match value {
             Avm2Value::Undefined | Avm2Value::Null => Value::Null,
@@ -213,7 +217,10 @@ impl Value {
         })
     }
 
-    pub fn into_avm2<'gc>(self, activation: &mut Avm2Activation<'_, 'gc, '_>) -> Avm2Value<'gc> {
+    pub fn into_avm2<'gc, B: Backend>(
+        self,
+        activation: &mut Avm2Activation<'_, 'gc, '_, B>,
+    ) -> Avm2Value<'gc, B> {
         match self {
             Value::Null => Avm2Value::Null,
             Value::Bool(value) => Avm2Value::Bool(value),
@@ -239,20 +246,20 @@ impl Value {
 
 #[derive(Collect, Clone)]
 #[collect(no_drop)]
-pub enum Callback<'gc> {
+pub enum Callback<'gc, B: Backend> {
     Avm1 {
-        this: Avm1Value<'gc>,
-        method: Avm1Object<'gc>,
+        this: Avm1Value<'gc, B>,
+        method: Avm1Object<'gc, B>,
     },
     Avm2 {
-        method: Avm2Object<'gc>,
+        method: Avm2Object<'gc, B>,
     },
 }
 
-impl<'gc> Callback<'gc> {
+impl<'gc, B: Backend> Callback<'gc, B> {
     pub fn call(
         &self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         name: &str,
         args: impl IntoIterator<Item = Value>,
     ) -> Value {
@@ -267,7 +274,7 @@ impl<'gc> Callback<'gc> {
                     base_clip,
                 );
                 let this = this.coerce_to_object(&mut activation);
-                let args: Vec<Avm1Value> = args
+                let args: Vec<Avm1Value<B>> = args
                     .into_iter()
                     .map(|v| v.into_avm1(&mut activation))
                     .collect();
@@ -283,7 +290,7 @@ impl<'gc> Callback<'gc> {
             }
             Callback::Avm2 { method } => {
                 let mut activation = Avm2Activation::from_nothing(context.reborrow());
-                let args: Vec<Avm2Value> = args
+                let args: Vec<Avm2Value<B>> = args
                     .into_iter()
                     .map(|v| v.into_avm2(&mut activation))
                     .collect();
@@ -300,56 +307,56 @@ impl<'gc> Callback<'gc> {
     }
 }
 
-pub trait ExternalInterfaceProvider {
-    fn get_method(&self, name: &str) -> Option<Box<dyn ExternalInterfaceMethod>>;
+pub trait ExternalInterfaceProvider<B: Backend> {
+    fn get_method(&self, name: &str) -> Option<Box<dyn ExternalInterfaceMethod<B>>>;
 
     fn on_callback_available(&self, name: &str);
 
     fn on_fs_command(&self, command: &str, args: &str) -> bool;
 }
 
-pub trait ExternalInterfaceMethod {
-    fn call(&self, context: &mut UpdateContext<'_, '_, '_>, args: &[Value]) -> Value;
+pub trait ExternalInterfaceMethod<B: Backend> {
+    fn call(&self, context: &mut UpdateContext<'_, '_, '_, B>, args: &[Value]) -> Value;
 }
 
-impl<F> ExternalInterfaceMethod for F
+impl<F, B: Backend> ExternalInterfaceMethod<B> for F
 where
-    F: Fn(&mut UpdateContext<'_, '_, '_>, &[Value]) -> Value,
+    F: Fn(&mut UpdateContext<'_, '_, '_, B>, &[Value]) -> Value,
 {
-    fn call(&self, context: &mut UpdateContext<'_, '_, '_>, args: &[Value]) -> Value {
+    fn call(&self, context: &mut UpdateContext<'_, '_, '_, B>, args: &[Value]) -> Value {
         self(context, args)
     }
 }
 
 #[derive(Default, Collect)]
 #[collect(no_drop)]
-pub struct ExternalInterface<'gc> {
+pub struct ExternalInterface<'gc, B: Backend> {
     #[collect(require_static)]
-    providers: Vec<Box<dyn ExternalInterfaceProvider>>,
-    callbacks: BTreeMap<String, Callback<'gc>>,
+    providers: Vec<Box<dyn ExternalInterfaceProvider<B>>>,
+    callbacks: BTreeMap<String, Callback<'gc, B>>,
 }
 
-impl<'gc> ExternalInterface<'gc> {
+impl<'gc, B: Backend> ExternalInterface<'gc, B> {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn add_provider(&mut self, provider: Box<dyn ExternalInterfaceProvider>) {
+    pub fn add_provider(&mut self, provider: Box<dyn ExternalInterfaceProvider<B>>) {
         self.providers.push(provider);
     }
 
-    pub fn add_callback(&mut self, name: String, callback: Callback<'gc>) {
+    pub fn add_callback(&mut self, name: String, callback: Callback<'gc, B>) {
         self.callbacks.insert(name.clone(), callback);
         for provider in &self.providers {
             provider.on_callback_available(&name);
         }
     }
 
-    pub fn get_callback(&self, name: &str) -> Option<Callback<'gc>> {
+    pub fn get_callback(&self, name: &str) -> Option<Callback<'gc, B>> {
         self.callbacks.get(name).cloned()
     }
 
-    pub fn get_method_for(&self, name: &str) -> Option<Box<dyn ExternalInterfaceMethod>> {
+    pub fn get_method_for(&self, name: &str) -> Option<Box<dyn ExternalInterfaceMethod<B>>> {
         for provider in &self.providers {
             if let Some(method) = provider.get_method(name) {
                 return Some(method);

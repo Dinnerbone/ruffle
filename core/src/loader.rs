@@ -22,6 +22,7 @@ use encoding_rs::UTF_8;
 use gc_arena::{Collect, CollectionContext};
 use generational_arena::{Arena, Index};
 use ruffle_types::backend::navigator::{OwnedFuture, Request};
+use ruffle_types::backend::Backend;
 use ruffle_types::loader::{ContentType, DataFormat, Error, LoaderStatus};
 use ruffle_types::string::AvmString;
 use ruffle_types::tag_utils::SwfMovie;
@@ -31,16 +32,16 @@ use url::form_urlencoded;
 
 pub type Handle = Index;
 
-impl From<crate::avm1::error::Error<'_>> for Error {
-    fn from(error: crate::avm1::error::Error<'_>) -> Self {
+impl<B: Backend> From<crate::avm1::error::Error<'_, B>> for Error {
+    fn from(error: crate::avm1::error::Error<'_, B>) -> Self {
         Error::Avm1Error(error.to_string())
     }
 }
 
 /// Holds all in-progress loads for the player.
-pub struct LoadManager<'gc>(Arena<Loader<'gc>>);
+pub struct LoadManager<'gc, B: Backend>(Arena<Loader<'gc, B>>);
 
-unsafe impl<'gc> Collect for LoadManager<'gc> {
+unsafe impl<'gc, B: Backend> Collect for LoadManager<'gc, B> {
     fn trace(&self, cc: CollectionContext) {
         for (_, loader) in self.0.iter() {
             loader.trace(cc)
@@ -48,7 +49,7 @@ unsafe impl<'gc> Collect for LoadManager<'gc> {
     }
 }
 
-impl<'gc> LoadManager<'gc> {
+impl<'gc, B: Backend> LoadManager<'gc, B> {
     /// Construct a new `LoadManager`.
     pub fn new() -> Self {
         Self(Arena::new())
@@ -59,7 +60,7 @@ impl<'gc> LoadManager<'gc> {
     /// Returns the loader handle for later inspection. A loader handle is
     /// valid for as long as the load operation. Once the load finishes,
     /// the handle will be invalidated (and the underlying loader deleted).
-    pub fn add_loader(&mut self, loader: Loader<'gc>) -> Handle {
+    pub fn add_loader(&mut self, loader: Loader<'gc, B>) -> Handle {
         let handle = self.0.insert(loader);
         match self.get_loader_mut(handle).unwrap() {
             Loader::RootMovie { self_handle, .. }
@@ -72,12 +73,12 @@ impl<'gc> LoadManager<'gc> {
     }
 
     /// Retrieve a loader by handle.
-    pub fn get_loader(&self, handle: Handle) -> Option<&Loader<'gc>> {
+    pub fn get_loader(&self, handle: Handle) -> Option<&Loader<'gc, B>> {
         self.0.get(handle)
     }
 
     /// Retrieve a loader by handle for mutation.
-    pub fn get_loader_mut(&mut self, handle: Handle) -> Option<&mut Loader<'gc>> {
+    pub fn get_loader_mut(&mut self, handle: Handle) -> Option<&mut Loader<'gc, B>> {
         self.0.get_mut(handle)
     }
 
@@ -89,7 +90,7 @@ impl<'gc> LoadManager<'gc> {
     /// kick off its root movie load.
     pub fn load_root_movie(
         &mut self,
-        player: Weak<Mutex<Player>>,
+        player: Weak<Mutex<Player<B>>>,
         request: Request,
         parameters: Vec<(String, String)>,
         on_metadata: Box<dyn FnOnce(&swf::HeaderExt)>,
@@ -105,11 +106,11 @@ impl<'gc> LoadManager<'gc> {
     /// Returns the loader's async process, which you will need to spawn.
     pub fn load_movie_into_clip(
         &mut self,
-        player: Weak<Mutex<Player>>,
-        target_clip: DisplayObject<'gc>,
+        player: Weak<Mutex<Player<B>>>,
+        target_clip: DisplayObject<'gc, B>,
         request: Request,
         loader_url: Option<String>,
-        target_broadcaster: Option<Object<'gc>>,
+        target_broadcaster: Option<Object<'gc, B>>,
     ) -> OwnedFuture<(), Error> {
         let loader = Loader::Movie {
             self_handle: None,
@@ -125,7 +126,7 @@ impl<'gc> LoadManager<'gc> {
     /// Indicates that a movie clip has initialized (ran its first frame).
     ///
     /// Interested loaders will be invoked from here.
-    pub fn movie_clip_on_load(&mut self, queue: &mut ActionQueue<'gc>) {
+    pub fn movie_clip_on_load(&mut self, queue: &mut ActionQueue<'gc, B>) {
         let mut invalidated_loaders = vec![];
 
         for (index, loader) in self.0.iter_mut().rev() {
@@ -144,8 +145,8 @@ impl<'gc> LoadManager<'gc> {
     /// Returns the loader's async process, which you will need to spawn.
     pub fn load_form_into_object(
         &mut self,
-        player: Weak<Mutex<Player>>,
-        target_object: Object<'gc>,
+        player: Weak<Mutex<Player<B>>>,
+        target_object: Object<'gc, B>,
         request: Request,
     ) -> OwnedFuture<(), Error> {
         let loader = Loader::Form {
@@ -162,8 +163,8 @@ impl<'gc> LoadManager<'gc> {
     /// Returns the loader's async process, which you will need to spawn.
     pub fn load_form_into_load_vars(
         &mut self,
-        player: Weak<Mutex<Player>>,
-        target_object: Object<'gc>,
+        player: Weak<Mutex<Player<B>>>,
+        target_object: Object<'gc, B>,
         request: Request,
     ) -> OwnedFuture<(), Error> {
         let loader = Loader::LoadVars {
@@ -181,8 +182,8 @@ impl<'gc> LoadManager<'gc> {
     /// Returns the loader's async process, which you will need to spawn.
     pub fn load_data_into_url_loader(
         &mut self,
-        player: Weak<Mutex<Player>>,
-        target_object: Avm2Object<'gc>,
+        player: Weak<Mutex<Player<B>>>,
+        target_object: Avm2Object<'gc, B>,
         request: Request,
         data_format: DataFormat,
     ) -> OwnedFuture<(), Error> {
@@ -196,7 +197,7 @@ impl<'gc> LoadManager<'gc> {
     }
 }
 
-impl<'gc> Default for LoadManager<'gc> {
+impl<'gc, B: Backend> Default for LoadManager<'gc, B> {
     fn default() -> Self {
         Self::new()
     }
@@ -205,7 +206,7 @@ impl<'gc> Default for LoadManager<'gc> {
 /// A struct that holds garbage-collected pointers for asynchronous code.
 #[derive(Collect)]
 #[collect(no_drop)]
-pub enum Loader<'gc> {
+pub enum Loader<'gc, B: Backend> {
     /// Loader that is loading the root movie of a player.
     RootMovie {
         /// The handle to refer to this loader instance.
@@ -220,11 +221,11 @@ pub enum Loader<'gc> {
         self_handle: Option<Handle>,
 
         /// The target movie clip to load the movie into.
-        target_clip: DisplayObject<'gc>,
+        target_clip: DisplayObject<'gc, B>,
 
         /// Event broadcaster (typically a `MovieClipLoader`) to fire events
         /// into.
-        target_broadcaster: Option<Object<'gc>>,
+        target_broadcaster: Option<Object<'gc, B>>,
 
         /// Indicates the completion status of this loader.
         ///
@@ -244,7 +245,7 @@ pub enum Loader<'gc> {
         self_handle: Option<Handle>,
 
         /// The target AVM1 object to load form data into.
-        target_object: Object<'gc>,
+        target_object: Object<'gc, B>,
     },
 
     /// Loader that is loading form data into an AVM1 LoadVars object.
@@ -254,7 +255,7 @@ pub enum Loader<'gc> {
         self_handle: Option<Handle>,
 
         /// The target AVM1 object to load form data into.
-        target_object: Object<'gc>,
+        target_object: Object<'gc, B>,
     },
 
     /// Loader that is loading data into a `URLLoader`'s `data` property
@@ -265,15 +266,15 @@ pub enum Loader<'gc> {
         self_handle: Option<Handle>,
 
         /// The target `URLLoader` to load data into.
-        target_object: Avm2Object<'gc>,
+        target_object: Avm2Object<'gc, B>,
     },
 }
 
-impl<'gc> Loader<'gc> {
+impl<'gc, B: Backend> Loader<'gc, B> {
     /// Construct a future for the root movie loader.
     fn root_movie_loader(
         &mut self,
-        player: Weak<Mutex<Player>>,
+        player: Weak<Mutex<Player<B>>>,
         request: Request,
         parameters: Vec<(String, String)>,
         on_metadata: Box<dyn FnOnce(&swf::HeaderExt)>,
@@ -318,7 +319,7 @@ impl<'gc> Loader<'gc> {
     /// error immediately once spawned.
     fn movie_loader(
         &mut self,
-        player: Weak<Mutex<Player>>,
+        player: Weak<Mutex<Player<B>>>,
         request: Request,
         loader_url: Option<String>,
     ) -> OwnedFuture<(), Error> {
@@ -426,7 +427,7 @@ impl<'gc> Loader<'gc> {
 
     fn form_loader(
         &mut self,
-        player: Weak<Mutex<Player>>,
+        player: Weak<Mutex<Player<B>>>,
         request: Request,
     ) -> OwnedFuture<(), Error> {
         let handle = match self {
@@ -487,7 +488,7 @@ impl<'gc> Loader<'gc> {
     /// Creates a future for a LoadVars load call.
     fn load_vars_loader(
         &mut self,
-        player: Weak<Mutex<Player>>,
+        player: Weak<Mutex<Player<B>>>,
         request: Request,
     ) -> OwnedFuture<(), Error> {
         let handle = match self {
@@ -568,7 +569,7 @@ impl<'gc> Loader<'gc> {
     /// Creates a future for a LoadURLLoader load call.
     fn load_url_loader(
         &mut self,
-        player: Weak<Mutex<Player>>,
+        player: Weak<Mutex<Player<B>>>,
         request: Request,
         data_format: DataFormat,
     ) -> OwnedFuture<(), Error> {
@@ -597,10 +598,10 @@ impl<'gc> Loader<'gc> {
 
                 let mut activation = Avm2Activation::from_nothing(uc.reborrow());
 
-                fn set_data<'a, 'gc: 'a, 'gc_context: 'a>(
+                fn set_data<'a, 'gc: 'a, 'gc_context: 'a, B: Backend>(
                     body: Vec<u8>,
-                    activation: &mut Avm2Activation<'a, 'gc, 'gc_context>,
-                    mut target: Avm2Object<'gc>,
+                    activation: &mut Avm2Activation<'a, 'gc, 'gc_context, B>,
+                    mut target: Avm2Object<'gc, B>,
                     data_format: DataFormat,
                 ) {
                     let data_object = match data_format {
@@ -703,7 +704,10 @@ impl<'gc> Loader<'gc> {
     }
 
     /// Report a movie loader start event to script code.
-    fn movie_loader_start(handle: Index, uc: &mut UpdateContext<'_, 'gc, '_>) -> Result<(), Error> {
+    fn movie_loader_start(
+        handle: Index,
+        uc: &mut UpdateContext<'_, 'gc, '_, B>,
+    ) -> Result<(), Error> {
         let me = uc.load_manager.get_loader_mut(handle);
         if me.is_none() {
             return Err(Error::Cancelled);
@@ -736,7 +740,7 @@ impl<'gc> Loader<'gc> {
     /// Report a movie loader progress event to script code.
     fn movie_loader_progress(
         handle: Index,
-        uc: &mut UpdateContext<'_, 'gc, '_>,
+        uc: &mut UpdateContext<'_, 'gc, '_, B>,
         cur_len: usize,
         total_len: usize,
     ) -> Result<(), Error> {
@@ -777,7 +781,7 @@ impl<'gc> Loader<'gc> {
     /// Report a movie loader completion to script code.
     fn movie_loader_complete(
         handle: Index,
-        uc: &mut UpdateContext<'_, 'gc, '_>,
+        uc: &mut UpdateContext<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         let (clip, broadcaster) = match uc.load_manager.get_loader_mut(handle) {
             Some(Loader::Movie {
@@ -812,7 +816,10 @@ impl<'gc> Loader<'gc> {
     ///
     /// This is an associated function because we cannot borrow both the update
     /// context and one of it's loaders.
-    fn movie_loader_error(handle: Index, uc: &mut UpdateContext<'_, 'gc, '_>) -> Result<(), Error> {
+    fn movie_loader_error(
+        handle: Index,
+        uc: &mut UpdateContext<'_, 'gc, '_, B>,
+    ) -> Result<(), Error> {
         //TODO: Inspect the fetch error.
         //This requires cooperation from the backend to send abstract
         //error types we can actually inspect.
@@ -855,7 +862,7 @@ impl<'gc> Loader<'gc> {
     /// Returns `true` if the loader has completed and should be removed.
     ///
     /// Used to fire listener events on clips and terminate completed loaders.
-    fn movie_clip_loaded(&mut self, queue: &mut ActionQueue<'gc>) -> bool {
+    fn movie_clip_loaded(&mut self, queue: &mut ActionQueue<'gc, B>) -> bool {
         let (clip, broadcaster, loader_status) = match self {
             Loader::Movie {
                 target_clip,

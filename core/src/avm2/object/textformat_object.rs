@@ -7,13 +7,14 @@ use crate::avm2::value::Value;
 use crate::avm2::Error;
 use crate::html::TextFormat;
 use gc_arena::{Collect, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use std::cell::{Ref, RefMut};
 
 /// A class instance allocator that allocates TextFormat objects.
-pub fn textformat_allocator<'gc>(
-    class: ClassObject<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Object<'gc>, Error> {
+pub fn textformat_allocator<'gc, B: Backend>(
+    class: ClassObject<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Object<'gc, B>, Error> {
     let base = ScriptObjectData::new(class);
 
     Ok(TextFormatObject(GcCell::allocate(
@@ -28,26 +29,26 @@ pub fn textformat_allocator<'gc>(
 
 #[derive(Clone, Collect, Debug, Copy)]
 #[collect(no_drop)]
-pub struct TextFormatObject<'gc>(GcCell<'gc, TextFormatObjectData<'gc>>);
+pub struct TextFormatObject<'gc, B: Backend>(GcCell<'gc, TextFormatObjectData<'gc, B>>);
 
 #[derive(Clone, Collect, Debug)]
 #[collect(no_drop)]
-pub struct TextFormatObjectData<'gc> {
+pub struct TextFormatObjectData<'gc, B: Backend> {
     /// Base script object
-    base: ScriptObjectData<'gc>,
+    base: ScriptObjectData<'gc, B>,
 
     text_format: TextFormat,
 }
 
-impl<'gc> TextFormatObject<'gc> {
+impl<'gc, B: Backend> TextFormatObject<'gc, B> {
     pub fn from_text_format(
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         text_format: TextFormat,
-    ) -> Result<Object<'gc>, Error> {
+    ) -> Result<Object<'gc, B>, Error> {
         let class = activation.avm2().classes().textformat;
         let base = ScriptObjectData::new(class);
 
-        let mut this: Object<'gc> = Self(GcCell::allocate(
+        let mut this: Object<'gc, B> = Self(GcCell::allocate(
             activation.context.gc_context,
             TextFormatObjectData { base, text_format },
         ))
@@ -58,12 +59,14 @@ impl<'gc> TextFormatObject<'gc> {
     }
 }
 
-impl<'gc> TObject<'gc> for TextFormatObject<'gc> {
-    fn base(&self) -> Ref<ScriptObjectData<'gc>> {
+impl<'gc, B: Backend> TObject<'gc> for TextFormatObject<'gc, B> {
+    type B = B;
+
+    fn base(&self) -> Ref<ScriptObjectData<'gc, B>> {
         Ref::map(self.0.read(), |read| &read.base)
     }
 
-    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc>> {
+    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc, B>> {
         RefMut::map(self.0.write(mc), |write| &mut write.base)
     }
 
@@ -71,7 +74,7 @@ impl<'gc> TObject<'gc> for TextFormatObject<'gc> {
         self.0.as_ptr() as *const ObjectPtr
     }
 
-    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc>, Error> {
+    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc, B>, Error> {
         Ok(Value::Object(Object::from(*self)))
     }
 

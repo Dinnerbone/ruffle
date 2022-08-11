@@ -1,8 +1,9 @@
 use crate::avm1::Value;
+use ruffle_types::backend::Backend;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum Error<'gc> {
+pub enum Error<'gc, B: Backend> {
     #[error("Prototype recursion limit has been exceeded")]
     PrototypeRecursionLimit,
 
@@ -19,5 +20,5 @@ pub enum Error<'gc> {
     InvalidSwf(#[from] swf::error::Error),
 
     #[error("A script has thrown a custom error.")]
-    ThrownValue(Value<'gc>),
+    ThrownValue(Value<'gc, B>),
 }

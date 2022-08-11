@@ -4,14 +4,15 @@ use crate::avm1::function::{Executable, FunctionObject, NativeFunction};
 use crate::avm1::property::Attribute;
 use crate::avm1::{Object, ScriptObject, TObject, Value};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 
 /// Defines a list of properties on a [`ScriptObject`].
 #[inline(never)]
-pub fn define_properties_on<'gc>(
-    decls: &[Declaration],
+pub fn define_properties_on<'gc, B: Backend>(
+    decls: &[Declaration<B>],
     mc: MutationContext<'gc, '_>,
-    this: ScriptObject<'gc>,
-    fn_proto: Object<'gc>,
+    this: ScriptObject<'gc, B>,
+    fn_proto: Object<'gc, B>,
 ) {
     for decl in decls {
         decl.define_on(mc, this, fn_proto);
@@ -21,9 +22,9 @@ pub fn define_properties_on<'gc>(
 /// The declaration of a property, method, or simple field, that
 /// can be defined on a [`ScriptObject`].
 #[derive(Copy, Clone)]
-pub struct Declaration {
+pub struct Declaration<B: Backend> {
     pub name: &'static str,
-    pub kind: DeclKind,
+    pub kind: DeclKind<B>,
     // This should be an `Attribute`, but because of `const` shenanigans
     // we need to store the raw flags.
     // See the comment in the `declare_properties!` macro.
@@ -32,21 +33,21 @@ pub struct Declaration {
 
 /// All the possible types of a [`Declaration`].
 #[derive(Copy, Clone)]
-pub enum DeclKind {
+pub enum DeclKind<B: Backend> {
     /// Declares a property with a getter and an optional setter.
     Property {
-        getter: NativeFunction,
-        setter: Option<NativeFunction>,
+        getter: NativeFunction<B>,
+        setter: Option<NativeFunction<B>>,
     },
     /// Declares a native host function.
     ///
     /// This is intended for use with defining host object prototypes. Notably,
     /// this creates a function object without an explicit `prototype`, which
     /// is only possible when defining host functions.
-    Method(NativeFunction),
+    Method(NativeFunction<B>),
     /// Declares a native function with a `prototype`.
     /// Prefer using [`Self::Method`] when defining host functions.
-    Function(NativeFunction),
+    Function(NativeFunction<B>),
     /// Declares a static string value.
     String(&'static str),
     /// Declares a static bool value.
@@ -57,7 +58,7 @@ pub enum DeclKind {
     Float(f64),
 }
 
-impl Declaration {
+impl<B: Backend> Declaration<B> {
     #[inline(never)]
     /// Defines the field represented by this declaration on a [`ScriptObject`].
     /// Returns the value defined on the object, or `undefined` if this declaration
@@ -65,9 +66,9 @@ impl Declaration {
     pub fn define_on<'gc>(
         &self,
         mc: MutationContext<'gc, '_>,
-        this: ScriptObject<'gc>,
-        fn_proto: Object<'gc>,
-    ) -> Value<'gc> {
+        this: ScriptObject<'gc, B>,
+        fn_proto: Object<'gc, B>,
+    ) -> Value<'gc, B> {
         let attributes = Attribute::from_bits_truncate(self.attributes);
         let value = match self.kind {
             DeclKind::Property { getter, setter } => {

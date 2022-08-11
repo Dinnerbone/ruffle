@@ -2,6 +2,7 @@ use crate::html::TextSpan;
 use crate::prelude::*;
 use gc_arena::{Collect, Gc, MutationContext};
 use ruffle_types::backend::render::{RenderBackend, ShapeHandle};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::WStr;
 use ruffle_types::transform::Transform;
 use std::cell::{Cell, Ref, RefCell};
@@ -102,7 +103,7 @@ struct FontData {
 }
 
 impl<'gc> Font<'gc> {
-    pub fn from_swf_tag(
+    pub fn from_swf_tag<B: Backend>(
         gc_context: MutationContext<'gc, '_>,
         renderer: &mut dyn RenderBackend,
         tag: swf::Font,

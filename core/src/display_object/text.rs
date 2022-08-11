@@ -3,6 +3,7 @@ use crate::display_object::{DisplayObjectBase, DisplayObjectPtr, TDisplayObject}
 use crate::font::TextRenderSettings;
 use crate::prelude::*;
 use gc_arena::{Collect, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::tag_utils::SwfMovie;
 use ruffle_types::transform::Transform;
 use std::cell::{Ref, RefMut};
@@ -10,19 +11,19 @@ use std::sync::Arc;
 
 #[derive(Clone, Debug, Collect, Copy)]
 #[collect(no_drop)]
-pub struct Text<'gc>(GcCell<'gc, TextData<'gc>>);
+pub struct Text<'gc, B: Backend>(GcCell<'gc, TextData<'gc, B>>);
 
 #[derive(Clone, Debug, Collect)]
 #[collect(no_drop)]
-pub struct TextData<'gc> {
-    base: DisplayObjectBase<'gc>,
+pub struct TextData<'gc, B: Backend> {
+    base: DisplayObjectBase<'gc, B>,
     static_data: gc_arena::Gc<'gc, TextStatic>,
     render_settings: TextRenderSettings,
 }
 
-impl<'gc> Text<'gc> {
+impl<'gc, B: Backend> Text<'gc, B> {
     pub fn from_swf_tag(
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         swf: Arc<SwfMovie>,
         tag: &swf::Text,
     ) -> Self {
@@ -54,16 +55,21 @@ impl<'gc> Text<'gc> {
     }
 }
 
-impl<'gc> TDisplayObject<'gc> for Text<'gc> {
-    fn base(&self) -> Ref<DisplayObjectBase<'gc>> {
+impl<'gc, B: Backend> TDisplayObject<'gc> for Text<'gc, B> {
+    type B = B;
+
+    fn base(&self) -> Ref<DisplayObjectBase<'gc, B>> {
         Ref::map(self.0.read(), |r| &r.base)
     }
 
-    fn base_mut<'a>(&'a self, mc: MutationContext<'gc, '_>) -> RefMut<'a, DisplayObjectBase<'gc>> {
+    fn base_mut<'a>(
+        &'a self,
+        mc: MutationContext<'gc, '_>,
+    ) -> RefMut<'a, DisplayObjectBase<'gc, B>> {
         RefMut::map(self.0.write(mc), |w| &mut w.base)
     }
 
-    fn instantiate(&self, gc_context: MutationContext<'gc, '_>) -> DisplayObject<'gc> {
+    fn instantiate(&self, gc_context: MutationContext<'gc, '_>) -> DisplayObject<'gc, B> {
         Self(GcCell::allocate(gc_context, self.0.read().clone())).into()
     }
 
@@ -79,7 +85,7 @@ impl<'gc> TDisplayObject<'gc> for Text<'gc> {
         Some(self.0.read().static_data.swf.clone())
     }
 
-    fn replace_with(&self, context: &mut UpdateContext<'_, 'gc, '_>, id: CharacterId) {
+    fn replace_with(&self, context: &mut UpdateContext<'_, 'gc, '_, B>, id: CharacterId) {
         if let Some(new_text) = context
             .library
             .library_for_movie_mut(self.movie().unwrap())
@@ -91,11 +97,11 @@ impl<'gc> TDisplayObject<'gc> for Text<'gc> {
         }
     }
 
-    fn run_frame(&self, _context: &mut UpdateContext) {
+    fn run_frame(&self, _context: &mut UpdateContext<B>) {
         // Noop
     }
 
-    fn render_self(&self, context: &mut RenderContext) {
+    fn render_self(&self, context: &mut RenderContext<B>) {
         let tf = self.0.read();
         context.transform_stack.push(&Transform {
             matrix: tf.static_data.text_transform,
@@ -153,7 +159,7 @@ impl<'gc> TDisplayObject<'gc> for Text<'gc> {
 
     fn hit_test_shape(
         &self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         mut point: (Twips, Twips),
         _options: HitTestOptions,
     ) -> bool {

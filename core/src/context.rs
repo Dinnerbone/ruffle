@@ -19,11 +19,9 @@ use instant::Instant;
 use rand::rngs::SmallRng;
 use ruffle_types::backend::audio::{AudioBackend, SoundHandle, SoundInstanceHandle};
 use ruffle_types::backend::log::LogBackend;
-use ruffle_types::backend::navigator::NavigatorBackend;
 use ruffle_types::backend::render::RenderBackend;
-use ruffle_types::backend::storage::StorageBackend;
 use ruffle_types::backend::ui::{InputManager, UiBackend};
-use ruffle_types::backend::video::VideoBackend;
+use ruffle_types::backend::Backend;
 use ruffle_types::tag_utils::{SwfMovie, SwfSlice};
 use ruffle_types::transform::TransformStack;
 use ruffle_types::vminterface::AvmType;
@@ -34,17 +32,17 @@ use std::time::Duration;
 /// `UpdateContext` holds shared data that is used by the various subsystems of Ruffle.
 /// `Player` creates this when it begins a tick and passes it through the call stack to
 /// children and the VM.
-pub struct UpdateContext<'a, 'gc, 'gc_context> {
+pub struct UpdateContext<'a, 'gc, 'gc_context, B: Backend> {
     /// The queue of actions that will be run after the display list updates.
     /// Display objects and actions can push actions onto the queue.
-    pub action_queue: &'a mut ActionQueue<'gc>,
+    pub action_queue: &'a mut ActionQueue<'gc, B>,
 
     /// The mutation context to allocate and mutate `GcCell` types.
     pub gc_context: MutationContext<'gc, 'gc_context>,
 
     /// The library containing character definitions for this SWF.
     /// Used to instantiate a `DisplayObject` of a given ID.
-    pub library: &'a mut Library<'gc>,
+    pub library: &'a mut Library<'gc, B>,
 
     /// The version of the Flash Player we are emulating.
     /// TODO: This is a little confusing because this represents the player's max SWF version,
@@ -59,43 +57,23 @@ pub struct UpdateContext<'a, 'gc, 'gc_context> {
     /// The root SWF file.
     pub swf: &'a Arc<SwfMovie>,
 
-    /// The audio backend, used by display objects and AVM to play audio.
-    pub audio: &'a mut dyn AudioBackend,
+    /// The backends used for various systems such as rendering or audio.
+    pub backend: &'a mut B,
 
     /// The audio manager, manging all actively playing sounds.
-    pub audio_manager: &'a mut AudioManager<'gc>,
-
-    /// The navigator backend, used by the AVM to make HTTP requests and visit webpages.
-    pub navigator: &'a mut (dyn NavigatorBackend + 'a),
-
-    /// The renderer, used by the display objects to draw themselves.
-    pub renderer: &'a mut dyn RenderBackend,
-
-    /// The UI backend, used to detect user interactions.
-    pub ui: &'a mut dyn UiBackend,
-
-    /// The storage backend, used for storing persistent state
-    pub storage: &'a mut dyn StorageBackend,
-
-    /// The logging backend, used for trace output capturing.
-    ///
-    /// **DO NOT** use this field directly, use the `avm_trace` method instead.
-    pub log: &'a mut dyn LogBackend,
-
-    /// The video backend, used for video decoding
-    pub video: &'a mut dyn VideoBackend,
+    pub audio_manager: &'a mut AudioManager<'gc, B>,
 
     /// The RNG, used by the AVM `RandomNumber` opcode,  `Math.random(),` and `random()`.
     pub rng: &'a mut SmallRng,
 
     /// The current player's stage (including all loaded levels)
-    pub stage: Stage<'gc>,
+    pub stage: Stage<'gc, B>,
 
     /// The display object that the mouse is currently hovering over.
-    pub mouse_over_object: Option<InteractiveObject<'gc>>,
+    pub mouse_over_object: Option<InteractiveObject<'gc, B>>,
 
     /// If the mouse is down, the display object that the mouse is currently pressing.
-    pub mouse_down_object: Option<InteractiveObject<'gc>>,
+    pub mouse_down_object: Option<InteractiveObject<'gc, B>>,
 
     /// The input manager, tracking keys state.
     pub input: &'a InputManager,
@@ -104,19 +82,19 @@ pub struct UpdateContext<'a, 'gc, 'gc_context> {
     pub mouse_position: &'a (Twips, Twips),
 
     /// The object being dragged via a `startDrag` action.
-    pub drag_object: &'a mut Option<crate::player::DragObject<'gc>>,
+    pub drag_object: &'a mut Option<crate::player::DragObject<'gc, B>>,
 
     /// Weak reference to the player.
     ///
     /// Recipients of an update context may upgrade the reference to ensure
     /// that the player lives across I/O boundaries.
-    pub player: Weak<Mutex<Player>>,
+    pub player: Weak<Mutex<Player<B>>>,
 
     /// The player's load manager.
     ///
     /// This is required for asynchronous behavior, such as fetching data from
     /// a URL.
-    pub load_manager: &'a mut LoadManager<'gc>,
+    pub load_manager: &'a mut LoadManager<'gc, B>,
 
     /// The system properties
     pub system: &'a mut SystemProperties,
@@ -125,24 +103,24 @@ pub struct UpdateContext<'a, 'gc, 'gc_context> {
     pub instance_counter: &'a mut i32,
 
     /// Shared objects cache
-    pub shared_objects: &'a mut HashMap<String, Avm1Object<'gc>>,
+    pub shared_objects: &'a mut HashMap<String, Avm1Object<'gc, B>>,
 
     /// Text fields with unbound variable bindings.
-    pub unbound_text_fields: &'a mut Vec<EditText<'gc>>,
+    pub unbound_text_fields: &'a mut Vec<EditText<'gc, B>>,
 
     /// Timed callbacks created with `setInterval`/`setTimeout`.
-    pub timers: &'a mut Timers<'gc>,
+    pub timers: &'a mut Timers<'gc, B>,
 
-    pub current_context_menu: &'a mut Option<ContextMenuState<'gc>>,
+    pub current_context_menu: &'a mut Option<ContextMenuState<'gc, B>>,
 
     /// The AVM1 global state.
-    pub avm1: &'a mut Avm1<'gc>,
+    pub avm1: &'a mut Avm1<'gc, B>,
 
     /// The AVM2 global state.
-    pub avm2: &'a mut Avm2<'gc>,
+    pub avm2: &'a mut Avm2<'gc, B>,
 
     /// External interface for (for example) JavaScript <-> ActionScript interaction
-    pub external_interface: &'a mut ExternalInterface<'gc>,
+    pub external_interface: &'a mut ExternalInterface<'gc, B>,
 
     /// The instant at which the SWF was launched.
     pub start_time: Instant,
@@ -155,7 +133,7 @@ pub struct UpdateContext<'a, 'gc, 'gc_context> {
     pub max_execution_duration: Duration,
 
     /// A tracker for the current keyboard focused element
-    pub focus_tracker: FocusTracker<'gc>,
+    pub focus_tracker: FocusTracker<'gc, B>,
 
     /// How many times getTimer() was called so far. Used to detect busy-loops.
     pub times_get_time_called: u32,
@@ -171,7 +149,7 @@ pub struct UpdateContext<'a, 'gc, 'gc_context> {
 }
 
 /// Convenience methods for controlling audio.
-impl<'a, 'gc, 'gc_context> UpdateContext<'a, 'gc, 'gc_context> {
+impl<'a, 'gc, 'gc_context, B: Backend> UpdateContext<'a, 'gc, 'gc_context, B> {
     pub fn update_sounds(&mut self) {
         self.audio_manager.update_sounds(
             self.audio,
@@ -209,8 +187,8 @@ impl<'a, 'gc, 'gc_context> UpdateContext<'a, 'gc, 'gc_context> {
         &mut self,
         sound: SoundHandle,
         settings: &swf::SoundInfo,
-        owner: Option<DisplayObject<'gc>>,
-        avm1_object: Option<crate::avm1::SoundObject<'gc>>,
+        owner: Option<DisplayObject<'gc, B>>,
+        avm1_object: Option<crate::avm1::SoundObject<'gc, B>>,
     ) -> Option<SoundInstanceHandle> {
         self.audio_manager
             .start_sound(self.audio, sound, settings, owner, avm1_object)
@@ -219,7 +197,7 @@ impl<'a, 'gc, 'gc_context> UpdateContext<'a, 'gc, 'gc_context> {
     pub fn attach_avm2_sound_channel(
         &mut self,
         instance: SoundInstanceHandle,
-        avm2_object: SoundChannelObject<'gc>,
+        avm2_object: SoundChannelObject<'gc, B>,
     ) {
         self.audio_manager
             .attach_avm2_sound_channel(instance, avm2_object);
@@ -234,7 +212,7 @@ impl<'a, 'gc, 'gc_context> UpdateContext<'a, 'gc, 'gc_context> {
             .stop_sounds_with_handle(self.audio, sound)
     }
 
-    pub fn stop_sounds_with_display_object(&mut self, display_object: DisplayObject<'gc>) {
+    pub fn stop_sounds_with_display_object(&mut self, display_object: DisplayObject<'gc, B>) {
         self.audio_manager
             .stop_sounds_with_display_object(self.audio, display_object)
     }
@@ -254,7 +232,7 @@ impl<'a, 'gc, 'gc_context> UpdateContext<'a, 'gc, 'gc_context> {
     pub fn start_stream(
         &mut self,
         stream_handle: Option<SoundHandle>,
-        movie_clip: MovieClip<'gc>,
+        movie_clip: MovieClip<'gc, B>,
         frame: u16,
         data: ruffle_types::tag_utils::SwfSlice,
         stream_info: &swf::SoundStreamHead,
@@ -274,7 +252,7 @@ impl<'a, 'gc, 'gc_context> UpdateContext<'a, 'gc, 'gc_context> {
     }
 }
 
-impl<'a, 'gc, 'gc_context> UpdateContext<'a, 'gc, 'gc_context> {
+impl<'a, 'gc, 'gc_context, B: Backend> UpdateContext<'a, 'gc, 'gc_context, B> {
     /// Transform a borrowed update context into an owned update context with
     /// a shorter internal lifetime.
     ///
@@ -282,7 +260,7 @@ impl<'a, 'gc, 'gc_context> UpdateContext<'a, 'gc, 'gc_context> {
     /// update context without adding further lifetimes for its borrowing.
     /// Please note that you will not be able to use the original update
     /// context until this reborrowed copy has fallen out of scope.
-    pub fn reborrow<'b>(&'b mut self) -> UpdateContext<'b, 'gc, 'gc_context>
+    pub fn reborrow<'b>(&'b mut self) -> UpdateContext<'b, 'gc, 'gc_context, B>
     where
         'a: 'b,
     {
@@ -293,14 +271,8 @@ impl<'a, 'gc, 'gc_context> UpdateContext<'a, 'gc, 'gc_context> {
             player_version: self.player_version,
             needs_render: self.needs_render,
             swf: self.swf,
-            audio: self.audio,
+            backend: self.backend,
             audio_manager: self.audio_manager,
-            navigator: self.navigator,
-            renderer: self.renderer,
-            log: self.log,
-            ui: self.ui,
-            video: self.video,
-            storage: self.storage,
             rng: self.rng,
             stage: self.stage,
             mouse_over_object: self.mouse_over_object,
@@ -343,12 +315,12 @@ impl<'a, 'gc, 'gc_context> UpdateContext<'a, 'gc, 'gc_context> {
 /// A queued ActionScript call.
 #[derive(Collect)]
 #[collect(no_drop)]
-pub struct QueuedActions<'gc> {
+pub struct QueuedActions<'gc, B: Backend> {
     /// The movie clip this ActionScript is running on.
-    pub clip: DisplayObject<'gc>,
+    pub clip: DisplayObject<'gc, B>,
 
     /// The type of action this is, along with the corresponding bytecode/method data.
-    pub action_type: ActionType<'gc>,
+    pub action_type: ActionType<'gc, B>,
 
     /// Whether this is an unload action, which can still run if the clip is removed.
     pub is_unload: bool,
@@ -357,12 +329,12 @@ pub struct QueuedActions<'gc> {
 /// Action and gotos need to be queued up to execute at the end of the frame.
 #[derive(Collect)]
 #[collect(no_drop)]
-pub struct ActionQueue<'gc> {
+pub struct ActionQueue<'gc, B: Backend> {
     /// Each priority is kept in a separate bucket.
-    action_queue: Vec<VecDeque<QueuedActions<'gc>>>,
+    action_queue: Vec<VecDeque<QueuedActions<'gc, B>>>,
 }
 
-impl<'gc> ActionQueue<'gc> {
+impl<'gc, B: Backend> ActionQueue<'gc, B> {
     const DEFAULT_CAPACITY: usize = 32;
     const NUM_PRIORITIES: usize = 3;
 
@@ -380,8 +352,8 @@ impl<'gc> ActionQueue<'gc> {
     /// The actions will be skipped if the clip is removed before the actions run.
     pub fn queue_actions(
         &mut self,
-        clip: DisplayObject<'gc>,
-        action_type: ActionType<'gc>,
+        clip: DisplayObject<'gc, B>,
+        action_type: ActionType<'gc, B>,
         is_unload: bool,
     ) {
         let priority = action_type.priority();
@@ -397,7 +369,7 @@ impl<'gc> ActionQueue<'gc> {
     }
 
     /// Sorts and drains the actions from the queue.
-    pub fn pop_action(&mut self) -> Option<QueuedActions<'gc>> {
+    pub fn pop_action(&mut self) -> Option<QueuedActions<'gc, B>> {
         for queue in self.action_queue.iter_mut().rev() {
             let action = queue.pop_front();
             if action.is_some() {
@@ -408,7 +380,7 @@ impl<'gc> ActionQueue<'gc> {
     }
 }
 
-impl<'gc> Default for ActionQueue<'gc> {
+impl<'gc, B: Backend> Default for ActionQueue<'gc, B> {
     fn default() -> Self {
         Self::new()
     }
@@ -416,7 +388,7 @@ impl<'gc> Default for ActionQueue<'gc> {
 
 /// Shared data used during rendering.
 /// `Player` creates this when it renders a frame and passes it down to display objects.
-pub struct RenderContext<'a, 'gc> {
+pub struct RenderContext<'a, 'gc, B: Backend> {
     /// The renderer, used by the display objects to draw themselves.
     pub renderer: &'a mut dyn RenderBackend,
 
@@ -424,13 +396,13 @@ pub struct RenderContext<'a, 'gc> {
     pub ui: &'a mut dyn UiBackend,
 
     /// The library, which provides access to fonts and other definitions when rendering.
-    pub library: &'a Library<'gc>,
+    pub library: &'a Library<'gc, B>,
 
     /// The transform stack controls the matrix and color transform as we traverse the display hierarchy.
     pub transform_stack: &'a mut TransformStack,
 
     /// The current player's stage (including all loaded levels)
-    pub stage: Stage<'gc>,
+    pub stage: Stage<'gc, B>,
 
     /// The stack of clip depths, used in masking.
     pub clip_depth_stack: Vec<Depth>,
@@ -443,7 +415,7 @@ pub struct RenderContext<'a, 'gc> {
 /// The type of action being run.
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub enum ActionType<'gc> {
+pub enum ActionType<'gc, B: Backend> {
     /// Normal frame or event actions.
     Normal { bytecode: SwfSlice },
 
@@ -452,40 +424,40 @@ pub enum ActionType<'gc> {
 
     /// Construct a movie with a custom class or on(construct) events.
     Construct {
-        constructor: Option<Avm1Object<'gc>>,
+        constructor: Option<Avm1Object<'gc, B>>,
         events: Vec<SwfSlice>,
     },
 
     /// An event handler method, e.g. `onEnterFrame`.
     Method {
-        object: Avm1Object<'gc>,
+        object: Avm1Object<'gc, B>,
         name: &'static str,
-        args: Vec<Avm1Value<'gc>>,
+        args: Vec<Avm1Value<'gc, B>>,
     },
 
     /// A system listener method.
     NotifyListeners {
         listener: &'static str,
         method: &'static str,
-        args: Vec<Avm1Value<'gc>>,
+        args: Vec<Avm1Value<'gc, B>>,
     },
 
     /// An AVM2 callable, e.g. a frame script or event handler.
     Callable2 {
-        callable: Avm2Object<'gc>,
-        reciever: Option<Avm2Object<'gc>>,
-        args: Vec<Avm2Value<'gc>>,
+        callable: Avm2Object<'gc, B>,
+        reciever: Option<Avm2Object<'gc, B>>,
+        args: Vec<Avm2Value<'gc, B>>,
     },
 
     /// An AVM2 event to be dispatched. This translates to an Event class instance.
     /// Creating an Event subclass via this dispatch is TODO.
     Event2 {
         event_type: &'static str,
-        target: Avm2Object<'gc>,
+        target: Avm2Object<'gc, B>,
     },
 }
 
-impl ActionType<'_> {
+impl<B: Backend> ActionType<'_, B> {
     fn priority(&self) -> usize {
         match self {
             ActionType::Initialize { .. } => 2,
@@ -495,7 +467,7 @@ impl ActionType<'_> {
     }
 }
 
-impl fmt::Debug for ActionType<'_> {
+impl<B: Backend> fmt::Debug for ActionType<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             ActionType::Normal { bytecode } => f

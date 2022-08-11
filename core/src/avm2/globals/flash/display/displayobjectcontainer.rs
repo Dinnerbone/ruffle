@@ -10,23 +10,24 @@ use crate::avm2::Error;
 use crate::context::UpdateContext;
 use crate::display_object::{DisplayObject, Lists, TDisplayObject, TDisplayObjectContainer};
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use std::cmp::min;
 
 /// Implements `flash.display.DisplayObjectContainer`'s instance constructor.
-pub fn instance_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn instance_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Err("You cannot construct DisplayObjectContainer directly.".into())
 }
 
 /// Implements `flash.display.DisplayObjectContainer`'s native instance constructor.
-pub fn native_instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn native_instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         activation.super_init(this, &[])?;
     }
@@ -35,11 +36,11 @@ pub fn native_instance_init<'gc>(
 }
 
 /// Implements `flash.display.DisplayObjectContainer`'s class constructor.
-pub fn class_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn class_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok(Value::Undefined)
 }
 
@@ -49,9 +50,9 @@ pub fn class_init<'gc>(
 ///
 ///  * The index is off the end of the child list of the proposed parent.
 ///  * The child is already a transitive child of the proposed parent.
-fn validate_add_operation<'gc>(
-    new_parent: DisplayObject<'gc>,
-    proposed_child: DisplayObject<'gc>,
+fn validate_add_operation<'gc, B: Backend>(
+    new_parent: DisplayObject<'gc, B>,
+    proposed_child: DisplayObject<'gc, B>,
     proposed_index: usize,
 ) -> Result<(), Error> {
     let ctr = new_parent
@@ -83,9 +84,9 @@ fn validate_add_operation<'gc>(
 /// There are several conditions which should cause a remove operation to fail:
 ///
 ///  * The child is not a child of the parent
-fn validate_remove_operation<'gc>(
-    old_parent: DisplayObject<'gc>,
-    proposed_child: DisplayObject<'gc>,
+fn validate_remove_operation<'gc, B: Backend>(
+    old_parent: DisplayObject<'gc, B>,
+    proposed_child: DisplayObject<'gc, B>,
 ) -> Result<(), Error> {
     let old_ctr = old_parent
         .as_container()
@@ -101,9 +102,9 @@ fn validate_remove_operation<'gc>(
 }
 
 /// Remove an element from it's parent display list.
-fn remove_child_from_displaylist<'gc>(
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    child: DisplayObject<'gc>,
+fn remove_child_from_displaylist<'gc, B: Backend>(
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    child: DisplayObject<'gc, B>,
 ) {
     if let Some(parent) = child.parent() {
         if let Some(mut ctr) = parent.as_container() {
@@ -113,10 +114,10 @@ fn remove_child_from_displaylist<'gc>(
 }
 
 /// Add the `child` to `parent`'s display list.
-fn add_child_to_displaylist<'gc>(
-    context: &mut UpdateContext<'_, 'gc, '_>,
-    parent: DisplayObject<'gc>,
-    child: DisplayObject<'gc>,
+fn add_child_to_displaylist<'gc, B: Backend>(
+    context: &mut UpdateContext<'_, 'gc, '_, B>,
+    parent: DisplayObject<'gc, B>,
+    child: DisplayObject<'gc, B>,
     index: usize,
 ) {
     if let Some(mut ctr) = parent.as_container() {
@@ -126,11 +127,11 @@ fn add_child_to_displaylist<'gc>(
 }
 
 /// Implements `DisplayObjectContainer.getChildAt`
-pub fn get_child_at<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn get_child_at<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(dobj) = this
         .and_then(|this| this.as_display_object())
         .and_then(|this| this.as_container())
@@ -154,11 +155,11 @@ pub fn get_child_at<'gc>(
 }
 
 /// Implements `DisplayObjectContainer.getChildByName`
-pub fn get_child_by_name<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn get_child_by_name<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(dobj) = this
         .and_then(|this| this.as_display_object())
         .and_then(|this| this.as_container())
@@ -180,11 +181,11 @@ pub fn get_child_by_name<'gc>(
 }
 
 /// Implements `DisplayObjectContainer.addChild`
-pub fn add_child<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn add_child<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(parent) = this.and_then(|this| this.as_display_object()) {
         if let Some(ctr) = parent.as_container() {
             let child = args
@@ -207,11 +208,11 @@ pub fn add_child<'gc>(
 }
 
 /// Implements `DisplayObjectContainer.addChildAt`
-pub fn add_child_at<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn add_child_at<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(parent) = this.and_then(|this| this.as_display_object()) {
         let child = args
             .get(0)
@@ -236,11 +237,11 @@ pub fn add_child_at<'gc>(
 }
 
 /// Implements `DisplayObjectContainer.removeChild`
-pub fn remove_child<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn remove_child<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(parent) = this.and_then(|this| this.as_display_object()) {
         let child = args
             .get(0)
@@ -260,11 +261,11 @@ pub fn remove_child<'gc>(
 }
 
 /// Implements `DisplayObjectContainer.numChildren`
-pub fn num_children<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn num_children<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(parent) = this
         .and_then(|this| this.as_display_object())
         .and_then(|this| this.as_container())
@@ -276,11 +277,11 @@ pub fn num_children<'gc>(
 }
 
 /// Implements `DisplayObjectContainer.contains`
-pub fn contains<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn contains<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(parent) = this.and_then(|this| this.as_display_object()) {
         if parent.as_container().is_some() {
             if let Some(child) = args
@@ -306,11 +307,11 @@ pub fn contains<'gc>(
 }
 
 /// Implements `DisplayObjectContainer.getChildIndex`
-pub fn get_child_index<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn get_child_index<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(parent) = this.and_then(|this| this.as_display_object()) {
         if let Some(ctr) = parent.as_container() {
             let target_child = args
@@ -334,11 +335,11 @@ pub fn get_child_index<'gc>(
 }
 
 /// Implements `DisplayObjectContainer.removeChildAt`
-pub fn remove_child_at<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn remove_child_at<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(parent) = this.and_then(|this| this.as_display_object()) {
         if let Some(mut ctr) = parent.as_container() {
             let target_child = args
@@ -368,11 +369,11 @@ pub fn remove_child_at<'gc>(
 }
 
 /// Implements `DisplayObjectContainer.removeChildren`
-pub fn remove_children<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn remove_children<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(parent) = this.and_then(|this| this.as_display_object()) {
         if let Some(mut ctr) = parent.as_container() {
             let from = args
@@ -419,11 +420,11 @@ pub fn remove_children<'gc>(
 }
 
 /// Implements `DisplayObjectContainer.setChildIndex`
-pub fn set_child_index<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn set_child_index<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(parent) = this.and_then(|this| this.as_display_object()) {
         let child = args
             .get(0)
@@ -453,11 +454,11 @@ pub fn set_child_index<'gc>(
 }
 
 /// Implements `DisplayObjectContainer.swapChildrenAt`
-pub fn swap_children_at<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn swap_children_at<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(parent) = this.and_then(|this| this.as_display_object()) {
         if let Some(mut ctr) = parent.as_container() {
             let index0 = args
@@ -494,11 +495,11 @@ pub fn swap_children_at<'gc>(
 }
 
 /// Implements `DisplayObjectContainer.swapChildren`
-pub fn swap_children<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn swap_children<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(parent) = this.and_then(|this| this.as_display_object()) {
         if let Some(mut ctr) = parent.as_container() {
             let child0 = args
@@ -536,11 +537,11 @@ pub fn swap_children<'gc>(
 }
 
 /// Implements `DisplayObjectContainer.stopAllMovieClips`
-pub fn stop_all_movie_clips<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn stop_all_movie_clips<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(parent) = this.and_then(|this| this.as_display_object()) {
         if let Some(mc) = parent.as_movie_clip() {
             mc.stop(&mut activation.context);
@@ -560,25 +561,25 @@ pub fn stop_all_movie_clips<'gc>(
 }
 
 /// Stubs `DisplayObjectContainer.getObjectsUnderPoint`
-pub fn get_objects_under_point<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn get_objects_under_point<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Err("DisplayObjectContainer.getObjectsUnderPoint not yet implemented".into())
 }
 
 /// Stubs `DisplayObjectContainer.areInaccessibleObjectsUnderPoint`
-pub fn are_inaccessible_objects_under_point<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn are_inaccessible_objects_under_point<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Err("DisplayObjectContainer.areInaccessibleObjectsUnderPoint not yet implemented".into())
 }
 
 /// Construct `DisplayObjectContainer`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(
             Namespace::package("flash.display"),
@@ -602,14 +603,14 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
         mc,
     ));
 
-    const PUBLIC_INSTANCE_PROPERTIES: &[(
+    let public_instance_properties: &[(
         &str,
-        Option<NativeMethodImpl>,
-        Option<NativeMethodImpl>,
+        Option<NativeMethodImpl<B>>,
+        Option<NativeMethodImpl<B>>,
     )] = &[("numChildren", Some(num_children), None)];
-    write.define_public_builtin_instance_properties(mc, PUBLIC_INSTANCE_PROPERTIES);
+    write.define_public_builtin_instance_properties(mc, public_instance_properties);
 
-    const PUBLIC_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] = &[
+    let public_instance_methods: &[(&str, NativeMethodImpl<B>)] = &[
         ("getChildAt", get_child_at),
         ("getChildByName", get_child_by_name),
         ("addChild", add_child),
@@ -629,7 +630,7 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
             are_inaccessible_objects_under_point,
         ),
     ];
-    write.define_public_builtin_instance_methods(mc, PUBLIC_INSTANCE_METHODS);
+    write.define_public_builtin_instance_methods(mc, public_instance_methods);
 
     class
 }

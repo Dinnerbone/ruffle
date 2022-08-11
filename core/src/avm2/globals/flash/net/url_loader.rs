@@ -6,14 +6,15 @@ use crate::avm2::object::TObject;
 use crate::avm2::value::Value;
 use crate::avm2::{Error, Object};
 use ruffle_types::backend::navigator::Request;
+use ruffle_types::backend::Backend;
 use ruffle_types::loader::DataFormat;
 
 /// Native function definition for `URLLoader.load`
-pub fn load<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn load<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let request = match args.get(0) {
             Some(Value::Object(request)) => request,
@@ -40,12 +41,12 @@ pub fn load<'gc>(
     Ok(Value::Undefined)
 }
 
-fn spawn_fetch<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    loader_object: Object<'gc>,
-    url_request: &Object<'gc>,
+fn spawn_fetch<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    loader_object: Object<'gc, B>,
+    url_request: &Object<'gc, B>,
     data_format: DataFormat,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     let url = url_request
         .get_property(&QName::dynamic_name("url").into(), activation)?
         .coerce_to_string(activation)?;

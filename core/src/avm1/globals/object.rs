@@ -9,28 +9,14 @@ use crate::avm1::{Object, ScriptObject, TObject, Value};
 use crate::avm_warn;
 use crate::display_object::TDisplayObject;
 use gc_arena::MutationContext;
-
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "addProperty" => method(add_property; DONT_ENUM | DONT_DELETE);
-    "hasOwnProperty" => method(has_own_property; DONT_ENUM | DONT_DELETE);
-    "isPropertyEnumerable" => method(is_property_enumerable; DONT_DELETE | DONT_ENUM);
-    "isPrototypeOf" => method(is_prototype_of; DONT_ENUM | DONT_DELETE);
-    "toString" => method(to_string; DONT_ENUM | DONT_DELETE);
-    "valueOf" => method(value_of; DONT_ENUM | DONT_DELETE);
-    "watch" => method(watch; DONT_ENUM | DONT_DELETE);
-    "unwatch" => method(unwatch; DONT_ENUM | DONT_DELETE);
-};
-
-const OBJECT_DECLS: &[Declaration] = declare_properties! {
-    "registerClass" => method(register_class; DONT_ENUM | DONT_DELETE | READ_ONLY);
-};
+use ruffle_types::backend::Backend;
 
 /// Implements `Object` constructor
-pub fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let this = match args.get(0).unwrap_or(&Value::Undefined) {
         Value::Undefined | Value::Null => this,
         val => val.coerce_to_object(activation),
@@ -39,11 +25,11 @@ pub fn constructor<'gc>(
 }
 
 /// Implements `Object` function
-pub fn object_function<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn object_function<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let obj = match args.get(0).unwrap_or(&Value::Undefined) {
         Value::Undefined | Value::Null => {
             Object::from(ScriptObject::object(activation.context.gc_context, None))
@@ -54,11 +40,11 @@ pub fn object_function<'gc>(
 }
 
 /// Implements `Object.prototype.addProperty`
-pub fn add_property<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn add_property<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let name = args
         .get(0)
         .and_then(|v| v.coerce_to_string(activation).ok())
@@ -95,11 +81,11 @@ pub fn add_property<'gc>(
 }
 
 /// Implements `Object.prototype.hasOwnProperty`
-pub fn has_own_property<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn has_own_property<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(value) = args.get(0) {
         let name = value.coerce_to_string(activation)?;
         Ok(this.has_own_property(activation, name).into())
@@ -109,11 +95,11 @@ pub fn has_own_property<'gc>(
 }
 
 /// Implements `Object.prototype.toString`
-fn to_string<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn to_string<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if this.as_executable().is_some() {
         Ok("[type Function]".into())
     } else {
@@ -122,11 +108,11 @@ fn to_string<'gc>(
 }
 
 /// Implements `Object.prototype.isPropertyEnumerable`
-fn is_property_enumerable<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn is_property_enumerable<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     match args.get(0) {
         Some(name) => {
             let name = name.coerce_to_string(activation)?;
@@ -137,11 +123,11 @@ fn is_property_enumerable<'gc>(
 }
 
 /// Implements `Object.prototype.isPrototypeOf`
-fn is_prototype_of<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn is_prototype_of<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     match args.get(0) {
         Some(val) => {
             let ob = val.coerce_to_object(activation);
@@ -152,20 +138,20 @@ fn is_prototype_of<'gc>(
 }
 
 /// Implements `Object.prototype.valueOf`
-fn value_of<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn value_of<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(this.into())
 }
 
 /// Implements `Object.registerClass`
-pub fn register_class<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn register_class<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let (class_name, constructor) = match args {
         [class_name, constructor, ..] => (class_name, constructor),
         _ => return Ok(false.into()),
@@ -188,11 +174,11 @@ pub fn register_class<'gc>(
 }
 
 /// Implements `Object.prototype.watch`
-fn watch<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn watch<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let name = if let Some(name) = args.get(0) {
         name.coerce_to_string(activation)?
     } else {
@@ -213,11 +199,11 @@ fn watch<'gc>(
 }
 
 /// Implements `Object.prototype.unmwatch`
-fn unwatch<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn unwatch<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let name = if let Some(name) = args.get(0) {
         name.coerce_to_string(activation)?
     } else {
@@ -238,12 +224,24 @@ fn unwatch<'gc>(
 /// Since Object and Function are so heavily intertwined, this function does
 /// not allocate an object to store either proto. Instead, you must allocate
 /// bare objects for both and let this function fill Object for you.
-pub fn fill_proto<'gc>(
+pub fn fill_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    object_proto: Object<'gc>,
-    fn_proto: Object<'gc>,
+    object_proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
 ) {
     let object = object_proto.as_script_object().unwrap();
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "addProperty" => method(add_property; DONT_ENUM | DONT_DELETE);
+        "hasOwnProperty" => method(has_own_property; DONT_ENUM | DONT_DELETE);
+        "isPropertyEnumerable" => method(is_property_enumerable; DONT_DELETE | DONT_ENUM);
+        "isPrototypeOf" => method(is_prototype_of; DONT_ENUM | DONT_DELETE);
+        "toString" => method(to_string; DONT_ENUM | DONT_DELETE);
+        "valueOf" => method(value_of; DONT_ENUM | DONT_DELETE);
+        "watch" => method(watch; DONT_ENUM | DONT_DELETE);
+        "unwatch" => method(unwatch; DONT_ENUM | DONT_DELETE);
+    };
+
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
 }
 
@@ -252,11 +250,11 @@ pub fn fill_proto<'gc>(
 /// This is an undocumented function that allows ActionScript 2.0 classes to
 /// declare the property flags of a given property. It's not part of
 /// `Object.prototype`, and I suspect that's a deliberate omission.
-pub fn as_set_prop_flags<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn as_set_prop_flags<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let object = if let Some(v) = args.get(0) {
         v.coerce_to_object(activation)
     } else {
@@ -315,11 +313,11 @@ pub fn as_set_prop_flags<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn create_object_object<'gc>(
+pub fn create_object_object<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let object_function = FunctionObject::constructor(
         gc_context,
         Executable::Native(constructor),
@@ -328,6 +326,11 @@ pub fn create_object_object<'gc>(
         proto,
     );
     let object = object_function.as_script_object().unwrap();
+
+    let OBJECT_DECLS: &[Declaration<B>] = declare_properties! {
+        "registerClass" => method(register_class; DONT_ENUM | DONT_DELETE | READ_ONLY);
+    };
     define_properties_on(OBJECT_DECLS, gc_context, object, fn_proto);
+
     object_function
 }

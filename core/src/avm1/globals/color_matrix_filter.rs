@@ -6,26 +6,23 @@ use crate::avm1::object::color_matrix_filter::ColorMatrixFilterObject;
 use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{ArrayObject, Object, TObject, Value};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "matrix" => property(matrix, set_matrix);
-};
-
-pub fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     set_matrix(activation, this, args.get(0..1).unwrap_or_default())?;
 
     Ok(this.into())
 }
 
-pub fn matrix<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn matrix<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_color_matrix_filter_object() {
         return Ok(ArrayObject::new(
             activation.context.gc_context,
@@ -38,11 +35,11 @@ pub fn matrix<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_matrix<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_matrix<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let matrix = args.get(0).unwrap_or(&Value::Undefined);
 
     if let Value::Object(obj) = matrix {
@@ -63,13 +60,18 @@ pub fn set_matrix<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let color_matrix_filter = ColorMatrixFilterObject::empty_object(gc_context, Some(proto));
     let object = color_matrix_filter.as_script_object().unwrap();
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "matrix" => property(matrix, set_matrix);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     color_matrix_filter.into()
 }

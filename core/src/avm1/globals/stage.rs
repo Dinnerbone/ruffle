@@ -8,36 +8,38 @@ use crate::avm1::globals::as_broadcaster::BroadcasterFunctions;
 use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{Object, ScriptObject, Value};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 use ruffle_types::display_object::stage::StageDisplayState;
 use ruffle_types::string::{AvmString, WStr, WString};
 
-const OBJECT_DECLS: &[Declaration] = declare_properties! {
-    "align" => property(align, set_align);
-    "height" => property(height);
-    "scaleMode" => property(scale_mode, set_scale_mode);
-    "displayState" => property(display_state, set_display_state);
-    "showMenu" => property(show_menu, set_show_menu);
-    "width" => property(width);
-};
-
-pub fn create_stage_object<'gc>(
+pub fn create_stage_object<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Option<Object<'gc>>,
-    array_proto: Option<Object<'gc>>,
-    fn_proto: Object<'gc>,
-    broadcaster_functions: BroadcasterFunctions<'gc>,
-) -> Object<'gc> {
+    proto: Option<Object<'gc, B>>,
+    array_proto: Option<Object<'gc, B>>,
+    fn_proto: Object<'gc, B>,
+    broadcaster_functions: BroadcasterFunctions<'gc, B>,
+) -> Object<'gc, B> {
     let stage = ScriptObject::object(gc_context, proto);
     broadcaster_functions.initialize(gc_context, stage.into(), array_proto.unwrap());
+
+    let OBJECT_DECLS: &[Declaration<B>] = declare_properties! {
+        "align" => property(align, set_align);
+        "height" => property(height);
+        "scaleMode" => property(scale_mode, set_scale_mode);
+        "displayState" => property(display_state, set_display_state);
+        "showMenu" => property(show_menu, set_show_menu);
+        "width" => property(width);
+    };
     define_properties_on(OBJECT_DECLS, gc_context, stage, fn_proto);
+
     stage.into()
 }
 
-fn align<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn align<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let align = activation.context.stage.align();
     let mut s = WString::with_capacity(4, false);
     // Match string values returned by AS.
@@ -61,11 +63,11 @@ fn align<'gc>(
     Ok(align.into())
 }
 
-fn set_align<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_align<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let align = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -79,19 +81,19 @@ fn set_align<'gc>(
     Ok(Value::Undefined)
 }
 
-fn height<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn height<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(activation.context.stage.stage_size().1.into())
 }
 
-fn scale_mode<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn scale_mode<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let scale_mode = AvmString::new_utf8(
         activation.context.gc_context,
         activation.context.stage.scale_mode().to_string(),
@@ -99,11 +101,11 @@ fn scale_mode<'gc>(
     Ok(scale_mode.into())
 }
 
-fn set_scale_mode<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_scale_mode<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let scale_mode = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -117,11 +119,11 @@ fn set_scale_mode<'gc>(
     Ok(Value::Undefined)
 }
 
-fn display_state<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn display_state<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if activation.context.stage.is_fullscreen() {
         Ok("fullScreen".into())
     } else {
@@ -129,11 +131,11 @@ fn display_state<'gc>(
     }
 }
 
-fn set_display_state<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_display_state<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let display_state = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -154,19 +156,19 @@ fn set_display_state<'gc>(
     Ok(Value::Undefined)
 }
 
-fn show_menu<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn show_menu<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(activation.context.stage.show_menu().into())
 }
 
-fn set_show_menu<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_show_menu<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let show_menu = args
         .get(0)
         .unwrap_or(&true.into())
@@ -179,10 +181,10 @@ fn set_show_menu<'gc>(
     Ok(Value::Undefined)
 }
 
-fn width<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn width<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(activation.context.stage.stage_size().0.into())
 }

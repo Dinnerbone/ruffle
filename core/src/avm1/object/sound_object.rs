@@ -5,21 +5,22 @@ use crate::display_object::DisplayObject;
 use crate::impl_custom_object;
 use gc_arena::{Collect, GcCell, MutationContext};
 use ruffle_types::backend::audio::{SoundHandle, SoundInstanceHandle};
+use ruffle_types::backend::Backend;
 use std::fmt;
 
 /// A SoundObject that is tied to a sound from the AudioBackend.
 #[derive(Clone, Copy, Collect)]
 #[collect(no_drop)]
-pub struct SoundObject<'gc>(GcCell<'gc, SoundObjectData<'gc>>);
+pub struct SoundObject<'gc, B: Backend>(GcCell<'gc, SoundObjectData<'gc, B>>);
 
 #[derive(Collect)]
 #[collect(no_drop)]
-pub struct SoundObjectData<'gc> {
+pub struct SoundObjectData<'gc, B: Backend> {
     /// The underlying script object.
     ///
     /// This is used to handle "expando properties" on AVM1 display nodes, as
     /// well as the underlying prototype chain.
-    base: ScriptObject<'gc>,
+    base: ScriptObject<'gc, B>,
 
     /// The sound that is attached to this object.
     #[collect(require_static)]
@@ -30,7 +31,7 @@ pub struct SoundObjectData<'gc> {
     sound_instance: Option<SoundInstanceHandle>,
 
     /// Sounds in AVM1 are tied to a specific movie clip.
-    owner: Option<DisplayObject<'gc>>,
+    owner: Option<DisplayObject<'gc, B>>,
 
     /// Position of the last playing sound in milliseconds.
     position: u32,
@@ -39,7 +40,7 @@ pub struct SoundObjectData<'gc> {
     duration: Option<u32>,
 }
 
-impl fmt::Debug for SoundObject<'_> {
+impl<B: Backend> fmt::Debug for SoundObject<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let this = self.0.read();
         f.debug_struct("SoundObject")
@@ -50,11 +51,11 @@ impl fmt::Debug for SoundObject<'_> {
     }
 }
 
-impl<'gc> SoundObject<'gc> {
+impl<'gc, B: Backend> SoundObject<'gc, B> {
     pub fn empty_sound(
         gc_context: MutationContext<'gc, '_>,
-        proto: Option<Object<'gc>>,
-    ) -> SoundObject<'gc> {
+        proto: Option<Object<'gc, B>>,
+    ) -> SoundObject<'gc, B> {
         SoundObject(GcCell::allocate(
             gc_context,
             SoundObjectData {
@@ -96,14 +97,14 @@ impl<'gc> SoundObject<'gc> {
         self.0.write(gc_context).sound_instance = sound_instance;
     }
 
-    pub fn owner(self) -> Option<DisplayObject<'gc>> {
+    pub fn owner(self) -> Option<DisplayObject<'gc, B>> {
         self.0.read().owner
     }
 
     pub fn set_owner(
         self,
         gc_context: MutationContext<'gc, '_>,
-        owner: Option<DisplayObject<'gc>>,
+        owner: Option<DisplayObject<'gc, B>>,
     ) {
         self.0.write(gc_context).owner = owner;
     }
@@ -117,8 +118,10 @@ impl<'gc> SoundObject<'gc> {
     }
 }
 
-impl<'gc> TObject<'gc> for SoundObject<'gc> {
-    impl_custom_object!(base {
+impl<'gc, B: Backend> TObject<'gc> for SoundObject<'gc, B> {
+    type B = B;
+
+    impl_custom_object!(B, base {
         bare_object(as_sound_object -> SoundObject::empty_sound);
     });
 }

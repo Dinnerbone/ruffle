@@ -4,6 +4,7 @@ use crate::impl_custom_object;
 use gc_arena::{Collect, GcCell, MutationContext};
 use ruffle_types::string::WStr;
 
+use ruffle_types::backend::Backend;
 use std::fmt;
 
 #[derive(Debug, Clone, Copy, Collect)]
@@ -44,26 +45,28 @@ impl From<DisplacementMapFilterMode> for &'static WStr {
 /// A DisplacementMapFilter
 #[derive(Clone, Copy, Collect)]
 #[collect(no_drop)]
-pub struct DisplacementMapFilterObject<'gc>(GcCell<'gc, DisplacementMapFilterData<'gc>>);
+pub struct DisplacementMapFilterObject<'gc, B: Backend>(
+    GcCell<'gc, DisplacementMapFilterData<'gc, B>>,
+);
 
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct DisplacementMapFilterData<'gc> {
+pub struct DisplacementMapFilterData<'gc, B: Backend> {
     /// The underlying script object.
-    base: ScriptObject<'gc>,
+    base: ScriptObject<'gc, B>,
 
     alpha: f64,
     color: u32,
     component_x: i32,
     component_y: i32,
-    map_bitmap: Option<Object<'gc>>,
+    map_bitmap: Option<Object<'gc, B>>,
     map_point: (i32, i32),
     mode: DisplacementMapFilterMode,
     scale_x: f64,
     scale_y: f64,
 }
 
-impl fmt::Debug for DisplacementMapFilterObject<'_> {
+impl<B: Backend> fmt::Debug for DisplacementMapFilterObject<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let this = self.0.read();
         f.debug_struct("DisplacementMapFilter")
@@ -80,20 +83,23 @@ impl fmt::Debug for DisplacementMapFilterObject<'_> {
     }
 }
 
-impl<'gc> DisplacementMapFilterObject<'gc> {
+impl<'gc, B: Backend> DisplacementMapFilterObject<'gc, B> {
     add_field_accessors!(
         [set_alpha, alpha, alpha, f64],
         [set_color, color, color, u32],
         [set_component_x, component_x, component_x, i32],
         [set_component_y, component_y, component_y, i32],
-        [set_map_bitmap, map_bitmap, map_bitmap, Option<Object<'gc>>],
+        [set_map_bitmap, map_bitmap, map_bitmap, Option<Object<'gc, B>>],
         [set_map_point, map_point, map_point, (i32, i32)],
         [set_mode, mode, mode, DisplacementMapFilterMode],
         [set_scale_x, scale_x, scale_x, f64],
         [set_scale_y, scale_y, scale_y, f64],
     );
 
-    pub fn empty_object(gc_context: MutationContext<'gc, '_>, proto: Option<Object<'gc>>) -> Self {
+    pub fn empty_object(
+        gc_context: MutationContext<'gc, '_>,
+        proto: Option<Object<'gc, B>>,
+    ) -> Self {
         DisplacementMapFilterObject(GcCell::allocate(
             gc_context,
             DisplacementMapFilterData {
@@ -112,8 +118,10 @@ impl<'gc> DisplacementMapFilterObject<'gc> {
     }
 }
 
-impl<'gc> TObject<'gc> for DisplacementMapFilterObject<'gc> {
-    impl_custom_object!(base {
+impl<'gc, B: Backend> TObject<'gc> for DisplacementMapFilterObject<'gc, B> {
+    type B = B;
+
+    impl_custom_object!(B, base {
         bare_object(as_displacement_map_filter_object -> DisplacementMapFilterObject::empty_object);
     });
 }

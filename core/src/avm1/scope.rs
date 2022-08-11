@@ -6,6 +6,7 @@ use crate::avm1::error::Error;
 use crate::avm1::property::Attribute;
 use crate::avm1::{AvmString, Object, ScriptObject, TObject, Value};
 use gc_arena::{Collect, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use std::cell::Ref;
 
 /// Indicates what kind of scope a scope is.
@@ -31,15 +32,15 @@ pub enum ScopeClass {
 /// Represents a scope chain for an AVM1 activation.
 #[derive(Debug, Collect)]
 #[collect(no_drop)]
-pub struct Scope<'gc> {
-    parent: Option<GcCell<'gc, Scope<'gc>>>,
+pub struct Scope<'gc, B: Backend> {
+    parent: Option<GcCell<'gc, Scope<'gc, B>>>,
     class: ScopeClass,
-    values: Object<'gc>,
+    values: Object<'gc, B>,
 }
 
-impl<'gc> Scope<'gc> {
+impl<'gc, B: Backend> Scope<'gc, B> {
     /// Construct a global scope (one without a parent).
-    pub fn from_global_object(globals: Object<'gc>) -> Scope<'gc> {
+    pub fn from_global_object(globals: Object<'gc, B>) -> Scope<'gc, B> {
         Scope {
             parent: None,
             class: ScopeClass::Global,
@@ -48,7 +49,10 @@ impl<'gc> Scope<'gc> {
     }
 
     /// Construct a child scope of another scope.
-    pub fn new_local_scope(parent: GcCell<'gc, Self>, mc: MutationContext<'gc, '_>) -> Scope<'gc> {
+    pub fn new_local_scope(
+        parent: GcCell<'gc, Self>,
+        mc: MutationContext<'gc, '_>,
+    ) -> Scope<'gc, B> {
         Scope {
             parent: Some(parent),
             class: ScopeClass::Local,
@@ -60,7 +64,7 @@ impl<'gc> Scope<'gc> {
     /// scope has been replaced with another given object.
     pub fn new_target_scope(
         mut parent: GcCell<'gc, Self>,
-        clip: Object<'gc>,
+        clip: Object<'gc, B>,
         mc: MutationContext<'gc, '_>,
     ) -> GcCell<'gc, Self> {
         let mut bottom_scope = None;
@@ -116,7 +120,7 @@ impl<'gc> Scope<'gc> {
     /// references will try to resolve on that object first.
     pub fn new_with_scope(
         parent_scope: GcCell<'gc, Self>,
-        with_object: Object<'gc>,
+        with_object: Object<'gc, B>,
         mc: MutationContext<'gc, '_>,
     ) -> GcCell<'gc, Self> {
         GcCell::allocate(
@@ -133,8 +137,8 @@ impl<'gc> Scope<'gc> {
     pub fn new(
         parent: GcCell<'gc, Self>,
         class: ScopeClass,
-        with_object: Object<'gc>,
-    ) -> Scope<'gc> {
+        with_object: Object<'gc, B>,
+    ) -> Scope<'gc, B> {
         Scope {
             parent: Some(parent),
             class,
@@ -143,23 +147,23 @@ impl<'gc> Scope<'gc> {
     }
 
     /// Returns a reference to the current local scope object.
-    pub fn locals(&self) -> &Object<'gc> {
+    pub fn locals(&self) -> &Object<'gc, B> {
         &self.values
     }
 
     /// Returns a reference to the current local scope object.
-    pub fn locals_cell(&self) -> Object<'gc> {
+    pub fn locals_cell(&self) -> Object<'gc, B> {
         self.values
     }
 
     /// Returns a reference to the current local scope object for mutation.
     #[allow(dead_code)]
-    pub fn locals_mut(&mut self) -> &mut Object<'gc> {
+    pub fn locals_mut(&mut self) -> &mut Object<'gc, B> {
         &mut self.values
     }
 
     /// Returns a reference to the parent scope object.
-    pub fn parent(&self) -> Option<Ref<Scope<'gc>>> {
+    pub fn parent(&self) -> Option<Ref<Scope<'gc, B>>> {
         match self.parent {
             Some(ref p) => Some(p.read()),
             None => None,
@@ -167,7 +171,7 @@ impl<'gc> Scope<'gc> {
     }
 
     /// Returns a reference to the parent scope object.
-    pub fn parent_cell(&self) -> Option<GcCell<'gc, Scope<'gc>>> {
+    pub fn parent_cell(&self) -> Option<GcCell<'gc, Scope<'gc, B>>> {
         self.parent
     }
 
@@ -184,8 +188,8 @@ impl<'gc> Scope<'gc> {
     pub fn resolve(
         &self,
         name: AvmString<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<CallableValue<'gc>, Error<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<CallableValue<'gc, B>, Error<'gc, B>> {
         if self.locals().has_property(activation, name) {
             return self
                 .locals()
@@ -208,9 +212,9 @@ impl<'gc> Scope<'gc> {
     pub fn set(
         &self,
         name: AvmString<'gc>,
-        value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<(), Error<'gc>> {
+        value: Value<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<(), Error<'gc, B>> {
         if self.class == ScopeClass::Target || self.locals().has_property(activation, name) {
             // Value found on this object, so overwrite it.
             // Or we've hit the executing movie clip, so create it here.
@@ -235,9 +239,9 @@ impl<'gc> Scope<'gc> {
     pub fn define_local(
         &self,
         name: AvmString<'gc>,
-        value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<(), Error<'gc>> {
+        value: Value<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<(), Error<'gc, B>> {
         self.locals().set(name, value, activation)
     }
 
@@ -248,7 +252,7 @@ impl<'gc> Scope<'gc> {
     pub fn force_define_local(
         &self,
         name: AvmString<'gc>,
-        value: Value<'gc>,
+        value: Value<'gc, B>,
         mc: MutationContext<'gc, '_>,
     ) {
         self.locals()
@@ -256,7 +260,11 @@ impl<'gc> Scope<'gc> {
     }
 
     /// Delete a value from scope.
-    pub fn delete(&self, activation: &mut Activation<'_, 'gc, '_>, name: AvmString<'gc>) -> bool {
+    pub fn delete(
+        &self,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        name: AvmString<'gc>,
+    ) -> bool {
         if self.locals().has_property(activation, name) {
             return self.locals().delete(activation, name);
         }

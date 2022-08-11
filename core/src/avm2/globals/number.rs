@@ -8,13 +8,14 @@ use crate::avm2::object::{primitive_allocator, FunctionObject, Object, TObject};
 use crate::avm2::value::Value;
 use crate::avm2::{AvmString, Error};
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 
 /// Implements `Number`'s instance initializer.
-fn instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut prim) = this.as_primitive_mut(activation.context.gc_context) {
             if matches!(*prim, Value::Undefined | Value::Null) {
@@ -32,11 +33,11 @@ fn instance_init<'gc>(
 }
 
 /// Implements `Number`'s native instance initializer.
-fn native_instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn native_instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         activation.super_init(this, args)?;
     }
@@ -45,11 +46,11 @@ fn native_instance_init<'gc>(
 }
 
 /// Implements `Number`'s class initializer.
-fn class_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn class_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let scope = activation.create_scopechain();
         let gc_context = activation.context.gc_context;
@@ -127,11 +128,11 @@ fn class_init<'gc>(
 }
 
 /// Implements `Number.toLocaleString`
-fn to_locale_string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn to_locale_string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(this) = this.as_primitive() {
             return Ok(this.coerce_to_string(activation)?.into());
@@ -142,11 +143,11 @@ fn to_locale_string<'gc>(
 }
 
 /// Implements `Number.toExponential`
-fn to_exponential<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn to_exponential<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(this) = this.as_primitive() {
             if let Value::Number(number) = *this {
@@ -176,11 +177,11 @@ fn to_exponential<'gc>(
 }
 
 /// Implements `Number.toFixed`
-fn to_fixed<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn to_fixed<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(this) = this.as_primitive() {
             if let Value::Number(number) = *this {
@@ -206,8 +207,8 @@ fn to_fixed<'gc>(
     Err("Number.prototype.toFixed has been called on an incompatible object".into())
 }
 
-pub fn print_with_precision<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+pub fn print_with_precision<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     number: f64,
     wanted_digits: usize,
 ) -> Result<AvmString<'gc>, Error> {
@@ -238,11 +239,11 @@ pub fn print_with_precision<'gc>(
 }
 
 /// Implements `Number.toPrecision`
-fn to_precision<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn to_precision<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(this) = this.as_primitive() {
             if let Value::Number(number) = *this {
@@ -264,8 +265,8 @@ fn to_precision<'gc>(
     Err("Number.prototype.toPrecision has been called on an incompatible object".into())
 }
 
-pub fn print_with_radix<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+pub fn print_with_radix<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     mut number: f64,
     radix: usize,
 ) -> Result<AvmString<'gc>, Error> {
@@ -307,11 +308,11 @@ pub fn print_with_radix<'gc>(
 }
 
 /// Implements `Number.toString`
-fn to_string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn to_string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(this) = this.as_primitive() {
             if let Value::Number(number) = *this {
@@ -334,11 +335,11 @@ fn to_string<'gc>(
 }
 
 /// Implements `Number.valueOf`
-fn value_of<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn value_of<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(this) = this.as_primitive() {
             return Ok(*this);
@@ -349,7 +350,7 @@ fn value_of<'gc>(
 }
 
 /// Construct `Number`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::public(), "Number"),
         Some(QName::new(Namespace::public(), "Object").into()),
@@ -375,11 +376,11 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
     ];
     write.define_public_constant_number_class_traits(CLASS_CONSTANTS);
 
-    const PUBLIC_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] =
+    let PUBLIC_INSTANCE_METHODS: &[(&str, NativeMethodImpl<B>)] =
         &[("toLocaleString", to_locale_string)];
     write.define_public_builtin_instance_methods(mc, PUBLIC_INSTANCE_METHODS);
 
-    const AS3_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] = &[
+    let AS3_INSTANCE_METHODS: &[(&str, NativeMethodImpl<B>)] = &[
         ("toExponential", to_exponential),
         ("toFixed", to_fixed),
         ("toPrecision", to_precision),

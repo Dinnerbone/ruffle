@@ -5,6 +5,7 @@ use crate::bitmap::color_transform_params::ColorTransformParams;
 use crate::bitmap::turbulence::Turbulence;
 use bitflags::bitflags;
 use ruffle_types::backend::render::{Bitmap, BitmapFormat, BitmapHandle, RenderBackend};
+use ruffle_types::backend::Backend;
 use std::ops::Range;
 
 /// An implementation of the Lehmer/Park-Miller random number generator
@@ -135,7 +136,7 @@ bitflags! {
 
 #[derive(Clone, Collect, Default, Debug)]
 #[collect(no_drop)]
-pub struct BitmapData<'gc> {
+pub struct BitmapData<'gc, B: Backend> {
     /// The pixels in the bitmap, stored as a array of pre-multiplied ARGB colour values
     pixels: Vec<Color>,
     dirty: bool,
@@ -153,10 +154,10 @@ pub struct BitmapData<'gc> {
     ///
     /// AVM1 cannot retrieve `BitmapData` back from the display object tree, so
     /// this does not need to hold an AVM1 object.
-    avm2_object: Option<Avm2Object<'gc>>,
+    avm2_object: Option<Avm2Object<'gc, B>>,
 }
 
-impl<'gc> BitmapData<'gc> {
+impl<'gc, B: Backend> BitmapData<'gc, B> {
     pub fn init_pixels(&mut self, width: u32, height: u32, transparency: bool, fill_color: i32) {
         self.width = width;
         self.height = height;
@@ -923,13 +924,13 @@ impl<'gc> BitmapData<'gc> {
         }
     }
 
-    pub fn object2(&self) -> Avm2Value<'gc> {
+    pub fn object2(&self) -> Avm2Value<'gc, B> {
         self.avm2_object
             .map(|o| o.into())
             .unwrap_or(Avm2Value::Undefined)
     }
 
-    pub fn init_object2(&mut self, object: Avm2Object<'gc>) {
+    pub fn init_object2(&mut self, object: Avm2Object<'gc, B>) {
         self.avm2_object = Some(object)
     }
 }

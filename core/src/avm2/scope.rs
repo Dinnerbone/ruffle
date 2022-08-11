@@ -7,14 +7,15 @@ use crate::avm2::object::{Object, TObject};
 use crate::avm2::value::Value;
 use crate::avm2::Error;
 use gc_arena::{Collect, Gc, MutationContext};
+use ruffle_types::backend::Backend;
 use std::ops::Deref;
 
 /// Represents a Scope that can be on either a ScopeChain or local ScopeStack.
 #[derive(Debug, Collect, Clone, Copy)]
 #[collect(no_drop)]
-pub struct Scope<'gc> {
+pub struct Scope<'gc, B: Backend> {
     /// The underlying object of this Scope
-    values: Object<'gc>,
+    values: Object<'gc, B>,
 
     /// Indicates whether or not this is a `with` scope.
     ///
@@ -23,9 +24,9 @@ pub struct Scope<'gc> {
     with: bool,
 }
 
-impl<'gc> Scope<'gc> {
+impl<'gc, B: Backend> Scope<'gc, B> {
     /// Creates a new regular Scope
-    pub fn new(values: Object<'gc>) -> Self {
+    pub fn new(values: Object<'gc, B>) -> Self {
         Self {
             values,
             with: false,
@@ -33,7 +34,7 @@ impl<'gc> Scope<'gc> {
     }
 
     /// Creates a new `with` Scope
-    pub fn new_with(values: Object<'gc>) -> Self {
+    pub fn new_with(values: Object<'gc, B>) -> Self {
         Self { values, with: true }
     }
 
@@ -41,7 +42,7 @@ impl<'gc> Scope<'gc> {
         self.with
     }
 
-    pub fn values(&self) -> Object<'gc> {
+    pub fn values(&self) -> Object<'gc, B> {
         self.values
     }
 }
@@ -61,14 +62,14 @@ impl<'gc> Scope<'gc> {
 /// on top of will be used for the new ScopeChain.
 #[derive(Debug, Collect, Clone, Copy)]
 #[collect(no_drop)]
-pub struct ScopeChain<'gc> {
-    scopes: Option<Gc<'gc, Vec<Scope<'gc>>>>,
-    domain: Domain<'gc>,
+pub struct ScopeChain<'gc, B: Backend> {
+    scopes: Option<Gc<'gc, Vec<Scope<'gc, B>>>>,
+    domain: Domain<'gc, B>,
 }
 
-impl<'gc> ScopeChain<'gc> {
+impl<'gc, B: Backend> ScopeChain<'gc, B> {
     /// Creates a brand new ScopeChain with a domain. The domain should be the current domain in use.
-    pub fn new(domain: Domain<'gc>) -> Self {
+    pub fn new(domain: Domain<'gc, B>) -> Self {
         Self {
             scopes: None,
             domain,
@@ -76,7 +77,7 @@ impl<'gc> ScopeChain<'gc> {
     }
 
     /// Creates a new ScopeChain by chaining new scopes on top of this ScopeChain
-    pub fn chain(&self, mc: MutationContext<'gc, '_>, new_scopes: &[Scope<'gc>]) -> Self {
+    pub fn chain(&self, mc: MutationContext<'gc, '_>, new_scopes: &[Scope<'gc, B>]) -> Self {
         if new_scopes.is_empty() {
             // If we are not actually adding any new scopes, we don't need to do anything.
             return *self;
@@ -104,7 +105,7 @@ impl<'gc> ScopeChain<'gc> {
         }
     }
 
-    pub fn get(&self, index: usize) -> Option<Scope<'gc>> {
+    pub fn get(&self, index: usize) -> Option<Scope<'gc, B>> {
         self.scopes.and_then(|scopes| scopes.get(index).cloned())
     }
 
@@ -113,7 +114,7 @@ impl<'gc> ScopeChain<'gc> {
     }
 
     /// Returns the domain associated with this ScopeChain.
-    pub fn domain(&self) -> Domain<'gc> {
+    pub fn domain(&self) -> Domain<'gc, B> {
         self.domain
     }
 
@@ -121,8 +122,8 @@ impl<'gc> ScopeChain<'gc> {
     pub fn find(
         &self,
         multiname: &Multiname<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Option<Object<'gc>>, Error> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Option<Object<'gc, B>>, Error> {
         // First search our scopes
         if let Some(scopes) = self.scopes {
             for (depth, scope) in scopes.iter().enumerate().rev() {
@@ -152,8 +153,8 @@ impl<'gc> ScopeChain<'gc> {
     pub fn resolve(
         &self,
         name: &Multiname<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Option<Value<'gc>>, Error> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Option<Value<'gc, B>>, Error> {
         if let Some(object) = self.find(name, activation)? {
             Ok(Some(object.get_property(name, activation)?))
         } else {
@@ -167,11 +168,11 @@ impl<'gc> ScopeChain<'gc> {
 /// A ScopeStack should only ever be accessed by the activation it was created in.
 #[derive(Debug, Collect, Clone)]
 #[collect(no_drop)]
-pub struct ScopeStack<'gc> {
-    scopes: Vec<Scope<'gc>>,
+pub struct ScopeStack<'gc, B: Backend> {
+    scopes: Vec<Scope<'gc, B>>,
 }
 
-impl<'gc> ScopeStack<'gc> {
+impl<'gc, B: Backend> ScopeStack<'gc, B> {
     pub fn new() -> Self {
         Self { scopes: Vec::new() }
     }
@@ -180,19 +181,19 @@ impl<'gc> ScopeStack<'gc> {
         self.scopes.clear();
     }
 
-    pub fn push(&mut self, scope: Scope<'gc>) {
+    pub fn push(&mut self, scope: Scope<'gc, B>) {
         self.scopes.push(scope);
     }
 
-    pub fn pop(&mut self) -> Option<Scope<'gc>> {
+    pub fn pop(&mut self) -> Option<Scope<'gc, B>> {
         self.scopes.pop()
     }
 
-    pub fn get(&self, index: usize) -> Option<Scope<'gc>> {
+    pub fn get(&self, index: usize) -> Option<Scope<'gc, B>> {
         self.scopes.get(index).cloned()
     }
 
-    pub fn scopes(&self) -> &[Scope<'gc>] {
+    pub fn scopes(&self) -> &[Scope<'gc, B>] {
         &self.scopes
     }
 
@@ -206,7 +207,7 @@ impl<'gc> ScopeStack<'gc> {
         &self,
         multiname: &Multiname<'gc>,
         global: bool,
-    ) -> Result<Option<Object<'gc>>, Error> {
+    ) -> Result<Option<Object<'gc, B>>, Error> {
         for (depth, scope) in self.scopes.iter().enumerate().rev() {
             let values = scope.values();
 

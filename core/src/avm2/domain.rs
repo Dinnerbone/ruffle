@@ -8,21 +8,22 @@ use crate::avm2::script::Script;
 use crate::avm2::value::Value;
 use crate::avm2::Error;
 use gc_arena::{Collect, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 
 /// Represents a set of scripts and movies that share traits across different
 /// script-global scopes.
 #[derive(Copy, Clone, Debug, Collect)]
 #[collect(no_drop)]
-pub struct Domain<'gc>(GcCell<'gc, DomainData<'gc>>);
+pub struct Domain<'gc, B: Backend>(GcCell<'gc, DomainData<'gc, B>>);
 
 #[derive(Clone, Debug, Collect)]
 #[collect(no_drop)]
-struct DomainData<'gc> {
+struct DomainData<'gc, B: Backend> {
     /// A list of all exported definitions and the script that exported them.
-    defs: PropertyMap<'gc, Script<'gc>>,
+    defs: PropertyMap<'gc, Script<'gc, B>>,
 
     /// The parent domain.
-    parent: Option<Domain<'gc>>,
+    parent: Option<Domain<'gc, B>>,
 
     /// The bytearray used for storing domain memory
     ///
@@ -30,10 +31,10 @@ struct DomainData<'gc> {
     /// to `None`. It is only optional to avoid an order-of-events problem in
     /// player globals setup (we need a global domain to put globals into, but
     /// that domain needs the bytearray global)
-    pub domain_memory: Option<ByteArrayObject<'gc>>,
+    pub domain_memory: Option<ByteArrayObject<'gc, B>>,
 }
 
-impl<'gc> Domain<'gc> {
+impl<'gc, B: Backend> Domain<'gc, B> {
     /// Create a new domain with no parent.
     ///
     /// This is intended exclusively for creating the player globals domain,
@@ -42,7 +43,7 @@ impl<'gc> Domain<'gc> {
     /// Note: the global domain will be created without valid domain memory.
     /// You must initialize domain memory later on after the ByteArray class is
     /// instantiated but before user code runs.
-    pub fn global_domain(mc: MutationContext<'gc, '_>) -> Domain<'gc> {
+    pub fn global_domain(mc: MutationContext<'gc, '_>) -> Domain<'gc, B> {
         Self(GcCell::allocate(
             mc,
             DomainData {
@@ -53,7 +54,7 @@ impl<'gc> Domain<'gc> {
         ))
     }
 
-    pub fn is_avm2_global_domain(&self, activation: &mut Activation<'_, 'gc, '_>) -> bool {
+    pub fn is_avm2_global_domain(&self, activation: &mut Activation<'_, 'gc, '_, B>) -> bool {
         activation.avm2().global_domain().0.as_ptr() == self.0.as_ptr()
     }
 
@@ -62,9 +63,9 @@ impl<'gc> Domain<'gc> {
     /// This function must not be called before the player globals have been
     /// fully allocated.
     pub fn movie_domain(
-        activation: &mut Activation<'_, 'gc, '_>,
-        parent: Domain<'gc>,
-    ) -> Domain<'gc> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        parent: Domain<'gc, B>,
+    ) -> Domain<'gc, B> {
         let this = Self(GcCell::allocate(
             activation.context.gc_context,
             DomainData {
@@ -80,7 +81,7 @@ impl<'gc> Domain<'gc> {
     }
 
     /// Get the parent of this domain
-    pub fn parent_domain(self) -> Option<Domain<'gc>> {
+    pub fn parent_domain(self) -> Option<Domain<'gc, B>> {
         self.0.read().parent
     }
 
@@ -106,7 +107,7 @@ impl<'gc> Domain<'gc> {
     pub fn get_defining_script(
         self,
         multiname: &Multiname<'gc>,
-    ) -> Result<Option<(QName<'gc>, Script<'gc>)>, Error> {
+    ) -> Result<Option<(QName<'gc>, Script<'gc, B>)>, Error> {
         let read = self.0.read();
 
         if let Some(name) = multiname.local_name() {
@@ -126,9 +127,9 @@ impl<'gc> Domain<'gc> {
     /// Retrieve a value from this domain.
     pub fn get_defined_value(
         self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         name: QName<'gc>,
-    ) -> Result<Value<'gc>, Error> {
+    ) -> Result<Value<'gc, B>, Error> {
         let (name, mut script) = self
             .get_defining_script(&name.into())?
             .ok_or_else(|| format!("MovieClip Symbol {} does not exist", name.local_name()))?;
@@ -144,7 +145,7 @@ impl<'gc> Domain<'gc> {
     pub fn export_definition(
         &mut self,
         name: QName<'gc>,
-        script: Script<'gc>,
+        script: Script<'gc, B>,
         mc: MutationContext<'gc, '_>,
     ) -> Result<(), Error> {
         if self.has_definition(name) {
@@ -160,7 +161,7 @@ impl<'gc> Domain<'gc> {
         Ok(())
     }
 
-    pub fn domain_memory(&self) -> ByteArrayObject<'gc> {
+    pub fn domain_memory(&self) -> ByteArrayObject<'gc, B> {
         self.0
             .read()
             .domain_memory
@@ -170,7 +171,7 @@ impl<'gc> Domain<'gc> {
     pub fn set_domain_memory(
         &self,
         mc: MutationContext<'gc, '_>,
-        domain_memory: ByteArrayObject<'gc>,
+        domain_memory: ByteArrayObject<'gc, B>,
     ) {
         self.0.write(mc).domain_memory = Some(domain_memory)
     }
@@ -183,7 +184,7 @@ impl<'gc> Domain<'gc> {
     /// domains.
     pub fn init_default_domain_memory(
         self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         let bytearray_class = activation.avm2().classes().bytearray;
 
@@ -202,10 +203,10 @@ impl<'gc> Domain<'gc> {
     }
 }
 
-impl<'gc> PartialEq for Domain<'gc> {
+impl<'gc, B: Backend> PartialEq for Domain<'gc, B> {
     fn eq(&self, other: &Self) -> bool {
         self.0.as_ptr() == other.0.as_ptr()
     }
 }
 
-impl<'gc> Eq for Domain<'gc> {}
+impl<'gc, B: Backend> Eq for Domain<'gc, B> {}

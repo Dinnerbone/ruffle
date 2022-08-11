@@ -11,18 +11,13 @@ use crate::avm1::{ArrayObject, Object, Value};
 use crate::display_object::{TDisplayObject, TDisplayObjectContainer};
 use gc_arena::MutationContext;
 use ruffle_types::backend::navigator::Request;
+use ruffle_types::backend::Backend;
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "loadClip" => method(load_clip; DONT_ENUM | DONT_DELETE);
-    "unloadClip" => method(unload_clip; DONT_ENUM | DONT_DELETE);
-    "getProgress" => method(get_progress; DONT_ENUM | DONT_DELETE);
-};
-
-pub fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let listeners = ArrayObject::new(
         activation.context.gc_context,
         activation.context.avm1.prototypes().array,
@@ -37,11 +32,11 @@ pub fn constructor<'gc>(
     Ok(this.into())
 }
 
-fn load_clip<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn load_clip<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let [url, target, ..] = args {
         if let Value::String(url) = url {
             let target = match target {
@@ -77,11 +72,11 @@ fn load_clip<'gc>(
     Ok(Value::Undefined)
 }
 
-fn unload_clip<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn unload_clip<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let [target, ..] = args {
         let target = match target {
             Value::String(_) => {
@@ -110,11 +105,11 @@ fn unload_clip<'gc>(
     Ok(Value::Undefined)
 }
 
-fn get_progress<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_progress<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let [target, ..] = args {
         let target = match target {
             Value::String(_) => {
@@ -154,15 +149,22 @@ fn get_progress<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-    array_proto: Object<'gc>,
-    broadcaster_functions: BroadcasterFunctions<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+    array_proto: Object<'gc, B>,
+    broadcaster_functions: BroadcasterFunctions<'gc, B>,
+) -> Object<'gc, B> {
     let mcl_proto = ScriptObject::object(gc_context, Some(proto));
     broadcaster_functions.initialize(gc_context, mcl_proto.into(), array_proto);
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "loadClip" => method(load_clip; DONT_ENUM | DONT_DELETE);
+        "unloadClip" => method(unload_clip; DONT_ENUM | DONT_DELETE);
+        "getProgress" => method(get_progress; DONT_ENUM | DONT_DELETE);
+    };
     define_properties_on(PROTO_DECLS, gc_context, mcl_proto, fn_proto);
+
     mcl_proto.into()
 }

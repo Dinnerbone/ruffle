@@ -1,14 +1,16 @@
 //! An internal Ruffle utility to build our playerglobal
 //! `library.swf`
 
-use convert_case::{Case, Casing};
-use proc_macro2::TokenStream;
-use quote::quote;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
+
+use convert_case::{Case, Casing};
+use proc_macro2::TokenStream;
+use quote::quote;
+
 use swf::avm2::types::*;
 use swf::avm2::write::Writer;
 use swf::DoAbc;
@@ -333,17 +335,21 @@ fn write_native_table(data: &[u8], out_dir: &Path) -> Result<Vec<u8>, Box<dyn st
         // and if its ID exists in this table.
         // If so, we replace it with a `NativeMethod` constructed
         // from the function pointer we looked up in the table.
-        pub const NATIVE_METHOD_TABLE: &[Option<crate::avm2::method::NativeMethodImpl>] = &[
-            #(#rust_paths,)*
-        ];
+        pub fn native_method_table<B: ruffle_types::backend::Backend>() -> &'static [Option<crate::avm2::method::NativeMethodImpl<B>>] {
+            &[
+                #(#rust_paths,)*
+            ]
+        }
 
         // This is very similar to `NATIVE_METHOD_TABLE`, but we have one entry per
         // class, rather than per method. When an entry is `Some(fn_ptr)`, we use
         // `fn_ptr` as the instance allocator for the corresponding class when we
         // load it into Ruffle.
-        pub const NATIVE_INSTANCE_ALLOCATOR_TABLE: &[Option<crate::avm2::class::AllocatorFn>] = &[
-            #(#rust_instance_allocators,)*
-        ];
+        pub fn native_instance_allocator_table<B: ruffle_types::backend::Backend>() -> &'static [Option<crate::avm2::class::AllocatorFn<B>>] {
+            &[
+                #(#rust_instance_allocators,)*
+            ]
+        }
     }
     .to_string();
 

@@ -7,6 +7,7 @@ use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{ArrayObject, Object, TObject, Value};
 use bitflags::bitflags;
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 use ruffle_types::ecma_conversions::f64_to_wrapping_i32;
 use ruffle_types::string::AvmString;
 use std::cmp::Ordering;
@@ -26,44 +27,21 @@ bitflags! {
 const DEFAULT_ORDERING: Ordering = Ordering::Equal;
 
 /// Compare function used by `Array.sort` and `Array.sortOn`.
-type CompareFn<'a, 'gc> = Box<
+type CompareFn<'a, 'gc, B: Backend> = Box<
     dyn 'a
         + Fn(
-            &mut Activation<'_, 'gc, '_>,
-            &Value<'gc>,
-            &Value<'gc>,
+            &mut Activation<'_, 'gc, '_, B>,
+            &Value<'gc, B>,
+            &Value<'gc, B>,
             SortOptions,
-        ) -> Result<Ordering, Error<'gc>>,
+        ) -> Result<Ordering, Error<'gc, B>>,
 >;
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "push" => method(push; DONT_ENUM | DONT_DELETE);
-    "unshift" => method(unshift; DONT_ENUM | DONT_DELETE);
-    "shift" => method(shift; DONT_ENUM | DONT_DELETE);
-    "pop" => method(pop; DONT_ENUM | DONT_DELETE);
-    "reverse" => method(reverse; DONT_ENUM | DONT_DELETE);
-    "join" => method(join; DONT_ENUM | DONT_DELETE);
-    "slice" => method(slice; DONT_ENUM | DONT_DELETE);
-    "splice" => method(splice; DONT_ENUM | DONT_DELETE);
-    "concat" => method(concat; DONT_ENUM | DONT_DELETE);
-    "toString" => method(to_string; DONT_ENUM | DONT_DELETE);
-    "sort" => method(sort; DONT_ENUM | DONT_DELETE);
-    "sortOn" => method(sort_on; DONT_ENUM | DONT_DELETE);
-};
-
-const OBJECT_DECLS: &[Declaration] = declare_properties! {
-    "CASEINSENSITIVE" => int(SortOptions::CASE_INSENSITIVE.bits());
-    "DESCENDING" => int(SortOptions::DESCENDING.bits());
-    "UNIQUESORT" => int(SortOptions::UNIQUE_SORT.bits());
-    "RETURNINDEXEDARRAY" => int(SortOptions::RETURN_INDEXED_ARRAY.bits());
-    "NUMERIC" => int(SortOptions::NUMERIC.bits());
-};
-
-pub fn create_array_object<'gc>(
+pub fn create_array_object<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    array_proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    array_proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let array = FunctionObject::constructor(
         gc_context,
         Executable::Native(constructor),
@@ -76,16 +54,24 @@ pub fn create_array_object<'gc>(
     // TODO: These were added in Flash Player 7, but are available even to SWFv6 and lower
     // when run in Flash Player 7. Make these conditional if we add a parameter to control
     // target Flash Player version.
+    let OBJECT_DECLS: &[Declaration<B>] = declare_properties! {
+        "CASEINSENSITIVE" => int(SortOptions::CASE_INSENSITIVE.bits());
+        "DESCENDING" => int(SortOptions::DESCENDING.bits());
+        "UNIQUESORT" => int(SortOptions::UNIQUE_SORT.bits());
+        "RETURNINDEXEDARRAY" => int(SortOptions::RETURN_INDEXED_ARRAY.bits());
+        "NUMERIC" => int(SortOptions::NUMERIC.bits());
+    };
     define_properties_on(OBJECT_DECLS, gc_context, object, fn_proto);
+
     array
 }
 
 /// Implements `Array` constructor and function
-pub fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let [Value::Number(length)] = *args {
         let length = if length.is_finite() && length >= i32::MIN.into() && length <= i32::MAX.into()
         {
@@ -106,11 +92,11 @@ pub fn constructor<'gc>(
     }
 }
 
-pub fn push<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn push<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let old_length = this.length(activation)?;
     for (i, &arg) in args.iter().enumerate() {
         this.set_element(activation, old_length + i as i32, arg)?;
@@ -121,11 +107,11 @@ pub fn push<'gc>(
     Ok(new_length.into())
 }
 
-pub fn unshift<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn unshift<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let old_length = this.length(activation)?;
     let new_length = old_length + args.len() as i32;
     for i in 0..old_length {
@@ -150,11 +136,11 @@ pub fn unshift<'gc>(
     Ok(new_length.into())
 }
 
-pub fn shift<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn shift<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let length = this.length(activation)?;
     if length == 0 {
         return Ok(Value::Undefined);
@@ -180,11 +166,11 @@ pub fn shift<'gc>(
     Ok(first)
 }
 
-pub fn pop<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn pop<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let length = this.length(activation)?;
     if length == 0 {
         return Ok(Value::Undefined);
@@ -201,11 +187,11 @@ pub fn pop<'gc>(
     Ok(last)
 }
 
-pub fn reverse<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn reverse<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let length = this.length(activation)?;
     for lower_index in 0..length / 2 {
         let has_lower = this.has_element(activation, lower_index);
@@ -247,11 +233,11 @@ pub fn reverse<'gc>(
     Ok(this.into())
 }
 
-pub fn join<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn join<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let length = this.length(activation)?;
 
     let separator = if let Some(v) = args.get(0) {
@@ -285,11 +271,11 @@ fn make_index_absolute(index: i32, length: i32) -> i32 {
     }
 }
 
-pub fn slice<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn slice<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let length = this.length(activation)?;
 
     let start = make_index_absolute(
@@ -314,11 +300,11 @@ pub fn slice<'gc>(
     .into())
 }
 
-pub fn splice<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn splice<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if args.is_empty() {
         return Ok(Value::Undefined);
     }
@@ -374,11 +360,11 @@ pub fn splice<'gc>(
     .into())
 }
 
-pub fn concat<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn concat<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let mut elements = vec![];
     for &value in [this.into()].iter().chain(args) {
         let array_object = if let Value::Object(object) = value {
@@ -409,19 +395,19 @@ pub fn concat<'gc>(
     .into())
 }
 
-pub fn to_string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn to_string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     join(activation, this, &[])
 }
 
-fn sort<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn sort<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // Overloads:
     // 1) a.sort(options: Number = 0): Sort with the given options.
     // 2) a.sort(compare_fn: Object, options: Number = 0): Sort using the given compare function and options.
@@ -448,11 +434,11 @@ fn sort<'gc>(
     sort_internal(activation, this, compare_fn, options, false)
 }
 
-fn sort_on<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn sort_on<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // Overloads:
     // 1) a.sortOn(field_name: String, options: Number = 0): Sort by a field and with the given options.
     // 2) a.sortOn(field_names: Array, options: Array): Sort by fields in order of precedence and with the given options respectively.
@@ -479,7 +465,7 @@ fn sort_on<'gc>(
                 return Ok(this.into());
             }
 
-            let fields: Result<Vec<_>, Error<'gc>> = (0..length)
+            let fields: Result<Vec<_>, Error<'gc, B>> = (0..length)
                 .map(|i| {
                     field_names_array
                         .get_element(activation, i)
@@ -536,12 +522,12 @@ fn sort_on<'gc>(
 }
 
 /// Compare between two values, with specified sort options.
-fn sort_compare<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    a: &Value<'gc>,
-    b: &Value<'gc>,
+fn sort_compare<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    a: &Value<'gc, B>,
+    b: &Value<'gc, B>,
     options: SortOptions,
-) -> Result<Ordering, Error<'gc>> {
+) -> Result<Ordering, Error<'gc, B>> {
     let result = match [a, b] {
         [Value::Number(a), Value::Number(b)] if options.contains(SortOptions::NUMERIC) => {
             a.partial_cmp(b).unwrap_or(DEFAULT_ORDERING)
@@ -565,7 +551,9 @@ fn sort_compare<'gc>(
 }
 
 /// Create a compare function based on a user-provided custom AS function.
-fn sort_compare_custom<'a, 'gc>(compare_fn: &'a Object<'gc>) -> CompareFn<'a, 'gc> {
+fn sort_compare_custom<'a, 'gc, B: Backend>(
+    compare_fn: &'a Object<'gc, B>,
+) -> CompareFn<'a, 'gc, B> {
     Box::new(move |activation, a, b, _options| {
         let this = Value::Undefined;
         let args = [*a, *b];
@@ -576,7 +564,9 @@ fn sort_compare_custom<'a, 'gc>(compare_fn: &'a Object<'gc>) -> CompareFn<'a, 'g
 }
 
 /// Create a compare function based on field names and options.
-fn sort_on_compare<'a, 'gc>(fields: &'a [(AvmString<'gc>, SortOptions)]) -> CompareFn<'a, 'gc> {
+fn sort_on_compare<'a, 'gc, B: Backend>(
+    fields: &'a [(AvmString<'gc>, SortOptions)],
+) -> CompareFn<'a, 'gc, B> {
     Box::new(move |activation, a, b, main_options| {
         if let [Value::Object(a), Value::Object(b)] = [a, b] {
             for (field_name, options) in fields {
@@ -603,13 +593,13 @@ fn sort_on_compare<'a, 'gc>(fields: &'a [(AvmString<'gc>, SortOptions)]) -> Comp
 }
 
 /// Common code for both `Array.sort` and `Array.sortOn`.
-fn sort_internal<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    compare_fn: CompareFn<'_, 'gc>,
+fn sort_internal<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    compare_fn: CompareFn<'_, 'gc, B>,
     mut options: SortOptions,
     is_sort_on: bool,
-) -> Result<Value<'gc>, Error<'gc>> {
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let length = this.length(activation)?;
     let mut elements: Vec<_> = (0..length)
         .map(|i| (i, this.get_element(activation, i)))
@@ -663,12 +653,12 @@ fn sort_internal<'gc>(
 }
 
 /// Sort elements using the quicksort algorithm, mimicking Flash's behavior.
-fn qsort<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    elements: &mut [(i32, Value<'gc>)],
-    compare_fn: &CompareFn<'_, 'gc>,
+fn qsort<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    elements: &mut [(i32, Value<'gc, B>)],
+    compare_fn: &CompareFn<'_, 'gc, B>,
     options: SortOptions,
-) -> Result<(), Error<'gc>> {
+) -> Result<(), Error<'gc, B>> {
     if elements.len() < 2 {
         // One or no elements - nothing to do.
         return Ok(());
@@ -741,13 +731,29 @@ fn qsort<'gc>(
     Ok(())
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let array = ArrayObject::empty_with_proto(gc_context, proto);
     let object = array.as_script_object().unwrap();
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "push" => method(push; DONT_ENUM | DONT_DELETE);
+        "unshift" => method(unshift; DONT_ENUM | DONT_DELETE);
+        "shift" => method(shift; DONT_ENUM | DONT_DELETE);
+        "pop" => method(pop; DONT_ENUM | DONT_DELETE);
+        "reverse" => method(reverse; DONT_ENUM | DONT_DELETE);
+        "join" => method(join; DONT_ENUM | DONT_DELETE);
+        "slice" => method(slice; DONT_ENUM | DONT_DELETE);
+        "splice" => method(splice; DONT_ENUM | DONT_DELETE);
+        "concat" => method(concat; DONT_ENUM | DONT_DELETE);
+        "toString" => method(to_string; DONT_ENUM | DONT_DELETE);
+        "sort" => method(sort; DONT_ENUM | DONT_DELETE);
+        "sortOn" => method(sort_on; DONT_ENUM | DONT_DELETE);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     object.into()
 }

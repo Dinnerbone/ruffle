@@ -6,28 +6,14 @@ use crate::avm1::object::bevel_filter::{BevelFilterObject, BevelFilterType};
 use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{Object, TObject, Value};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 use ruffle_types::string::{AvmString, WStr};
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "distance" => property(distance, set_distance);
-    "angle" => property(angle, set_angle);
-    "highlightColor" => property(highlight_color, set_highlight_color);
-    "highlightAlpha" => property(highlight_alpha, set_highlight_alpha);
-    "shadowColor" => property(shadow_color, set_shadow_color);
-    "shadowAlpha" => property(shadow_alpha, set_shadow_alpha);
-    "quality" => property(quality, set_quality);
-    "strength" => property(strength, set_strength);
-    "knockout" => property(knockout, set_knockout);
-    "blurX" => property(blur_x, set_blur_x);
-    "blurY" => property(blur_y, set_blur_y);
-    "type" => property(get_type, set_type);
-};
-
-pub fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     set_distance(activation, this, args.get(0..1).unwrap_or_default())?;
     set_angle(activation, this, args.get(1..2).unwrap_or_default())?;
     set_highlight_color(activation, this, args.get(2..3).unwrap_or_default())?;
@@ -44,11 +30,11 @@ pub fn constructor<'gc>(
     Ok(this.into())
 }
 
-pub fn distance<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn distance<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_bevel_filter_object() {
         return Ok(filter.distance().into());
     }
@@ -56,11 +42,11 @@ pub fn distance<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_distance<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_distance<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let distance = args.get(0).unwrap_or(&4.into()).coerce_to_f64(activation)?;
 
     if let Some(filter) = this.as_bevel_filter_object() {
@@ -70,11 +56,11 @@ pub fn set_distance<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn angle<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn angle<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_bevel_filter_object() {
         return Ok(filter.angle().into());
     }
@@ -82,11 +68,11 @@ pub fn angle<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_angle<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_angle<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let angle = args
         .get(0)
         .unwrap_or(&44.9999999772279.into())
@@ -105,11 +91,11 @@ pub fn set_angle<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn highlight_color<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn highlight_color<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_bevel_filter_object() {
         return Ok(filter.highlight_color().into());
     }
@@ -117,11 +103,11 @@ pub fn highlight_color<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_highlight_color<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_highlight_color<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let highlight_color = args
         .get(0)
         .unwrap_or(&0xFFFFFF.into())
@@ -134,11 +120,11 @@ pub fn set_highlight_color<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn highlight_alpha<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn highlight_alpha<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_bevel_filter_object() {
         return Ok(filter.highlight_alpha().into());
     }
@@ -146,11 +132,11 @@ pub fn highlight_alpha<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_highlight_alpha<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_highlight_alpha<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let highlight_alpha = args
         .get(0)
         .unwrap_or(&1.into())
@@ -164,11 +150,11 @@ pub fn set_highlight_alpha<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn shadow_color<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn shadow_color<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_bevel_filter_object() {
         return Ok(filter.shadow_color().into());
     }
@@ -176,11 +162,11 @@ pub fn shadow_color<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_shadow_color<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_shadow_color<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let color = args
         .get(0)
         .unwrap_or(&0x000000.into())
@@ -193,11 +179,11 @@ pub fn set_shadow_color<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn shadow_alpha<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn shadow_alpha<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_bevel_filter_object() {
         return Ok(filter.shadow_alpha().into());
     }
@@ -205,11 +191,11 @@ pub fn shadow_alpha<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_shadow_alpha<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_shadow_alpha<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let shadow_alpha = args
         .get(0)
         .unwrap_or(&1.into())
@@ -223,11 +209,11 @@ pub fn set_shadow_alpha<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn quality<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn quality<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_bevel_filter_object() {
         return Ok(filter.quality().into());
     }
@@ -235,11 +221,11 @@ pub fn quality<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_quality<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_quality<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let quality = args
         .get(0)
         .unwrap_or(&1.into())
@@ -253,11 +239,11 @@ pub fn set_quality<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn strength<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn strength<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_bevel_filter_object() {
         return Ok(filter.strength().into());
     }
@@ -265,11 +251,11 @@ pub fn strength<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_strength<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_strength<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let strength = args
         .get(0)
         .unwrap_or(&1.into())
@@ -283,11 +269,11 @@ pub fn set_strength<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn knockout<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn knockout<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_bevel_filter_object() {
         return Ok(filter.knockout().into());
     }
@@ -295,11 +281,11 @@ pub fn knockout<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_knockout<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_knockout<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let knockout = args
         .get(0)
         .unwrap_or(&false.into())
@@ -312,11 +298,11 @@ pub fn set_knockout<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn blur_x<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn blur_x<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_bevel_filter_object() {
         return Ok(filter.blur_x().into());
     }
@@ -324,11 +310,11 @@ pub fn blur_x<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_blur_x<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_blur_x<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let blur_x = args
         .get(0)
         .unwrap_or(&4.into())
@@ -342,11 +328,11 @@ pub fn set_blur_x<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn blur_y<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn blur_y<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_bevel_filter_object() {
         return Ok(filter.blur_y().into());
     }
@@ -354,11 +340,11 @@ pub fn blur_y<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_blur_y<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_blur_y<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let blur_y = args
         .get(0)
         .unwrap_or(&4.into())
@@ -372,11 +358,11 @@ pub fn set_blur_y<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn get_type<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_type<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_bevel_filter_object() {
         let type_: &WStr = filter.get_type().into();
         return Ok(AvmString::from(type_).into());
@@ -385,11 +371,11 @@ pub fn get_type<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_type<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_type<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let type_: BevelFilterType = args
         .get(0)
         .unwrap_or(&"inner".into())
@@ -403,13 +389,29 @@ pub fn set_type<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let object = BevelFilterObject::empty_object(gc_context, Some(proto));
     let script_object = object.as_script_object().unwrap();
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "distance" => property(distance, set_distance);
+        "angle" => property(angle, set_angle);
+        "highlightColor" => property(highlight_color, set_highlight_color);
+        "highlightAlpha" => property(highlight_alpha, set_highlight_alpha);
+        "shadowColor" => property(shadow_color, set_shadow_color);
+        "shadowAlpha" => property(shadow_alpha, set_shadow_alpha);
+        "quality" => property(quality, set_quality);
+        "strength" => property(strength, set_strength);
+        "knockout" => property(knockout, set_knockout);
+        "blurX" => property(blur_x, set_blur_x);
+        "blurY" => property(blur_y, set_blur_y);
+        "type" => property(get_type, set_type);
+    };
     define_properties_on(PROTO_DECLS, gc_context, script_object, fn_proto);
+
     object.into()
 }

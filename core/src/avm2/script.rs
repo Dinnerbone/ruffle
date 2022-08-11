@@ -13,6 +13,7 @@ use crate::avm2::value::Value;
 use crate::avm2::{Avm2, Error};
 use crate::context::UpdateContext;
 use gc_arena::{Collect, Gc, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 use std::borrow::Cow;
 use std::cell::Ref;
@@ -22,7 +23,7 @@ use swf::avm2::types::{AbcFile, Index, Method as AbcMethod, Script as AbcScript}
 
 #[derive(Copy, Clone, Debug, Collect)]
 #[collect(no_drop)]
-pub struct TranslationUnit<'gc>(GcCell<'gc, TranslationUnitData<'gc>>);
+pub struct TranslationUnit<'gc, B: Backend>(GcCell<'gc, TranslationUnitData<'gc, B>>);
 
 /// A loaded ABC file, with any loaded ABC items alongside it.
 ///
@@ -38,22 +39,22 @@ pub struct TranslationUnit<'gc>(GcCell<'gc, TranslationUnitData<'gc>>);
 /// constructing the appropriate runtime object for that item.
 #[derive(Clone, Debug, Collect)]
 #[collect(no_drop)]
-pub struct TranslationUnitData<'gc> {
+pub struct TranslationUnitData<'gc, B: Backend> {
     /// The domain that all scripts in the translation unit export defs to.
-    domain: Domain<'gc>,
+    domain: Domain<'gc, B>,
 
     /// The ABC file that all of the following loaded data comes from.
     #[collect(require_static)]
     abc: Rc<AbcFile>,
 
     /// All classes loaded from the ABC's class list.
-    classes: Vec<Option<GcCell<'gc, Class<'gc>>>>,
+    classes: Vec<Option<GcCell<'gc, Class<'gc, B>>>>,
 
     /// All methods loaded from the ABC's method list.
-    methods: Vec<Option<Method<'gc>>>,
+    methods: Vec<Option<Method<'gc, B>>>,
 
     /// All scripts loaded from the ABC's scripts list.
-    scripts: Vec<Option<Script<'gc>>>,
+    scripts: Vec<Option<Script<'gc, B>>>,
 
     /// All strings loaded from the ABC's strings list.
     /// They're lazy loaded and offset by 1, with the 0th element being always None.
@@ -74,13 +75,17 @@ pub struct TranslationUnitData<'gc> {
     /// traits declared by that script. When looking up a
     /// trait name in this map, you must ensure that its
     /// corresponing `Script` will have already been loaded.
-    private_trait_scripts: PropertyMap<'gc, Script<'gc>>,
+    private_trait_scripts: PropertyMap<'gc, Script<'gc, B>>,
 }
 
-impl<'gc> TranslationUnit<'gc> {
+impl<'gc, B: Backend> TranslationUnit<'gc, B> {
     /// Construct a new `TranslationUnit` for a given ABC file intended to
     /// execute within a particular domain.
-    pub fn from_abc(abc: Rc<AbcFile>, domain: Domain<'gc>, mc: MutationContext<'gc, '_>) -> Self {
+    pub fn from_abc(
+        abc: Rc<AbcFile>,
+        domain: Domain<'gc, B>,
+        mc: MutationContext<'gc, '_>,
+    ) -> Self {
         let classes = vec![None; abc.classes.len()];
         let methods = vec![None; abc.methods.len()];
         let scripts = vec![None; abc.scripts.len()];
@@ -101,7 +106,7 @@ impl<'gc> TranslationUnit<'gc> {
         ))
     }
 
-    pub fn domain(self) -> Domain<'gc> {
+    pub fn domain(self) -> Domain<'gc, B> {
         self.0.read().domain
     }
 
@@ -110,7 +115,7 @@ impl<'gc> TranslationUnit<'gc> {
         self.0.read().abc.clone()
     }
 
-    pub fn get_loaded_private_trait_script(self, name: &Multiname<'gc>) -> Option<Script<'gc>> {
+    pub fn get_loaded_private_trait_script(self, name: &Multiname<'gc>) -> Option<Script<'gc, B>> {
         self.0
             .read()
             .private_trait_scripts
@@ -123,8 +128,8 @@ impl<'gc> TranslationUnit<'gc> {
         self,
         method_index: Index<AbcMethod>,
         is_function: bool,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Method<'gc>, Error> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Method<'gc, B>, Error> {
         let read = self.0.read();
         if let Some(Some(method)) = read.methods.get(method_index.0 as usize) {
             return Ok(method.clone());
@@ -165,8 +170,8 @@ impl<'gc> TranslationUnit<'gc> {
     pub fn load_class(
         self,
         class_index: u32,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<GcCell<'gc, Class<'gc>>, Error> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<GcCell<'gc, Class<'gc, B>>, Error> {
         let read = self.0.read();
         if let Some(Some(class)) = read.classes.get(class_index as usize) {
             return Ok(*class);
@@ -188,8 +193,8 @@ impl<'gc> TranslationUnit<'gc> {
     pub fn load_script(
         self,
         script_index: u32,
-        uc: &mut UpdateContext<'_, 'gc, '_>,
-    ) -> Result<Script<'gc>, Error> {
+        uc: &mut UpdateContext<'_, 'gc, '_, B>,
+    ) -> Result<Script<'gc, B>, Error> {
         let read = self.0.read();
         if let Some(Some(scripts)) = read.scripts.get(script_index as usize) {
             return Ok(*scripts);
@@ -267,22 +272,22 @@ impl<'gc> TranslationUnit<'gc> {
 /// A loaded Script from an ABC file.
 #[derive(Copy, Clone, Debug, Collect)]
 #[collect(no_drop)]
-pub struct Script<'gc>(GcCell<'gc, ScriptData<'gc>>);
+pub struct Script<'gc, B: Backend>(GcCell<'gc, ScriptData<'gc, B>>);
 
 #[derive(Clone, Debug, Collect)]
 #[collect(no_drop)]
-struct ScriptData<'gc> {
+struct ScriptData<'gc, B: Backend> {
     /// The global object for the script.
-    globals: Object<'gc>,
+    globals: Object<'gc, B>,
 
     /// The domain associated with this script.
-    domain: Domain<'gc>,
+    domain: Domain<'gc, B>,
 
     /// The initializer method to run for the script.
-    init: Method<'gc>,
+    init: Method<'gc, B>,
 
     /// Traits that this script uses.
-    traits: Vec<Trait<'gc>>,
+    traits: Vec<Trait<'gc, B>>,
 
     /// Whether or not we loaded our traits.
     traits_loaded: bool,
@@ -291,7 +296,7 @@ struct ScriptData<'gc> {
     initialized: bool,
 }
 
-impl<'gc> Script<'gc> {
+impl<'gc, B: Backend> Script<'gc, B> {
     /// Create an empty script.
     ///
     /// This method is intended for builtin script initialization, such as our
@@ -304,8 +309,8 @@ impl<'gc> Script<'gc> {
     /// prototype.
     pub fn empty_script(
         mc: MutationContext<'gc, '_>,
-        globals: Object<'gc>,
-        domain: Domain<'gc>,
+        globals: Object<'gc, B>,
+        domain: Domain<'gc, B>,
     ) -> Self {
         Self(GcCell::allocate(
             mc,
@@ -334,11 +339,11 @@ impl<'gc> Script<'gc> {
     /// The given `globals` should be an empty object of the `global` hidden
     /// type. The initializer script will create and store traits on it.
     pub fn from_abc_index(
-        unit: TranslationUnit<'gc>,
+        unit: TranslationUnit<'gc, B>,
         script_index: u32,
-        globals: Object<'gc>,
-        domain: Domain<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        globals: Object<'gc, B>,
+        domain: Domain<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<Self, Error> {
         let abc = unit.abc();
         let script: Result<&AbcScript, Error> = abc
@@ -370,9 +375,9 @@ impl<'gc> Script<'gc> {
     /// executed.
     pub fn load_traits(
         &mut self,
-        unit: TranslationUnit<'gc>,
+        unit: TranslationUnit<'gc, B>,
         script_index: u32,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         let mut write = self.0.write(activation.context.gc_context);
 
@@ -411,7 +416,7 @@ impl<'gc> Script<'gc> {
     }
 
     /// Return the entrypoint for the script and the scope it should run in.
-    pub fn init(self) -> (Method<'gc>, Object<'gc>, Domain<'gc>) {
+    pub fn init(self) -> (Method<'gc, B>, Object<'gc, B>, Domain<'gc, B>) {
         let read = self.0.read();
         (read.init.clone(), read.globals, read.domain)
     }
@@ -422,8 +427,8 @@ impl<'gc> Script<'gc> {
     /// the same stack.
     pub fn globals(
         &mut self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-    ) -> Result<Object<'gc>, Error> {
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+    ) -> Result<Object<'gc, B>, Error> {
         let mut write = self.0.write(context.gc_context);
 
         if !write.initialized {
@@ -458,7 +463,7 @@ impl<'gc> Script<'gc> {
     ///
     /// This function will return an error if it is incorrectly called before
     /// traits are loaded.
-    pub fn traits<'a>(&'a self) -> Result<Ref<'a, [Trait<'gc>]>, Error> {
+    pub fn traits<'a>(&'a self) -> Result<Ref<'a, [Trait<'gc, B>]>, Error> {
         let read = self.0.read();
 
         if !read.traits_loaded {

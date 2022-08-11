@@ -4,14 +4,15 @@ use crate::avm2::value::Value;
 use crate::avm2::Error;
 use crate::avm2::{Namespace, QName};
 use crate::display_object::TDisplayObject;
+use ruffle_types::backend::Backend;
 use swf::Twips;
 
 /// Implements `stageX`'s getter.
-pub fn get_stage_x<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn get_stage_x<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(evt) = this.as_event() {
             let local_x = this
@@ -38,11 +39,11 @@ pub fn get_stage_x<'gc>(
 }
 
 /// Implements `stageY`'s getter.
-pub fn get_stage_y<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn get_stage_y<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(evt) = this.as_event() {
             let local_y = this

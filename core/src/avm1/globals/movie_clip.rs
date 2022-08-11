@@ -14,7 +14,7 @@ use crate::display_object::{
 use crate::prelude::*;
 use gc_arena::MutationContext;
 use ruffle_types::backend::navigator::NavigationMethod;
-use ruffle_types::backend::render;
+use ruffle_types::backend::{render, Backend};
 use ruffle_types::ecma_conversions::f64_to_wrapping_i32;
 use ruffle_types::shape_utils::DrawCommand;
 use ruffle_types::vminterface::Instantiator;
@@ -63,68 +63,21 @@ macro_rules! mc_setter {
     };
 }
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "attachMovie" => method(mc_method!(attach_movie); DONT_ENUM | DONT_DELETE);
-    "createEmptyMovieClip" => method(mc_method!(create_empty_movie_clip); DONT_ENUM | DONT_DELETE; version(6));
-    "createTextField" => method(mc_method!(create_text_field); DONT_ENUM | DONT_DELETE);
-    "duplicateMovieClip" => method(mc_method!(duplicate_movie_clip); DONT_ENUM | DONT_DELETE);
-    "getBounds" => method(mc_method!(get_bounds); DONT_ENUM | DONT_DELETE);
-    "getBytesLoaded" => method(mc_method!(get_bytes_loaded); DONT_ENUM | DONT_DELETE);
-    "getBytesTotal" => method(mc_method!(get_bytes_total); DONT_ENUM | DONT_DELETE);
-    "getDepth" => method(globals::get_depth; DONT_ENUM | DONT_DELETE | READ_ONLY; version(6));
-    "getInstanceAtDepth" => method(mc_method!(get_instance_at_depth); DONT_ENUM | DONT_DELETE; version(7));
-    "getNextHighestDepth" => method(mc_method!(get_next_highest_depth); DONT_ENUM | DONT_DELETE; version(7));
-    "getRect" => method(mc_method!(get_rect); DONT_ENUM | DONT_DELETE; version(8));
-    "getURL" => method(mc_method!(get_url); DONT_ENUM | DONT_DELETE);
-    "globalToLocal" => method(mc_method!(global_to_local); DONT_ENUM | DONT_DELETE);
-    "gotoAndPlay" => method(mc_method!(goto_and_play); DONT_ENUM | DONT_DELETE);
-    "gotoAndStop" => method(mc_method!(goto_and_stop); DONT_ENUM | DONT_DELETE);
-    "hitTest" => method(mc_method!(hit_test); DONT_ENUM | DONT_DELETE);
-    "loadMovie" => method(mc_method!(load_movie); DONT_ENUM | DONT_DELETE);
-    "loadVariables" => method(mc_method!(load_variables); DONT_ENUM | DONT_DELETE);
-    "localToGlobal" => method(mc_method!(local_to_global); DONT_ENUM | DONT_DELETE);
-    "nextFrame" => method(mc_method!(next_frame); DONT_ENUM | DONT_DELETE);
-    "play" => method(mc_method!(play); DONT_ENUM | DONT_DELETE);
-    "prevFrame" => method(mc_method!(prev_frame); DONT_ENUM | DONT_DELETE);
-    "setMask" => method(mc_method!(set_mask); DONT_ENUM | DONT_DELETE; version(6));
-    "startDrag" => method(mc_method!(start_drag); DONT_ENUM | DONT_DELETE);
-    "stop" => method(mc_method!(stop); DONT_ENUM | DONT_DELETE);
-    "stopDrag" => method(mc_method!(stop_drag); DONT_ENUM | DONT_DELETE);
-    "swapDepths" => method(mc_method!(swap_depths); DONT_ENUM | DONT_DELETE);
-    "unloadMovie" => method(mc_method!(unload_movie); DONT_ENUM | DONT_DELETE);
-    "beginFill" => method(mc_method!(begin_fill); DONT_ENUM | DONT_DELETE; version(6));
-    "beginBitmapFill" => method(mc_method!(begin_bitmap_fill); DONT_ENUM | DONT_DELETE; version(8));
-    "beginGradientFill" => method(mc_method!(begin_gradient_fill); DONT_ENUM | DONT_DELETE; version(6));
-    "moveTo" => method(mc_method!(move_to); DONT_ENUM | DONT_DELETE; version(6));
-    "lineTo" => method(mc_method!(line_to); DONT_ENUM | DONT_DELETE; version(6));
-    "curveTo" => method(mc_method!(curve_to); DONT_ENUM | DONT_DELETE; version(6));
-    "endFill" => method(mc_method!(end_fill); DONT_ENUM | DONT_DELETE; version(6));
-    "lineStyle" => method(mc_method!(line_style); DONT_ENUM | DONT_DELETE; version(6));
-    "clear" => method(mc_method!(clear); DONT_ENUM | DONT_DELETE; version(6));
-    "attachBitmap" => method(mc_method!(attach_bitmap); DONT_ENUM | DONT_DELETE; version(8));
-    "removeMovieClip" => method(remove_movie_clip; DONT_ENUM | DONT_DELETE);
-    "transform" => property(mc_getter!(transform), mc_setter!(set_transform); DONT_ENUM; version(8));
-    "enabled" => property(mc_getter!(enabled), mc_setter!(set_enabled); DONT_DELETE | DONT_ENUM);
-    "focusEnabled" => property(mc_getter!(focus_enabled), mc_setter!(set_focus_enabled); DONT_DELETE | DONT_ENUM);
-    "_lockroot" => property(mc_getter!(lock_root), mc_setter!(set_lock_root); DONT_DELETE | DONT_ENUM);
-    "useHandCursor" => property(mc_getter!(use_hand_cursor), mc_setter!(set_use_hand_cursor); DONT_DELETE | DONT_ENUM);
-};
-
 /// Implements `MovieClip`
-pub fn constructor<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(this.into())
 }
 
 #[allow(clippy::comparison_chain)]
-pub fn hit_test<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn hit_test<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if args.len() > 1 {
         let x = args.get(0).unwrap().coerce_to_f64(activation)?;
         let y = args.get(1).unwrap().coerce_to_f64(activation)?;
@@ -163,21 +116,69 @@ pub fn hit_test<'gc>(
     Ok(false.into())
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let object = ScriptObject::object(gc_context, Some(proto));
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "attachMovie" => method(mc_method!(attach_movie); DONT_ENUM | DONT_DELETE);
+        "createEmptyMovieClip" => method(mc_method!(create_empty_movie_clip); DONT_ENUM | DONT_DELETE; version(6));
+        "createTextField" => method(mc_method!(create_text_field); DONT_ENUM | DONT_DELETE);
+        "duplicateMovieClip" => method(mc_method!(duplicate_movie_clip); DONT_ENUM | DONT_DELETE);
+        "getBounds" => method(mc_method!(get_bounds); DONT_ENUM | DONT_DELETE);
+        "getBytesLoaded" => method(mc_method!(get_bytes_loaded); DONT_ENUM | DONT_DELETE);
+        "getBytesTotal" => method(mc_method!(get_bytes_total); DONT_ENUM | DONT_DELETE);
+        "getDepth" => method(globals::get_depth; DONT_ENUM | DONT_DELETE | READ_ONLY; version(6));
+        "getInstanceAtDepth" => method(mc_method!(get_instance_at_depth); DONT_ENUM | DONT_DELETE; version(7));
+        "getNextHighestDepth" => method(mc_method!(get_next_highest_depth); DONT_ENUM | DONT_DELETE; version(7));
+        "getRect" => method(mc_method!(get_rect); DONT_ENUM | DONT_DELETE; version(8));
+        "getURL" => method(mc_method!(get_url); DONT_ENUM | DONT_DELETE);
+        "globalToLocal" => method(mc_method!(global_to_local); DONT_ENUM | DONT_DELETE);
+        "gotoAndPlay" => method(mc_method!(goto_and_play); DONT_ENUM | DONT_DELETE);
+        "gotoAndStop" => method(mc_method!(goto_and_stop); DONT_ENUM | DONT_DELETE);
+        "hitTest" => method(mc_method!(hit_test); DONT_ENUM | DONT_DELETE);
+        "loadMovie" => method(mc_method!(load_movie); DONT_ENUM | DONT_DELETE);
+        "loadVariables" => method(mc_method!(load_variables); DONT_ENUM | DONT_DELETE);
+        "localToGlobal" => method(mc_method!(local_to_global); DONT_ENUM | DONT_DELETE);
+        "nextFrame" => method(mc_method!(next_frame); DONT_ENUM | DONT_DELETE);
+        "play" => method(mc_method!(play); DONT_ENUM | DONT_DELETE);
+        "prevFrame" => method(mc_method!(prev_frame); DONT_ENUM | DONT_DELETE);
+        "setMask" => method(mc_method!(set_mask); DONT_ENUM | DONT_DELETE; version(6));
+        "startDrag" => method(mc_method!(start_drag); DONT_ENUM | DONT_DELETE);
+        "stop" => method(mc_method!(stop); DONT_ENUM | DONT_DELETE);
+        "stopDrag" => method(mc_method!(stop_drag); DONT_ENUM | DONT_DELETE);
+        "swapDepths" => method(mc_method!(swap_depths); DONT_ENUM | DONT_DELETE);
+        "unloadMovie" => method(mc_method!(unload_movie); DONT_ENUM | DONT_DELETE);
+        "beginFill" => method(mc_method!(begin_fill); DONT_ENUM | DONT_DELETE; version(6));
+        "beginBitmapFill" => method(mc_method!(begin_bitmap_fill); DONT_ENUM | DONT_DELETE; version(8));
+        "beginGradientFill" => method(mc_method!(begin_gradient_fill); DONT_ENUM | DONT_DELETE; version(6));
+        "moveTo" => method(mc_method!(move_to); DONT_ENUM | DONT_DELETE; version(6));
+        "lineTo" => method(mc_method!(line_to); DONT_ENUM | DONT_DELETE; version(6));
+        "curveTo" => method(mc_method!(curve_to); DONT_ENUM | DONT_DELETE; version(6));
+        "endFill" => method(mc_method!(end_fill); DONT_ENUM | DONT_DELETE; version(6));
+        "lineStyle" => method(mc_method!(line_style); DONT_ENUM | DONT_DELETE; version(6));
+        "clear" => method(mc_method!(clear); DONT_ENUM | DONT_DELETE; version(6));
+        "attachBitmap" => method(mc_method!(attach_bitmap); DONT_ENUM | DONT_DELETE; version(8));
+        "removeMovieClip" => method(remove_movie_clip; DONT_ENUM | DONT_DELETE);
+        "transform" => property(mc_getter!(transform), mc_setter!(set_transform); DONT_ENUM; version(8));
+        "enabled" => property(mc_getter!(enabled), mc_setter!(set_enabled); DONT_DELETE | DONT_ENUM);
+        "focusEnabled" => property(mc_getter!(focus_enabled), mc_setter!(set_focus_enabled); DONT_DELETE | DONT_ENUM);
+        "_lockroot" => property(mc_getter!(lock_root), mc_setter!(set_lock_root); DONT_DELETE | DONT_ENUM);
+        "useHandCursor" => property(mc_getter!(use_hand_cursor), mc_setter!(set_use_hand_cursor); DONT_DELETE | DONT_ENUM);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     object.into()
 }
 
-fn attach_bitmap<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn attach_bitmap<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap) = args.get(0) {
         if let Some(bitmap_data) = bitmap
             .coerce_to_object(activation)
@@ -234,11 +235,11 @@ fn attach_bitmap<'gc>(
     Ok(Value::Undefined)
 }
 
-fn line_style<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn line_style<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(width) = args.get(0) {
         let width = Twips::from_pixels(width.coerce_to_f64(activation)?.clamp(0.0, 255.0));
         let color = if let Some(rgb) = args.get(1) {
@@ -315,11 +316,11 @@ fn line_style<'gc>(
     Ok(Value::Undefined)
 }
 
-fn begin_fill<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn begin_fill<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(rgb) = args.get(0) {
         let rgb = rgb.coerce_to_u32(activation)?;
         let alpha = if let Some(alpha) = args.get(1) {
@@ -342,11 +343,11 @@ fn begin_fill<'gc>(
     Ok(Value::Undefined)
 }
 
-fn begin_bitmap_fill<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn begin_bitmap_fill<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(bitmap_data) = args
         .get(0)
         .and_then(|val| val.coerce_to_object(activation).as_bitmap_data_object())
@@ -406,11 +407,11 @@ fn begin_bitmap_fill<'gc>(
     Ok(Value::Undefined)
 }
 
-fn begin_gradient_fill<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn begin_gradient_fill<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let (Some(method), Some(colors), Some(alphas), Some(ratios), Some(matrix)) = (
         args.get(0),
         args.get(1),
@@ -433,7 +434,7 @@ fn begin_gradient_fill<'gc>(
             );
             return Ok(Value::Undefined);
         }
-        let records: Result<Vec<_>, Error<'gc>> = (0..colors_length)
+        let records: Result<Vec<_>, Error<'gc, B>> = (0..colors_length)
             .map(|i| {
                 let ratio = ratios_object
                     .get_element(activation, i)
@@ -510,11 +511,11 @@ fn begin_gradient_fill<'gc>(
     Ok(Value::Undefined)
 }
 
-fn move_to<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn move_to<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let (Some(x), Some(y)) = (args.get(0), args.get(1)) {
         let x = x.coerce_to_f64(activation)?;
         let y = y.coerce_to_f64(activation)?;
@@ -529,11 +530,11 @@ fn move_to<'gc>(
     Ok(Value::Undefined)
 }
 
-fn line_to<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn line_to<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let (Some(x), Some(y)) = (args.get(0), args.get(1)) {
         let x = x.coerce_to_f64(activation)?;
         let y = y.coerce_to_f64(activation)?;
@@ -548,11 +549,11 @@ fn line_to<'gc>(
     Ok(Value::Undefined)
 }
 
-fn curve_to<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn curve_to<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let (Some(x1), Some(y1), Some(x2), Some(y2)) =
         (args.get(0), args.get(1), args.get(2), args.get(3))
     {
@@ -573,11 +574,11 @@ fn curve_to<'gc>(
     Ok(Value::Undefined)
 }
 
-fn end_fill<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn end_fill<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     movie_clip
         .as_drawing(activation.context.gc_context)
         .unwrap()
@@ -585,11 +586,11 @@ fn end_fill<'gc>(
     Ok(Value::Undefined)
 }
 
-fn clear<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn clear<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     movie_clip
         .as_drawing(activation.context.gc_context)
         .unwrap()
@@ -597,11 +598,11 @@ fn clear<'gc>(
     Ok(Value::Undefined)
 }
 
-fn attach_movie<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn attach_movie<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let (export_name, new_instance_name, depth) = match &args.get(0..3) {
         Some([export_name, new_instance_name, depth]) => (
             export_name.coerce_to_string(activation)?,
@@ -652,11 +653,11 @@ fn attach_movie<'gc>(
     }
 }
 
-fn create_empty_movie_clip<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn create_empty_movie_clip<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let (new_instance_name, depth) = match &args.get(0..2) {
         Some([new_instance_name, depth]) => (
             new_instance_name.coerce_to_string(activation)?,
@@ -688,11 +689,11 @@ fn create_empty_movie_clip<'gc>(
     Ok(new_clip.object())
 }
 
-fn create_text_field<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn create_text_field<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let movie = activation.base_clip().movie().unwrap();
     let instance_name = args.get(0).cloned().unwrap_or(Value::Undefined);
     let depth = args
@@ -721,7 +722,7 @@ fn create_text_field<'gc>(
         .unwrap_or(Value::Undefined)
         .coerce_to_f64(activation)?;
 
-    let text_field: DisplayObject<'gc> =
+    let text_field: DisplayObject<'gc, B> =
         EditText::new(&mut activation.context, movie, x, y, width, height).into();
     text_field.set_name(
         activation.context.gc_context,
@@ -742,21 +743,21 @@ fn create_text_field<'gc>(
     }
 }
 
-fn duplicate_movie_clip<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn duplicate_movie_clip<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // duplicateMovieClip method uses biased depth compared to CloneSprite
     duplicate_movie_clip_with_bias(movie_clip, activation, args, AVM_DEPTH_BIAS)
 }
 
-pub fn duplicate_movie_clip_with_bias<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
+pub fn duplicate_movie_clip_with_bias<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
     depth_bias: i32,
-) -> Result<Value<'gc>, Error<'gc>> {
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let (new_instance_name, depth) = match &args.get(0..2) {
         Some([new_instance_name, depth]) => (
             new_instance_name.coerce_to_string(activation)?,
@@ -844,11 +845,11 @@ pub fn duplicate_movie_clip_with_bias<'gc>(
     }
 }
 
-fn get_bytes_loaded<'gc>(
-    movie_clip: MovieClip<'gc>,
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_bytes_loaded<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let bytes_loaded = if movie_clip.is_root() {
         movie_clip
             .movie()
@@ -860,11 +861,11 @@ fn get_bytes_loaded<'gc>(
     Ok(bytes_loaded.into())
 }
 
-fn get_bytes_total<'gc>(
-    movie_clip: MovieClip<'gc>,
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_bytes_total<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // For a loaded SWF, returns the uncompressed size of the SWF.
     // Otherwise, returns the size of the tag list in the clip's DefineSprite tag.
     let bytes_total = if movie_clip.is_root() {
@@ -878,11 +879,11 @@ fn get_bytes_total<'gc>(
     Ok(bytes_total.into())
 }
 
-fn get_instance_at_depth<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_instance_at_depth<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if activation.swf_version() >= 7 {
         let depth = if let Some(depth) = args.get(0) {
             depth
@@ -913,11 +914,11 @@ fn get_instance_at_depth<'gc>(
     }
 }
 
-fn get_next_highest_depth<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_next_highest_depth<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if activation.swf_version() >= 7 {
         let depth = std::cmp::max(
             movie_clip
@@ -932,29 +933,29 @@ fn get_next_highest_depth<'gc>(
     }
 }
 
-fn goto_and_play<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn goto_and_play<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     goto_frame(movie_clip, activation, args, false, 0)
 }
 
-fn goto_and_stop<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn goto_and_stop<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     goto_frame(movie_clip, activation, args, true, 0)
 }
 
-pub fn goto_frame<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
+pub fn goto_frame<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
     stop: bool,
     scene_offset: u16,
-) -> Result<Value<'gc>, Error<'gc>> {
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let mut call_frame = None;
 
     match args.get(0).cloned().unwrap_or(Value::Undefined) {
@@ -1000,38 +1001,38 @@ pub fn goto_frame<'gc>(
     Ok(Value::Undefined)
 }
 
-fn next_frame<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn next_frame<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     movie_clip.next_frame(&mut activation.context);
     Ok(Value::Undefined)
 }
 
-fn play<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn play<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     movie_clip.play(&mut activation.context);
     Ok(Value::Undefined)
 }
 
-fn prev_frame<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn prev_frame<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     movie_clip.prev_frame(&mut activation.context);
     Ok(Value::Undefined)
 }
 
-fn remove_movie_clip<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn remove_movie_clip<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // `removeMovieClip` can remove all types of display object,
     // e.g. `MovieClip.prototype.removeMovieClip.apply(textField);`
     if let Some(this) = this.as_display_object() {
@@ -1041,11 +1042,11 @@ fn remove_movie_clip<'gc>(
     Ok(Value::Undefined)
 }
 
-fn set_mask<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_mask<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let mask = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -1061,29 +1062,29 @@ fn set_mask<'gc>(
     Ok(Value::Undefined)
 }
 
-fn start_drag<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn start_drag<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     crate::avm1::start_drag(movie_clip.into(), activation, args);
     Ok(Value::Undefined)
 }
 
-fn stop<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn stop<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     movie_clip.stop(&mut activation.context);
     Ok(Value::Undefined)
 }
 
-fn stop_drag<'gc>(
-    _movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn stop_drag<'gc, B: Backend>(
+    _movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // It doesn't matter which clip we call this on; it simply stops any active drag.
 
     // we might not have had an opportunity to call `update_drag`
@@ -1095,11 +1096,11 @@ fn stop_drag<'gc>(
     Ok(Value::Undefined)
 }
 
-fn swap_depths<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn swap_depths<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let arg = args.get(0).cloned().unwrap_or(Value::Undefined);
 
     if movie_clip.removed() {
@@ -1150,11 +1151,11 @@ fn swap_depths<'gc>(
     Ok(Value::Undefined)
 }
 
-fn local_to_global<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn local_to_global<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Value::Object(point) = args.get(0).unwrap_or(&Value::Undefined) {
         // localToGlobal does no coercion; it fails if the properties are not numbers.
         // It does not search the prototype chain and ignores virtual properties.
@@ -1187,11 +1188,11 @@ fn local_to_global<'gc>(
     Ok(Value::Undefined)
 }
 
-fn get_bounds<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_bounds<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let target = match args.get(0) {
         Some(val) => activation.resolve_target_display_object(movie_clip.into(), *val, false)?,
         None => Some(movie_clip.into()),
@@ -1227,21 +1228,21 @@ fn get_bounds<'gc>(
     }
 }
 
-fn get_rect<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_rect<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // TODO: This should get the bounds ignoring strokes. Always equal to or smaller than getBounds.
     // Just defer to getBounds for now. Will have to store edge_bounds vs. shape_bounds in Graphic.
     get_bounds(movie_clip, activation, args)
 }
 
-pub fn get_url<'gc>(
-    _movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_url<'gc, B: Backend>(
+    _movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     use crate::avm1::fscommand;
 
     //TODO: Error behavior if no arguments are present
@@ -1275,11 +1276,11 @@ pub fn get_url<'gc>(
     Ok(Value::Undefined)
 }
 
-fn global_to_local<'gc>(
-    movie_clip: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn global_to_local<'gc, B: Backend>(
+    movie_clip: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Value::Object(point) = args.get(0).unwrap_or(&Value::Undefined) {
         // globalToLocal does no coercion; it fails if the properties are not numbers.
         // It does not search the prototype chain and ignores virtual properties.
@@ -1312,11 +1313,11 @@ fn global_to_local<'gc>(
     Ok(Value::Undefined)
 }
 
-fn load_movie<'gc>(
-    target: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn load_movie<'gc, B: Backend>(
+    target: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let url_val = args.get(0).cloned().unwrap_or(Value::Undefined);
     let url = url_val.coerce_to_string(activation)?;
     let method = args.get(1).cloned().unwrap_or(Value::Undefined);
@@ -1334,11 +1335,11 @@ fn load_movie<'gc>(
     Ok(Value::Undefined)
 }
 
-fn load_variables<'gc>(
-    target: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn load_variables<'gc, B: Backend>(
+    target: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let url_val = args.get(0).cloned().unwrap_or(Value::Undefined);
     let url = url_val.coerce_to_string(activation)?;
     let method = args.get(1).cloned().unwrap_or(Value::Undefined);
@@ -1355,31 +1356,31 @@ fn load_variables<'gc>(
     Ok(Value::Undefined)
 }
 
-fn unload_movie<'gc>(
-    mut target: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn unload_movie<'gc, B: Backend>(
+    mut target: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     target.unload(&mut activation.context);
     target.replace_with_movie(&mut activation.context, None);
 
     Ok(Value::Undefined)
 }
 
-fn transform<'gc>(
-    this: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Value<'gc>, Error<'gc>> {
+fn transform<'gc, B: Backend>(
+    this: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let constructor = activation.context.avm1.prototypes.transform_constructor;
     let cloned = constructor.construct(activation, &[this.object()])?;
     Ok(cloned)
 }
 
-fn set_transform<'gc>(
-    this: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    value: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_transform<'gc, B: Backend>(
+    this: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    value: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     if let Value::Object(object) = value {
         if let Some(transform) = object.as_transform_object() {
             if let Some(clip) = transform.clip() {
@@ -1395,35 +1396,35 @@ fn set_transform<'gc>(
     Ok(())
 }
 
-fn enabled<'gc>(
-    this: MovieClip<'gc>,
-    _activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Value<'gc>, Error<'gc>> {
+fn enabled<'gc, B: Backend>(
+    this: MovieClip<'gc, B>,
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(this.enabled().into())
 }
 
-fn set_enabled<'gc>(
-    this: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    value: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_enabled<'gc, B: Backend>(
+    this: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    value: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     let enabled = value.as_bool(activation.swf_version());
     this.set_enabled(&mut activation.context, enabled);
     Ok(())
 }
 
-fn focus_enabled<'gc>(
-    this: MovieClip<'gc>,
-    _activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Value<'gc>, Error<'gc>> {
+fn focus_enabled<'gc, B: Backend>(
+    this: MovieClip<'gc, B>,
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(this.is_focusable().into())
 }
 
-fn set_focus_enabled<'gc>(
-    this: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    value: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_focus_enabled<'gc, B: Backend>(
+    this: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    value: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     this.set_focusable(
         value.as_bool(activation.swf_version()),
         &mut activation.context,
@@ -1431,35 +1432,35 @@ fn set_focus_enabled<'gc>(
     Ok(())
 }
 
-fn lock_root<'gc>(
-    this: MovieClip<'gc>,
-    _activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Value<'gc>, Error<'gc>> {
+fn lock_root<'gc, B: Backend>(
+    this: MovieClip<'gc, B>,
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(this.lock_root().into())
 }
 
-fn set_lock_root<'gc>(
-    this: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    value: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_lock_root<'gc, B: Backend>(
+    this: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    value: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     let lock_root = value.as_bool(activation.swf_version());
     this.set_lock_root(activation.context.gc_context, lock_root);
     Ok(())
 }
 
-fn use_hand_cursor<'gc>(
-    this: MovieClip<'gc>,
-    _activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Value<'gc>, Error<'gc>> {
+fn use_hand_cursor<'gc, B: Backend>(
+    this: MovieClip<'gc, B>,
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(this.use_hand_cursor().into())
 }
 
-fn set_use_hand_cursor<'gc>(
-    this: MovieClip<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    value: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_use_hand_cursor<'gc, B: Backend>(
+    this: MovieClip<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    value: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     let use_hand_cursor = value.as_bool(activation.swf_version());
     this.set_use_hand_cursor(&mut activation.context, use_hand_cursor);
     Ok(())

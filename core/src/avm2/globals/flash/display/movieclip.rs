@@ -10,16 +10,17 @@ use crate::avm2::value::Value;
 use crate::avm2::Error;
 use crate::display_object::{MovieClip, Scene, TDisplayObject};
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::{AvmString, WString};
 use ruffle_types::tag_utils::SwfMovie;
 use std::sync::Arc;
 
 /// Implements `flash.display.MovieClip`'s instance constructor.
-pub fn instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         activation.super_init(this, &[])?;
 
@@ -38,21 +39,21 @@ pub fn instance_init<'gc>(
 }
 
 /// Implements `flash.display.MovieClip`'s class constructor.
-pub fn class_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn class_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok(Value::Undefined)
 }
 
 /// Implements `addFrameScript`, an undocumented method of `MovieClip` used to
 /// specify what methods of a clip's class run on which frames.
-pub fn add_frame_script<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn add_frame_script<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mc) = this
         .and_then(|o| o.as_display_object())
         .and_then(|dobj| dobj.as_movie_clip())
@@ -71,11 +72,11 @@ pub fn add_frame_script<'gc>(
 }
 
 /// Implements `currentFrame`.
-pub fn current_frame<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn current_frame<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mc) = this
         .and_then(|o| o.as_display_object())
         .and_then(|dobj| dobj.as_movie_clip())
@@ -96,11 +97,11 @@ pub fn current_frame<'gc>(
 }
 
 /// Implements `currentFrameLabel`.
-pub fn current_frame_label<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn current_frame_label<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mc) = this
         .and_then(|o| o.as_display_object())
         .and_then(|dobj| dobj.as_movie_clip())
@@ -121,11 +122,11 @@ pub fn current_frame_label<'gc>(
 }
 
 /// Implements `currentLabel`.
-pub fn current_label<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn current_label<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mc) = this
         .and_then(|o| o.as_display_object())
         .and_then(|dobj| dobj.as_movie_clip())
@@ -145,11 +146,11 @@ pub fn current_label<'gc>(
 ///
 /// The intended purpose of this output is to be sent directly into the
 /// constructor of `flash.display.Scene`.
-fn labels_for_scene<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    mc: MovieClip<'gc>,
+fn labels_for_scene<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    mc: MovieClip<'gc, B>,
     scene: &Scene,
-) -> Result<(String, u16, Object<'gc>), Error> {
+) -> Result<(String, u16, Object<'gc, B>), Error> {
     let Scene {
         name: scene_name,
         start: scene_start,
@@ -160,7 +161,7 @@ fn labels_for_scene<'gc>(
     let mut frame_labels = Vec::with_capacity(labels.len());
 
     for (name, frame) in labels {
-        let name: Value<'gc> = AvmString::new(activation.context.gc_context, name).into();
+        let name: Value<'gc, B> = AvmString::new(activation.context.gc_context, name).into();
         let local_frame = frame - scene_start + 1;
         let args = [name, local_frame.into()];
         let frame_label = frame_label_class.construct(activation, &args)?;
@@ -176,11 +177,11 @@ fn labels_for_scene<'gc>(
 }
 
 /// Implements `currentLabels`.
-pub fn current_labels<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn current_labels<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mc) = this
         .and_then(|o| o.as_display_object())
         .and_then(|dobj| dobj.as_movie_clip())
@@ -197,11 +198,11 @@ pub fn current_labels<'gc>(
 }
 
 /// Implements `currentScene`.
-pub fn current_scene<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn current_scene<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mc) = this
         .and_then(|o| o.as_display_object())
         .and_then(|dobj| dobj.as_movie_clip())
@@ -228,11 +229,11 @@ pub fn current_scene<'gc>(
 }
 
 /// Implements `scenes`.
-pub fn scenes<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn scenes<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mc) = this
         .and_then(|o| o.as_display_object())
         .and_then(|dobj| dobj.as_movie_clip())
@@ -273,11 +274,11 @@ pub fn scenes<'gc>(
 }
 
 /// Implements `framesLoaded`.
-pub fn frames_loaded<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn frames_loaded<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mc) = this
         .and_then(|o| o.as_display_object())
         .and_then(|dobj| dobj.as_movie_clip())
@@ -289,11 +290,11 @@ pub fn frames_loaded<'gc>(
 }
 
 /// Implements `isPlaying`.
-pub fn is_playing<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn is_playing<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mc) = this
         .and_then(|o| o.as_display_object())
         .and_then(|dobj| dobj.as_movie_clip())
@@ -305,11 +306,11 @@ pub fn is_playing<'gc>(
 }
 
 /// Implements `totalFrames`.
-pub fn total_frames<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn total_frames<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mc) = this
         .and_then(|o| o.as_display_object())
         .and_then(|dobj| dobj.as_movie_clip())
@@ -321,11 +322,11 @@ pub fn total_frames<'gc>(
 }
 
 /// Implements `gotoAndPlay`.
-pub fn goto_and_play<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn goto_and_play<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mc) = this
         .and_then(|o| o.as_display_object())
         .and_then(|dobj| dobj.as_movie_clip())
@@ -338,11 +339,11 @@ pub fn goto_and_play<'gc>(
 }
 
 /// Implements `gotoAndStop`.
-pub fn goto_and_stop<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn goto_and_stop<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mc) = this
         .and_then(|o| o.as_display_object())
         .and_then(|dobj| dobj.as_movie_clip())
@@ -353,10 +354,10 @@ pub fn goto_and_stop<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn goto_frame<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    mc: MovieClip<'gc>,
-    args: &[Value<'gc>],
+pub fn goto_frame<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    mc: MovieClip<'gc, B>,
+    args: &[Value<'gc, B>],
     stop: bool,
 ) -> Result<(), Error> {
     let frame_or_label = args.get(0).cloned().unwrap_or(Value::Null);
@@ -405,11 +406,11 @@ pub fn goto_frame<'gc>(
 }
 
 /// Implements `stop`.
-pub fn stop<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn stop<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mc) = this
         .and_then(|o| o.as_display_object())
         .and_then(|dobj| dobj.as_movie_clip())
@@ -421,11 +422,11 @@ pub fn stop<'gc>(
 }
 
 /// Implements `play`.
-pub fn play<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn play<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mc) = this
         .and_then(|o| o.as_display_object())
         .and_then(|dobj| dobj.as_movie_clip())
@@ -438,11 +439,11 @@ pub fn play<'gc>(
 }
 
 /// Implements `prevFrame`.
-pub fn prev_frame<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn prev_frame<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mc) = this
         .and_then(|o| o.as_display_object())
         .and_then(|dobj| dobj.as_movie_clip())
@@ -454,11 +455,11 @@ pub fn prev_frame<'gc>(
 }
 
 /// Implements `nextFrame`.
-pub fn next_frame<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn next_frame<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mc) = this
         .and_then(|o| o.as_display_object())
         .and_then(|dobj| dobj.as_movie_clip())
@@ -470,11 +471,11 @@ pub fn next_frame<'gc>(
 }
 
 /// Implements `prevScene`.
-pub fn prev_scene<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn prev_scene<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mc) = this
         .and_then(|o| o.as_display_object())
         .and_then(|dobj| dobj.as_movie_clip())
@@ -493,11 +494,11 @@ pub fn prev_scene<'gc>(
 }
 
 /// Implements `nextScene`.
-pub fn next_scene<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn next_scene<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mc) = this
         .and_then(|o| o.as_display_object())
         .and_then(|dobj| dobj.as_movie_clip())
@@ -516,7 +517,7 @@ pub fn next_scene<'gc>(
 }
 
 /// Construct `MovieClip`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::package("flash.display"), "MovieClip"),
         Some(QName::new(Namespace::package("flash.display"), "Sprite").into()),
@@ -527,10 +528,10 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
 
     let mut write = class.write(mc);
 
-    const PUBLIC_INSTANCE_PROPERTIES: &[(
+    let public_instance_properties: &[(
         &str,
-        Option<NativeMethodImpl>,
-        Option<NativeMethodImpl>,
+        Option<NativeMethodImpl<B>>,
+        Option<NativeMethodImpl<B>>,
     )] = &[
         ("currentFrame", Some(current_frame), None),
         ("currentFrameLabel", Some(current_frame_label), None),
@@ -542,9 +543,9 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
         ("isPlaying", Some(is_playing), None),
         ("totalFrames", Some(total_frames), None),
     ];
-    write.define_public_builtin_instance_properties(mc, PUBLIC_INSTANCE_PROPERTIES);
+    write.define_public_builtin_instance_properties(mc, public_instance_properties);
 
-    const PUBLIC_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] = &[
+    let public_instance_methods: &[(&str, NativeMethodImpl<B>)] = &[
         ("addFrameScript", add_frame_script),
         ("gotoAndPlay", goto_and_play),
         ("gotoAndStop", goto_and_stop),
@@ -555,7 +556,7 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
         ("prevScene", prev_scene),
         ("nextScene", next_scene),
     ];
-    write.define_public_builtin_instance_methods(mc, PUBLIC_INSTANCE_METHODS);
+    write.define_public_builtin_instance_methods(mc, public_instance_methods);
 
     class
 }

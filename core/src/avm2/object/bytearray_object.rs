@@ -6,13 +6,14 @@ use crate::avm2::object::{ClassObject, Object, ObjectPtr, TObject};
 use crate::avm2::value::Value;
 use crate::avm2::Error;
 use gc_arena::{Collect, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use std::cell::{Ref, RefMut};
 
 /// A class instance allocator that allocates ByteArray objects.
-pub fn bytearray_allocator<'gc>(
-    class: ClassObject<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Object<'gc>, Error> {
+pub fn bytearray_allocator<'gc, B: Backend>(
+    class: ClassObject<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Object<'gc, B>, Error> {
     let base = ScriptObjectData::new(class);
 
     Ok(ByteArrayObject(GcCell::allocate(
@@ -27,26 +28,26 @@ pub fn bytearray_allocator<'gc>(
 
 #[derive(Clone, Collect, Debug, Copy)]
 #[collect(no_drop)]
-pub struct ByteArrayObject<'gc>(GcCell<'gc, ByteArrayObjectData<'gc>>);
+pub struct ByteArrayObject<'gc, B: Backend>(GcCell<'gc, ByteArrayObjectData<'gc, B>>);
 
 #[derive(Clone, Collect, Debug)]
 #[collect(no_drop)]
-pub struct ByteArrayObjectData<'gc> {
+pub struct ByteArrayObjectData<'gc, B: Backend> {
     /// Base script object
-    base: ScriptObjectData<'gc>,
+    base: ScriptObjectData<'gc, B>,
 
     storage: ByteArrayStorage,
 }
 
-impl<'gc> ByteArrayObject<'gc> {
+impl<'gc, B: Backend> ByteArrayObject<'gc, B> {
     pub fn from_storage(
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         bytes: ByteArrayStorage,
-    ) -> Result<Object<'gc>, Error> {
+    ) -> Result<Object<'gc, B>, Error> {
         let class = activation.avm2().classes().bytearray;
         let base = ScriptObjectData::new(class);
 
-        let mut instance: Object<'gc> = ByteArrayObject(GcCell::allocate(
+        let mut instance: Object<'gc, B> = ByteArrayObject(GcCell::allocate(
             activation.context.gc_context,
             ByteArrayObjectData {
                 base,
@@ -62,12 +63,14 @@ impl<'gc> ByteArrayObject<'gc> {
     }
 }
 
-impl<'gc> TObject<'gc> for ByteArrayObject<'gc> {
-    fn base(&self) -> Ref<ScriptObjectData<'gc>> {
+impl<'gc, B: Backend> TObject<'gc> for ByteArrayObject<'gc, B> {
+    type B = B;
+
+    fn base(&self) -> Ref<ScriptObjectData<'gc, B>> {
         Ref::map(self.0.read(), |read| &read.base)
     }
 
-    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc>> {
+    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc, B>> {
         RefMut::map(self.0.write(mc), |write| &mut write.base)
     }
 
@@ -78,8 +81,8 @@ impl<'gc> TObject<'gc> for ByteArrayObject<'gc> {
     fn get_property_local(
         self,
         name: &Multiname<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         let read = self.0.read();
 
         if name.contains_public_namespace() {
@@ -100,8 +103,8 @@ impl<'gc> TObject<'gc> for ByteArrayObject<'gc> {
     fn set_property_local(
         self,
         name: &Multiname<'gc>,
-        value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        value: Value<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         let mut write = self.0.write(activation.context.gc_context);
 
@@ -123,8 +126,8 @@ impl<'gc> TObject<'gc> for ByteArrayObject<'gc> {
     fn init_property_local(
         self,
         name: &Multiname<'gc>,
-        value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        value: Value<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         let mut write = self.0.write(activation.context.gc_context);
 
@@ -145,7 +148,7 @@ impl<'gc> TObject<'gc> for ByteArrayObject<'gc> {
 
     fn delete_property_local(
         self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         name: &Multiname<'gc>,
     ) -> Result<bool, Error> {
         if name.contains_public_namespace() {
@@ -179,7 +182,7 @@ impl<'gc> TObject<'gc> for ByteArrayObject<'gc> {
         self.0.read().base.has_own_property(name)
     }
 
-    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc>, Error> {
+    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc, B>, Error> {
         Ok(Value::Object(Object::from(*self)))
     }
 
@@ -191,7 +194,7 @@ impl<'gc> TObject<'gc> for ByteArrayObject<'gc> {
         Some(RefMut::map(self.0.write(mc), |d| &mut d.storage))
     }
 
-    fn as_bytearray_object(&self) -> Option<ByteArrayObject<'gc>> {
+    fn as_bytearray_object(&self) -> Option<ByteArrayObject<'gc, B>> {
         Some(*self)
     }
 }

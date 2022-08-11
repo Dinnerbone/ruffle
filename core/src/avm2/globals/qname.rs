@@ -8,13 +8,14 @@ use crate::avm2::object::{qname_allocator, FunctionObject, Object, TObject};
 use crate::avm2::value::Value;
 use crate::avm2::Error;
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 
 /// Implements `QName`'s instance initializer.
-pub fn instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this.and_then(|t| t.as_qname_object()) {
         if this.qname().is_none() {
             let (namespace, local_arg) = if args.len() > 1 {
@@ -58,11 +59,11 @@ pub fn instance_init<'gc>(
 }
 
 /// Implements `QName`'s class initializer.
-pub fn class_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn class_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let this = this.unwrap();
     let scope = activation.create_scopechain();
     let this_class = this.as_class_object().unwrap();
@@ -109,11 +110,11 @@ pub fn class_init<'gc>(
 }
 
 /// Implements `QName.localName`'s getter
-pub fn local_name<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn local_name<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this.and_then(|t| t.as_qname_object()) {
         if let Some(qname) = this.qname() {
             return Ok(qname.local_name().into());
@@ -124,11 +125,11 @@ pub fn local_name<'gc>(
 }
 
 /// Implements `QName.uri`'s getter
-pub fn uri<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn uri<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this.and_then(|t| t.as_qname_object()) {
         if let Some(qname) = this.qname() {
             return Ok(match qname.namespace() {
@@ -142,11 +143,11 @@ pub fn uri<'gc>(
 }
 
 /// Implements `QName.AS3::toString` and `QName.prototype.toString`
-pub fn to_string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn to_string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this.and_then(|t| t.as_qname_object()) {
         if let Some(qname) = this.qname() {
             return Ok(qname.as_uri(activation.context.gc_context).into());
@@ -157,11 +158,11 @@ pub fn to_string<'gc>(
 }
 
 /// Implements `QName.AS3::valueOf` and `QName.prototype.valueOf`
-pub fn value_of<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn value_of<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         return Ok(this.into());
     }
@@ -170,7 +171,7 @@ pub fn value_of<'gc>(
 }
 
 /// Construct `QName`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::public(), "QName"),
         Some(QName::new(Namespace::public(), "Object").into()),
@@ -182,17 +183,17 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
     let mut write = class.write(mc);
     write.set_instance_allocator(qname_allocator);
 
-    const PUBLIC_INSTANCE_PROPERTIES: &[(
+    let PUBLIC_INSTANCE_PROPERTIES: &[(
         &str,
-        Option<NativeMethodImpl>,
-        Option<NativeMethodImpl>,
+        Option<NativeMethodImpl<B>>,
+        Option<NativeMethodImpl<B>>,
     )] = &[
         ("localName", Some(local_name), None),
         ("uri", Some(uri), None),
     ];
     write.define_public_builtin_instance_properties(mc, PUBLIC_INSTANCE_PROPERTIES);
 
-    const AS3_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] =
+    let AS3_INSTANCE_METHODS: &[(&str, NativeMethodImpl<B>)] =
         &[("toString", to_string), ("valueOf", value_of)];
     write.define_as3_builtin_instance_methods(mc, AS3_INSTANCE_METHODS);
 

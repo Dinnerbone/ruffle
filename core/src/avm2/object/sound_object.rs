@@ -7,13 +7,14 @@ use crate::avm2::value::Value;
 use crate::avm2::Error;
 use gc_arena::{Collect, GcCell, MutationContext};
 use ruffle_types::backend::audio::SoundHandle;
+use ruffle_types::backend::Backend;
 use std::cell::{Ref, RefMut};
 
 /// A class instance allocator that allocates Sound objects.
-pub fn sound_allocator<'gc>(
-    class: ClassObject<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Object<'gc>, Error> {
+pub fn sound_allocator<'gc, B: Backend>(
+    class: ClassObject<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Object<'gc, B>, Error> {
     let base = ScriptObjectData::new(class);
 
     Ok(SoundObject(GcCell::allocate(
@@ -25,33 +26,33 @@ pub fn sound_allocator<'gc>(
 
 #[derive(Clone, Collect, Debug, Copy)]
 #[collect(no_drop)]
-pub struct SoundObject<'gc>(GcCell<'gc, SoundObjectData<'gc>>);
+pub struct SoundObject<'gc, B: Backend>(GcCell<'gc, SoundObjectData<'gc, B>>);
 
 #[derive(Clone, Collect, Debug)]
 #[collect(no_drop)]
-pub struct SoundObjectData<'gc> {
+pub struct SoundObjectData<'gc, B: Backend> {
     /// Base script object
-    base: ScriptObjectData<'gc>,
+    base: ScriptObjectData<'gc, B>,
 
     /// The sound this object holds.
     #[collect(require_static)]
     sound: Option<SoundHandle>,
 }
 
-impl<'gc> SoundObject<'gc> {
+impl<'gc, B: Backend> SoundObject<'gc, B> {
     /// Convert a bare sound into it's object representation.
     ///
     /// In AS3, library sounds are accessed through subclasses of `Sound`. As a
     /// result, this needs to take the subclass so that the returned object is
     /// an instance of the correct class.
     pub fn from_sound(
-        activation: &mut Activation<'_, 'gc, '_>,
-        class: ClassObject<'gc>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        class: ClassObject<'gc, B>,
         sound: SoundHandle,
-    ) -> Result<Object<'gc>, Error> {
+    ) -> Result<Object<'gc, B>, Error> {
         let base = ScriptObjectData::new(class);
 
-        let mut sound_object: Object<'gc> = SoundObject(GcCell::allocate(
+        let mut sound_object: Object<'gc, B> = SoundObject(GcCell::allocate(
             activation.context.gc_context,
             SoundObjectData {
                 base,
@@ -67,12 +68,14 @@ impl<'gc> SoundObject<'gc> {
     }
 }
 
-impl<'gc> TObject<'gc> for SoundObject<'gc> {
-    fn base(&self) -> Ref<ScriptObjectData<'gc>> {
+impl<'gc, B: Backend> TObject<'gc> for SoundObject<'gc, B> {
+    type B = B;
+
+    fn base(&self) -> Ref<ScriptObjectData<'gc, B>> {
         Ref::map(self.0.read(), |read| &read.base)
     }
 
-    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc>> {
+    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc, B>> {
         RefMut::map(self.0.write(mc), |write| &mut write.base)
     }
 
@@ -80,7 +83,7 @@ impl<'gc> TObject<'gc> for SoundObject<'gc> {
         self.0.as_ptr() as *const ObjectPtr
     }
 
-    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc>, Error> {
+    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc, B>, Error> {
         Ok(Object::from(*self).into())
     }
 

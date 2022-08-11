@@ -6,7 +6,7 @@ use crate::font::{Font, FontDescriptor};
 use crate::prelude::*;
 use gc_arena::{Collect, MutationContext};
 use ruffle_types::backend::audio::SoundHandle;
-use ruffle_types::backend::render;
+use ruffle_types::backend::{render, Backend};
 use ruffle_types::string::AvmString;
 use ruffle_types::tag_utils::SwfMovie;
 use ruffle_types::vminterface::AvmType;
@@ -39,13 +39,13 @@ impl WeakElement for WeakMovieSymbol {
 
 /// The mappings between class objects and library characters defined by
 /// `SymbolClass`.
-pub struct Avm2ClassRegistry<'gc> {
+pub struct Avm2ClassRegistry<'gc, B: Backend> {
     /// A list of AVM2 class objects and the character IDs they are expected to
     /// instantiate.
-    class_map: WeakValueHashMap<Avm2ClassObject<'gc>, WeakMovieSymbol>,
+    class_map: WeakValueHashMap<Avm2ClassObject<'gc, B>, WeakMovieSymbol>,
 }
 
-unsafe impl Collect for Avm2ClassRegistry<'_> {
+unsafe impl<B: Backend> Collect for Avm2ClassRegistry<'_, B> {
     fn trace(&self, cc: gc_arena::CollectionContext) {
         for (k, _) in self.class_map.iter() {
             k.trace(cc);
@@ -53,13 +53,13 @@ unsafe impl Collect for Avm2ClassRegistry<'_> {
     }
 }
 
-impl Default for Avm2ClassRegistry<'_> {
+impl<B: Backend> Default for Avm2ClassRegistry<'_, B> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'gc> Avm2ClassRegistry<'gc> {
+impl<'gc, B: Backend> Avm2ClassRegistry<'gc, B> {
     pub fn new() -> Self {
         Self {
             class_map: WeakValueHashMap::new(),
@@ -72,7 +72,7 @@ impl<'gc> Avm2ClassRegistry<'gc> {
     /// a library symbol.
     pub fn class_symbol(
         &self,
-        class_object: Avm2ClassObject<'gc>,
+        class_object: Avm2ClassObject<'gc, B>,
     ) -> Option<(Arc<SwfMovie>, CharacterId)> {
         match self.class_map.get(&class_object) {
             Some(MovieSymbol(movie, symbol)) => Some((movie, symbol)),
@@ -83,7 +83,7 @@ impl<'gc> Avm2ClassRegistry<'gc> {
     /// Associate an AVM2 class object with a given library symbol.
     pub fn set_class_symbol(
         &mut self,
-        class_object: Avm2ClassObject<'gc>,
+        class_object: Avm2ClassObject<'gc, B>,
         movie: Arc<SwfMovie>,
         symbol: CharacterId,
     ) {
@@ -95,16 +95,16 @@ impl<'gc> Avm2ClassRegistry<'gc> {
 /// Symbol library for a single given SWF.
 #[derive(Collect)]
 #[collect(no_drop)]
-pub struct MovieLibrary<'gc> {
-    characters: HashMap<CharacterId, Character<'gc>>,
-    export_characters: Avm1PropertyMap<'gc, Character<'gc>>,
+pub struct MovieLibrary<'gc, B: Backend> {
+    characters: HashMap<CharacterId, Character<'gc, B>>,
+    export_characters: Avm1PropertyMap<'gc, Character<'gc, B>>,
     jpeg_tables: Option<Vec<u8>>,
     fonts: HashMap<FontDescriptor, Font<'gc>>,
     avm_type: AvmType,
-    avm2_domain: Option<Avm2Domain<'gc>>,
+    avm2_domain: Option<Avm2Domain<'gc, B>>,
 }
 
-impl<'gc> MovieLibrary<'gc> {
+impl<'gc, B: Backend> MovieLibrary<'gc, B> {
     pub fn new(avm_type: AvmType) -> Self {
         Self {
             characters: HashMap::new(),
@@ -116,7 +116,7 @@ impl<'gc> MovieLibrary<'gc> {
         }
     }
 
-    pub fn register_character(&mut self, id: CharacterId, character: Character<'gc>) {
+    pub fn register_character(&mut self, id: CharacterId, character: Character<'gc, B>) {
         // TODO(Herschel): What is the behavior if id already exists?
         if !self.contains_character(id) {
             if let Character::Font(font) = character.clone() {
@@ -135,7 +135,7 @@ impl<'gc> MovieLibrary<'gc> {
         &mut self,
         id: CharacterId,
         export_name: AvmString<'gc>,
-    ) -> Option<&Character<'gc>> {
+    ) -> Option<&Character<'gc, B>> {
         if let Some(character) = self.characters.get(&id) {
             self.export_characters
                 .insert(export_name, character.clone(), false);
@@ -154,11 +154,11 @@ impl<'gc> MovieLibrary<'gc> {
         self.characters.contains_key(&id)
     }
 
-    pub fn character_by_id(&self, id: CharacterId) -> Option<&Character<'gc>> {
+    pub fn character_by_id(&self, id: CharacterId) -> Option<&Character<'gc, B>> {
         self.characters.get(&id)
     }
 
-    pub fn character_by_export_name(&self, name: AvmString<'gc>) -> Option<&Character<'gc>> {
+    pub fn character_by_export_name(&self, name: AvmString<'gc>) -> Option<&Character<'gc, B>> {
         self.export_characters.get(name, false)
     }
 
@@ -168,7 +168,7 @@ impl<'gc> MovieLibrary<'gc> {
         &self,
         id: CharacterId,
         gc_context: MutationContext<'gc, '_>,
-    ) -> Result<DisplayObject<'gc>, Box<dyn std::error::Error>> {
+    ) -> Result<DisplayObject<'gc, B>, Box<dyn std::error::Error>> {
         if let Some(character) = self.characters.get(&id) {
             self.instantiate_display_object(character, gc_context)
         } else {
@@ -183,7 +183,7 @@ impl<'gc> MovieLibrary<'gc> {
         &self,
         export_name: AvmString<'gc>,
         gc_context: MutationContext<'gc, '_>,
-    ) -> Result<DisplayObject<'gc>, Box<dyn std::error::Error>> {
+    ) -> Result<DisplayObject<'gc, B>, Box<dyn std::error::Error>> {
         if let Some(character) = self.export_characters.get(export_name, false) {
             self.instantiate_display_object(character, gc_context)
         } else {
@@ -199,9 +199,9 @@ impl<'gc> MovieLibrary<'gc> {
     /// The object must then be post-instantiated before being used.
     fn instantiate_display_object(
         &self,
-        character: &Character<'gc>,
+        character: &Character<'gc, B>,
         gc_context: MutationContext<'gc, '_>,
-    ) -> Result<DisplayObject<'gc>, Box<dyn std::error::Error>> {
+    ) -> Result<DisplayObject<'gc, B>, Box<dyn std::error::Error>> {
         match character {
             Character::Bitmap(bitmap) => Ok(bitmap.instantiate(gc_context)),
             Character::EditText(edit_text) => Ok(edit_text.instantiate(gc_context)),
@@ -216,7 +216,7 @@ impl<'gc> MovieLibrary<'gc> {
         }
     }
 
-    pub fn get_bitmap(&self, id: CharacterId) -> Option<Bitmap<'gc>> {
+    pub fn get_bitmap(&self, id: CharacterId) -> Option<Bitmap<'gc, B>> {
         if let Some(&Character::Bitmap(bitmap)) = self.characters.get(&id) {
             Some(bitmap)
         } else {
@@ -246,7 +246,7 @@ impl<'gc> MovieLibrary<'gc> {
 
     /// Returns the `Graphic` with the given character ID.
     /// Returns `None` if the ID does not exist or is not a `Graphic`.
-    pub fn get_graphic(&self, id: CharacterId) -> Option<Graphic<'gc>> {
+    pub fn get_graphic(&self, id: CharacterId) -> Option<Graphic<'gc, B>> {
         if let Some(&Character::Graphic(graphic)) = self.characters.get(&id) {
             Some(graphic)
         } else {
@@ -256,7 +256,7 @@ impl<'gc> MovieLibrary<'gc> {
 
     /// Returns the `MorphShape` with the given character ID.
     /// Returns `None` if the ID does not exist or is not a `MorphShape`.
-    pub fn get_morph_shape(&self, id: CharacterId) -> Option<MorphShape<'gc>> {
+    pub fn get_morph_shape(&self, id: CharacterId) -> Option<MorphShape<'gc, B>> {
         if let Some(&Character::MorphShape(morph_shape)) = self.characters.get(&id) {
             Some(morph_shape)
         } else {
@@ -274,7 +274,7 @@ impl<'gc> MovieLibrary<'gc> {
 
     /// Returns the `Text` with the given character ID.
     /// Returns `None` if the ID does not exist or is not a `Text`.
-    pub fn get_text(&self, id: CharacterId) -> Option<Text<'gc>> {
+    pub fn get_text(&self, id: CharacterId) -> Option<Text<'gc, B>> {
         if let Some(&Character::Text(text)) = self.characters.get(&id) {
             Some(text)
         } else {
@@ -316,7 +316,7 @@ impl<'gc> MovieLibrary<'gc> {
         self.avm_type = new_type;
     }
 
-    pub fn set_avm2_domain(&mut self, avm2_domain: Avm2Domain<'gc>) {
+    pub fn set_avm2_domain(&mut self, avm2_domain: Avm2Domain<'gc, B>) {
         self.avm2_domain = Some(avm2_domain);
     }
 
@@ -326,12 +326,12 @@ impl<'gc> MovieLibrary<'gc> {
     /// movie provides AVM2 code. For example, a movie may have been loaded by
     /// AVM2 code into a particular domain, even though it turned out to be
     /// an AVM1 movie, and thus this domain is unused.
-    pub fn avm2_domain(&self) -> Avm2Domain<'gc> {
+    pub fn avm2_domain(&self) -> Avm2Domain<'gc, B> {
         self.avm2_domain.unwrap()
     }
 }
 
-impl<'gc> render::BitmapSource for MovieLibrary<'gc> {
+impl<'gc, B: Backend> render::BitmapSource for MovieLibrary<'gc, B> {
     fn bitmap(&self, id: u16) -> Option<render::BitmapInfo> {
         self.get_bitmap(id).and_then(|bitmap| {
             Some(render::BitmapInfo {
@@ -344,19 +344,19 @@ impl<'gc> render::BitmapSource for MovieLibrary<'gc> {
 }
 
 /// Symbol library for multiple movies.
-pub struct Library<'gc> {
+pub struct Library<'gc, B: Backend> {
     /// All the movie libraries.
-    movie_libraries: PtrWeakKeyHashMap<Weak<SwfMovie>, MovieLibrary<'gc>>,
+    movie_libraries: PtrWeakKeyHashMap<Weak<SwfMovie>, MovieLibrary<'gc, B>>,
 
     /// The embedded device font.
     device_font: Option<Font<'gc>>,
 
     /// A list of the symbols associated with specific AVM2 constructor
     /// prototypes.
-    avm2_class_registry: Avm2ClassRegistry<'gc>,
+    avm2_class_registry: Avm2ClassRegistry<'gc, B>,
 }
 
-unsafe impl<'gc> gc_arena::Collect for Library<'gc> {
+unsafe impl<'gc, B: Backend> gc_arena::Collect for Library<'gc, B> {
     #[inline]
     fn trace(&self, cc: gc_arena::CollectionContext) {
         for (_, val) in self.movie_libraries.iter() {
@@ -367,7 +367,7 @@ unsafe impl<'gc> gc_arena::Collect for Library<'gc> {
     }
 }
 
-impl<'gc> Library<'gc> {
+impl<'gc, B: Backend> Library<'gc, B> {
     pub fn empty() -> Self {
         Self {
             movie_libraries: PtrWeakKeyHashMap::new(),
@@ -376,11 +376,11 @@ impl<'gc> Library<'gc> {
         }
     }
 
-    pub fn library_for_movie(&self, movie: Arc<SwfMovie>) -> Option<&MovieLibrary<'gc>> {
+    pub fn library_for_movie(&self, movie: Arc<SwfMovie>) -> Option<&MovieLibrary<'gc, B>> {
         self.movie_libraries.get(&movie)
     }
 
-    pub fn library_for_movie_mut(&mut self, movie: Arc<SwfMovie>) -> &mut MovieLibrary<'gc> {
+    pub fn library_for_movie_mut(&mut self, movie: Arc<SwfMovie>) -> &mut MovieLibrary<'gc, B> {
         let avm_type = movie.avm_type();
         self.movie_libraries
             .entry(movie)
@@ -398,12 +398,12 @@ impl<'gc> Library<'gc> {
     }
 
     /// Get the AVM2 class registry.
-    pub fn avm2_class_registry(&self) -> &Avm2ClassRegistry<'gc> {
+    pub fn avm2_class_registry(&self) -> &Avm2ClassRegistry<'gc, B> {
         &self.avm2_class_registry
     }
 
     /// Mutate the AVM2 class registry.
-    pub fn avm2_class_registry_mut(&mut self) -> &mut Avm2ClassRegistry<'gc> {
+    pub fn avm2_class_registry_mut(&mut self) -> &mut Avm2ClassRegistry<'gc, B> {
         &mut self.avm2_class_registry
     }
 }

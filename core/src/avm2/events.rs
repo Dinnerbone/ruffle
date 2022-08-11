@@ -8,6 +8,7 @@ use crate::avm2::Error;
 use crate::display_object::TDisplayObject;
 use fnv::FnvHashMap;
 use gc_arena::Collect;
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
@@ -46,7 +47,7 @@ pub enum PropagationMode {
 /// implements `IEventDispatcher`.
 #[derive(Clone, Collect, Debug)]
 #[collect(no_drop)]
-pub struct Event<'gc> {
+pub struct Event<'gc, B: Backend> {
     /// Whether or not the event "bubbles" - fires on it's parents after it
     /// fires on the child.
     bubbles: bool,
@@ -62,19 +63,19 @@ pub struct Event<'gc> {
     propagation: PropagationMode,
 
     /// The object currently having it's event handlers invoked.
-    current_target: Option<Object<'gc>>,
+    current_target: Option<Object<'gc, B>>,
 
     /// The current event phase.
     event_phase: EventPhase,
 
     /// The object this event was dispatched on.
-    target: Option<Object<'gc>>,
+    target: Option<Object<'gc, B>>,
 
     /// The name of the event being triggered.
     event_type: AvmString<'gc>,
 }
 
-impl<'gc> Event<'gc> {
+impl<'gc, B: Backend> Event<'gc, B> {
     /// Construct a new event of a given type.
     pub fn new<S>(event_type: S) -> Self
     where
@@ -155,19 +156,19 @@ impl<'gc> Event<'gc> {
         self.event_phase = phase;
     }
 
-    pub fn target(&self) -> Option<Object<'gc>> {
+    pub fn target(&self) -> Option<Object<'gc, B>> {
         self.target
     }
 
-    pub fn set_target(&mut self, target: Object<'gc>) {
+    pub fn set_target(&mut self, target: Object<'gc, B>) {
         self.target = Some(target)
     }
 
-    pub fn current_target(&self) -> Option<Object<'gc>> {
+    pub fn current_target(&self) -> Option<Object<'gc, B>> {
         self.current_target
     }
 
-    pub fn set_current_target(&mut self, current_target: Object<'gc>) {
+    pub fn set_current_target(&mut self, current_target: Object<'gc, B>) {
         self.current_target = Some(current_target)
     }
 }
@@ -175,9 +176,11 @@ impl<'gc> Event<'gc> {
 /// A set of handlers organized by event type, priority, and order added.
 #[derive(Clone, Collect, Debug)]
 #[collect(no_drop)]
-pub struct DispatchList<'gc>(FnvHashMap<AvmString<'gc>, BTreeMap<i32, Vec<EventHandler<'gc>>>>);
+pub struct DispatchList<'gc, B: Backend>(
+    FnvHashMap<AvmString<'gc>, BTreeMap<i32, Vec<EventHandler<'gc, B>>>>,
+);
 
-impl<'gc> DispatchList<'gc> {
+impl<'gc, B: Backend> DispatchList<'gc, B> {
     /// Construct a new dispatch list.
     pub fn new() -> Self {
         Self(Default::default())
@@ -188,7 +191,7 @@ impl<'gc> DispatchList<'gc> {
     fn get_event(
         &self,
         event: impl Into<AvmString<'gc>>,
-    ) -> Option<&BTreeMap<i32, Vec<EventHandler<'gc>>>> {
+    ) -> Option<&BTreeMap<i32, Vec<EventHandler<'gc, B>>>> {
         self.0.get(&event.into())
     }
 
@@ -199,7 +202,7 @@ impl<'gc> DispatchList<'gc> {
     fn get_event_mut(
         &mut self,
         event: impl Into<AvmString<'gc>>,
-    ) -> &mut BTreeMap<i32, Vec<EventHandler<'gc>>> {
+    ) -> &mut BTreeMap<i32, Vec<EventHandler<'gc, B>>> {
         self.0.entry(event.into()).or_insert_with(BTreeMap::new)
     }
 
@@ -209,7 +212,7 @@ impl<'gc> DispatchList<'gc> {
         &mut self,
         event: impl Into<AvmString<'gc>>,
         priority: i32,
-    ) -> &mut Vec<EventHandler<'gc>> {
+    ) -> &mut Vec<EventHandler<'gc, B>> {
         self.0
             .entry(event.into())
             .or_insert_with(BTreeMap::new)
@@ -227,7 +230,7 @@ impl<'gc> DispatchList<'gc> {
         &mut self,
         event: impl Into<AvmString<'gc>> + Clone,
         priority: i32,
-        handler: Object<'gc>,
+        handler: Object<'gc, B>,
         use_capture: bool,
     ) {
         let new_handler = EventHandler::new(handler, use_capture);
@@ -251,7 +254,7 @@ impl<'gc> DispatchList<'gc> {
     pub fn remove_event_listener(
         &mut self,
         event: impl Into<AvmString<'gc>>,
-        handler: Object<'gc>,
+        handler: Object<'gc, B>,
         use_capture: bool,
     ) {
         let old_handler = EventHandler::new(handler, use_capture);
@@ -288,7 +291,7 @@ impl<'gc> DispatchList<'gc> {
         &'a mut self,
         event: impl Into<AvmString<'gc>>,
         use_capture: bool,
-    ) -> impl 'a + Iterator<Item = Object<'gc>> {
+    ) -> impl 'a + Iterator<Item = Object<'gc, B>> {
         self.get_event_mut(event)
             .iter()
             .rev()
@@ -298,7 +301,7 @@ impl<'gc> DispatchList<'gc> {
     }
 }
 
-impl<'gc> Default for DispatchList<'gc> {
+impl<'gc, B: Backend> Default for DispatchList<'gc, B> {
     fn default() -> Self {
         Self::new()
     }
@@ -307,9 +310,9 @@ impl<'gc> Default for DispatchList<'gc> {
 /// A single instance of an event handler.
 #[derive(Clone, Collect, Debug)]
 #[collect(no_drop)]
-struct EventHandler<'gc> {
+struct EventHandler<'gc, B: Backend> {
     /// The event handler to call.
-    handler: Object<'gc>,
+    handler: Object<'gc, B>,
 
     /// Indicates if this handler should only be called for capturing events
     /// (when `true`), or if it should only be called for bubbling and
@@ -317,8 +320,8 @@ struct EventHandler<'gc> {
     use_capture: bool,
 }
 
-impl<'gc> EventHandler<'gc> {
-    fn new(handler: Object<'gc>, use_capture: bool) -> Self {
+impl<'gc, B: Backend> EventHandler<'gc, B> {
+    fn new(handler: Object<'gc, B>, use_capture: bool) -> Self {
         Self {
             handler,
             use_capture,
@@ -326,15 +329,15 @@ impl<'gc> EventHandler<'gc> {
     }
 }
 
-impl<'gc> PartialEq for EventHandler<'gc> {
+impl<'gc, B: Backend> PartialEq for EventHandler<'gc, B> {
     fn eq(&self, rhs: &Self) -> bool {
         self.use_capture == rhs.use_capture && Object::ptr_eq(self.handler, rhs.handler)
     }
 }
 
-impl<'gc> Eq for EventHandler<'gc> {}
+impl<'gc, B: Backend> Eq for EventHandler<'gc, B> {}
 
-impl<'gc> Hash for EventHandler<'gc> {
+impl<'gc, B: Backend> Hash for EventHandler<'gc, B> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.use_capture.hash(state);
         self.handler.as_ptr().hash(state);
@@ -349,7 +352,7 @@ pub const NS_EVENT_DISPATCHER: &str = "https://ruffle.rs/AS3/impl/EventDispatche
 /// indicate ancestry. Instead, only specific event targets provide a hierarchy
 /// to traverse. If no hierarchy is available, this returns `None`, as if the
 /// target had no parent.
-pub fn parent_of(target: Object<'_>) -> Option<Object<'_>> {
+pub fn parent_of<B: Backend>(target: Object<'_, B>) -> Option<Object<'_, B>> {
     if let Some(dobj) = target.as_display_object() {
         if let Some(dparent) = dobj.parent() {
             if let Value::Object(parent) = dparent.object2() {
@@ -367,10 +370,10 @@ pub fn parent_of(target: Object<'_>) -> Option<Object<'_>> {
 /// `EventObject`, or this function will panic. You must have already set the
 /// event's phase to match what targets you are dispatching to, or you will
 /// call the wrong handlers.
-pub fn dispatch_event_to_target<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    target: Object<'gc>,
-    event: Object<'gc>,
+pub fn dispatch_event_to_target<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    target: Object<'gc, B>,
+    event: Object<'gc, B>,
 ) -> Result<(), Error> {
     avm_debug!(
         activation.context.avm2,
@@ -400,7 +403,7 @@ pub fn dispatch_event_to_target<'gc>(
 
     drop(evtmut);
 
-    let handlers: Vec<Object<'gc>> = dispatch_list
+    let handlers: Vec<Object<'gc, B>> = dispatch_list
         .as_dispatch_mut(activation.context.gc_context)
         .ok_or_else(|| Error::from("Internal dispatch list is missing during dispatch!"))?
         .iter_event_handlers(name, use_capture)
@@ -430,10 +433,10 @@ pub fn dispatch_event_to_target<'gc>(
     Ok(())
 }
 
-pub fn dispatch_event<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    event: Object<'gc>,
+pub fn dispatch_event<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    event: Object<'gc, B>,
 ) -> Result<bool, Error> {
     let target = this
         .get_property(

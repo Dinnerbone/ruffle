@@ -30,6 +30,7 @@ use crate::display_object::DisplayObject;
 use crate::xml::XmlNode;
 use gc_arena::{Collect, MutationContext};
 use ruffle_macros::enum_trait_object;
+use ruffle_types::backend::Backend;
 use std::fmt::Debug;
 
 pub mod array_object;
@@ -63,34 +64,36 @@ pub mod xml_object;
     #[allow(clippy::enum_variant_names)]
     #[derive(Clone, Collect, Debug, Copy)]
     #[collect(no_drop)]
-    pub enum Object<'gc> {
-        ScriptObject(ScriptObject<'gc>),
-        ArrayObject(ArrayObject<'gc>),
-        SoundObject(SoundObject<'gc>),
-        StageObject(StageObject<'gc>),
-        SuperObject(SuperObject<'gc>),
-        XmlObject(XmlObject<'gc>),
-        XmlNodeObject(XmlNodeObject<'gc>),
-        ValueObject(ValueObject<'gc>),
-        FunctionObject(FunctionObject<'gc>),
-        SharedObject(SharedObject<'gc>),
-        ColorTransformObject(ColorTransformObject<'gc>),
-        TransformObject(TransformObject<'gc>),
-        BlurFilterObject(BlurFilterObject<'gc>),
-        BevelFilterObject(BevelFilterObject<'gc>),
-        GlowFilterObject(GlowFilterObject<'gc>),
-        DropShadowFilterObject(DropShadowFilterObject<'gc>),
-        ColorMatrixFilterObject(ColorMatrixFilterObject<'gc>),
-        DisplacementMapFilterObject(DisplacementMapFilterObject<'gc>),
-        ConvolutionFilterObject(ConvolutionFilterObject<'gc>),
-        GradientBevelFilterObject(GradientBevelFilterObject<'gc>),
-        GradientGlowFilterObject(GradientGlowFilterObject<'gc>),
-        DateObject(DateObject<'gc>),
-        BitmapData(BitmapDataObject<'gc>),
-        TextFormatObject(TextFormatObject<'gc>),
+    pub enum Object<'gc, B: Backend> {
+        ScriptObject(ScriptObject<'gc, B>),
+        ArrayObject(ArrayObject<'gc, B>),
+        SoundObject(SoundObject<'gc, B>),
+        StageObject(StageObject<'gc, B>),
+        SuperObject(SuperObject<'gc, B>),
+        XmlObject(XmlObject<'gc, B>),
+        XmlNodeObject(XmlNodeObject<'gc, B>),
+        ValueObject(ValueObject<'gc, B>),
+        FunctionObject(FunctionObject<'gc, B>),
+        SharedObject(SharedObject<'gc, B>),
+        ColorTransformObject(ColorTransformObject<'gc, B>),
+        TransformObject(TransformObject<'gc, B>),
+        BlurFilterObject(BlurFilterObject<'gc, B>),
+        BevelFilterObject(BevelFilterObject<'gc, B>),
+        GlowFilterObject(GlowFilterObject<'gc, B>),
+        DropShadowFilterObject(DropShadowFilterObject<'gc, B>),
+        ColorMatrixFilterObject(ColorMatrixFilterObject<'gc, B>),
+        DisplacementMapFilterObject(DisplacementMapFilterObject<'gc, B>),
+        ConvolutionFilterObject(ConvolutionFilterObject<'gc, B>),
+        GradientBevelFilterObject(GradientBevelFilterObject<'gc, B>),
+        GradientGlowFilterObject(GradientGlowFilterObject<'gc, B>),
+        DateObject(DateObject<'gc, B>),
+        BitmapData(BitmapDataObject<'gc, B>),
+        TextFormatObject(TextFormatObject<'gc, B>),
     }
 )]
-pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy {
+pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc, Self::B>> + Clone + Copy {
+    type B: Backend;
+
     /// Retrieve a named, non-virtual property from this object exclusively.
     ///
     /// This function should not inspect prototype chains. Instead, use
@@ -98,15 +101,15 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn get_local_stored(
         &self,
         name: impl Into<AvmString<'gc>>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Option<Value<'gc>>;
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+    ) -> Option<Value<'gc, Self::B>>;
 
     /// Retrieve a named property from the object, or its prototype.
     fn get(
         &self,
         name: impl Into<AvmString<'gc>>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+    ) -> Result<Value<'gc, Self::B>, Error<'gc, Self::B>> {
         // TODO: Extract logic to a `lookup` function.
         let (this, proto) = if let Some(super_object) = self.as_super_object() {
             (super_object.this(), super_object.proto(activation))
@@ -123,8 +126,8 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn get_stored(
         &self,
         name: AvmString<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+    ) -> Result<Value<'gc, Self::B>, Error<'gc, Self::B>> {
         let this = (*self).into();
 
         let mut depth = 0;
@@ -149,18 +152,18 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn set_local(
         &self,
         name: AvmString<'gc>,
-        value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-        this: Object<'gc>,
-    ) -> Result<(), Error<'gc>>;
+        value: Value<'gc, Self::B>,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+        this: Object<'gc, Self::B>,
+    ) -> Result<(), Error<'gc, Self::B>>;
 
     /// Set a named property on this object, or its prototype.
     fn set(
         &self,
         name: impl Into<AvmString<'gc>>,
-        value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<(), Error<'gc>> {
+        value: Value<'gc, Self::B>,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+    ) -> Result<(), Error<'gc, Self::B>> {
         let name = name.into();
         if name.is_empty() {
             return Ok(());
@@ -211,28 +214,28 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn call(
         &self,
         name: AvmString<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-        this: Value<'gc>,
-        args: &[Value<'gc>],
-    ) -> Result<Value<'gc>, Error<'gc>>;
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+        this: Value<'gc, Self::B>,
+        args: &[Value<'gc, Self::B>],
+    ) -> Result<Value<'gc, Self::B>, Error<'gc, Self::B>>;
 
     /// Construct the underlying object, if this is a valid constructor, and returns the result.
     /// Calling this on something other than a constructor will return a new Undefined object.
     fn construct(
         &self,
-        _activation: &mut Activation<'_, 'gc, '_>,
-        _args: &[Value<'gc>],
-    ) -> Result<Value<'gc>, Error<'gc>> {
+        _activation: &mut Activation<'_, 'gc, '_, Self::B>,
+        _args: &[Value<'gc, Self::B>],
+    ) -> Result<Value<'gc, Self::B>, Error<'gc, Self::B>> {
         Ok(Value::Undefined)
     }
 
     /// Takes an already existing object and performs this constructor (if valid) on it.
     fn construct_on_existing(
         &self,
-        _activation: &mut Activation<'_, 'gc, '_>,
-        mut _this: Object<'gc>,
-        _args: &[Value<'gc>],
-    ) -> Result<(), Error<'gc>> {
+        _activation: &mut Activation<'_, 'gc, '_, Self::B>,
+        mut _this: Object<'gc, Self::B>,
+        _args: &[Value<'gc, Self::B>],
+    ) -> Result<(), Error<'gc, Self::B>> {
         Ok(())
     }
 
@@ -246,10 +249,10 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn call_method(
         &self,
         name: AvmString<'gc>,
-        args: &[Value<'gc>],
-        activation: &mut Activation<'_, 'gc, '_>,
+        args: &[Value<'gc, Self::B>],
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
         reason: ExecutionReason,
-    ) -> Result<Value<'gc>, Error<'gc>> {
+    ) -> Result<Value<'gc, Self::B>, Error<'gc, Self::B>> {
         let this = (*self).into();
         let (method, depth) = match search_prototype(Value::Object(this), name, activation, this)? {
             Some((Value::Object(method), depth)) => (method, depth),
@@ -278,15 +281,15 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn getter(
         &self,
         name: AvmString<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Option<Object<'gc>>;
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+    ) -> Option<Object<'gc, Self::B>>;
 
     /// Retrive a setter defined on this object.
     fn setter(
         &self,
         name: AvmString<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Option<Object<'gc>>;
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+    ) -> Option<Object<'gc, Self::B>>;
 
     /// Construct a host object of some kind and return its cell.
     ///
@@ -297,21 +300,25 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// initialize the object.
     fn create_bare_object(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
-        this: Object<'gc>,
-    ) -> Result<Object<'gc>, Error<'gc>>;
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+        this: Object<'gc, Self::B>,
+    ) -> Result<Object<'gc, Self::B>, Error<'gc, Self::B>>;
 
     /// Delete a named property from the object.
     ///
     /// Returns false if the property cannot be deleted.
-    fn delete(&self, activation: &mut Activation<'_, 'gc, '_>, name: AvmString<'gc>) -> bool;
+    fn delete(
+        &self,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+        name: AvmString<'gc>,
+    ) -> bool;
 
     /// Retrieve the `__proto__` of a given object.
     ///
     /// The proto is another object used to resolve methods across a class of
     /// multiple objects. It should also be accessible as `__proto__` from
     /// `get`.
-    fn proto(&self, activation: &mut Activation<'_, 'gc, '_>) -> Value<'gc>;
+    fn proto(&self, activation: &mut Activation<'_, 'gc, '_, Self::B>) -> Value<'gc, Self::B>;
 
     /// Define a value on an object.
     ///
@@ -328,7 +335,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         &self,
         gc_context: MutationContext<'gc, '_>,
         name: impl Into<AvmString<'gc>>,
-        value: Value<'gc>,
+        value: Value<'gc, Self::B>,
         attributes: Attribute,
     );
 
@@ -361,8 +368,8 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         &self,
         gc_context: MutationContext<'gc, '_>,
         name: AvmString<'gc>,
-        get: Object<'gc>,
-        set: Option<Object<'gc>>,
+        get: Object<'gc, Self::B>,
+        set: Option<Object<'gc, Self::B>>,
         attributes: Attribute,
     );
 
@@ -378,47 +385,55 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// as `__proto__`.
     fn add_property_with_case(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
         name: AvmString<'gc>,
-        get: Object<'gc>,
-        set: Option<Object<'gc>>,
+        get: Object<'gc, Self::B>,
+        set: Option<Object<'gc, Self::B>>,
         attributes: Attribute,
     );
 
     /// Calls the 'watcher' of a given property, if it exists.
     fn call_watcher(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
         name: AvmString<'gc>,
-        value: &mut Value<'gc>,
-        this: Object<'gc>,
-    ) -> Result<(), Error<'gc>>;
+        value: &mut Value<'gc, Self::B>,
+        this: Object<'gc, Self::B>,
+    ) -> Result<(), Error<'gc, Self::B>>;
 
     /// Set the 'watcher' of a given property.
     ///
     /// The property does not need to exist at the time of this being called.
     fn watch(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
         name: AvmString<'gc>,
-        callback: Object<'gc>,
-        user_data: Value<'gc>,
+        callback: Object<'gc, Self::B>,
+        user_data: Value<'gc, Self::B>,
     );
 
     /// Removed any assigned 'watcher' from the given property.
     ///
     /// The return value will indicate if there was a watcher present before this method was
     /// called.
-    fn unwatch(&self, activation: &mut Activation<'_, 'gc, '_>, name: AvmString<'gc>) -> bool;
+    fn unwatch(
+        &self,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+        name: AvmString<'gc>,
+    ) -> bool;
 
     /// Checks if the object has a given named property.
-    fn has_property(&self, activation: &mut Activation<'_, 'gc, '_>, name: AvmString<'gc>) -> bool;
+    fn has_property(
+        &self,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+        name: AvmString<'gc>,
+    ) -> bool;
 
     /// Checks if the object has a given named property on itself (and not,
     /// say, the object's prototype or superclass)
     fn has_own_property(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
         name: AvmString<'gc>,
     ) -> bool;
 
@@ -426,25 +441,29 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// virtual.
     fn has_own_virtual(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
         name: AvmString<'gc>,
     ) -> bool;
 
     /// Checks if a named property appears when enumerating the object.
     fn is_property_enumerable(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
         name: AvmString<'gc>,
     ) -> bool;
 
     /// Enumerate the object.
-    fn get_keys(&self, activation: &mut Activation<'_, 'gc, '_>) -> Vec<AvmString<'gc>>;
+    fn get_keys(&self, activation: &mut Activation<'_, 'gc, '_, Self::B>) -> Vec<AvmString<'gc>>;
 
     /// Enumerate all interfaces implemented by this object.
-    fn interfaces(&self) -> Vec<Object<'gc>>;
+    fn interfaces(&self) -> Vec<Object<'gc, Self::B>>;
 
     /// Set the interface list for this object. (Only useful for prototypes.)
-    fn set_interfaces(&self, gc_context: MutationContext<'gc, '_>, iface_list: Vec<Object<'gc>>);
+    fn set_interfaces(
+        &self,
+        gc_context: MutationContext<'gc, '_>,
+        iface_list: Vec<Object<'gc, Self::B>>,
+    );
 
     /// Determine if this object is an instance of a class.
     ///
@@ -452,17 +471,17 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// explicit prototype of that constructor function. It is assumed that
     /// they are already linked.
     ///
-    /// Because ActionScript 2.0 added interfaces, this function cannot simply
+    /// Self::Because ActionScript 2.0 added interfaces, this function cannot simply
     /// check the prototype chain and call it a day. Each interface represents
     /// a new, parallel prototype chain which also needs to be checked. You
     /// can't implement interfaces within interfaces (fortunately), but if you
     /// somehow could this would support that, too.
     fn is_instance_of(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
-        constructor: Object<'gc>,
-        prototype: Object<'gc>,
-    ) -> Result<bool, Error<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+        constructor: Object<'gc, Self::B>,
+        prototype: Object<'gc, Self::B>,
+    ) -> Result<bool, Error<'gc, Self::B>> {
         let mut proto_stack = vec![];
         if let Value::Object(p) = self.proto(activation) {
             proto_stack.push(p);
@@ -494,125 +513,127 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     }
 
     /// Get the underlying script object, if it exists.
-    fn as_script_object(&self) -> Option<ScriptObject<'gc>>;
+    fn as_script_object(&self) -> Option<ScriptObject<'gc, Self::B>>;
 
     /// Get the underlying array object, if it exists.
-    fn as_array_object(&self) -> Option<ArrayObject<'gc>> {
+    fn as_array_object(&self) -> Option<ArrayObject<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying sound object, if it exists.
-    fn as_sound_object(&self) -> Option<SoundObject<'gc>> {
+    fn as_sound_object(&self) -> Option<SoundObject<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying stage object, if it exists.
-    fn as_stage_object(&self) -> Option<StageObject<'gc>> {
+    fn as_stage_object(&self) -> Option<StageObject<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying super object, if it exists.
-    fn as_super_object(&self) -> Option<SuperObject<'gc>> {
+    fn as_super_object(&self) -> Option<SuperObject<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying display node for this object, if it exists.
-    fn as_display_object(&self) -> Option<DisplayObject<'gc>> {
+    fn as_display_object(&self) -> Option<DisplayObject<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying executable for this object, if it exists.
-    fn as_executable(&self) -> Option<Executable<'gc>> {
+    fn as_executable(&self) -> Option<Executable<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying XML document for this object, if it exists.
-    fn as_xml(&self) -> Option<XmlObject<'gc>> {
+    fn as_xml(&self) -> Option<XmlObject<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying XML node for this object, if it exists.
-    fn as_xml_node(&self) -> Option<XmlNode<'gc>> {
+    fn as_xml_node(&self) -> Option<XmlNode<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying `ValueObject`, if it exists.
-    fn as_value_object(&self) -> Option<ValueObject<'gc>> {
+    fn as_value_object(&self) -> Option<ValueObject<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying `SharedObject`, if it exists
-    fn as_shared_object(&self) -> Option<SharedObject<'gc>> {
+    fn as_shared_object(&self) -> Option<SharedObject<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying `DateObject`, if it exists
-    fn as_date_object(&self) -> Option<DateObject<'gc>> {
+    fn as_date_object(&self) -> Option<DateObject<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying `ColorTransformObject`, if it exists
-    fn as_color_transform_object(&self) -> Option<ColorTransformObject<'gc>> {
+    fn as_color_transform_object(&self) -> Option<ColorTransformObject<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying `TransformObject`, if it exists
-    fn as_transform_object(&self) -> Option<TransformObject<'gc>> {
+    fn as_transform_object(&self) -> Option<TransformObject<'gc, Self::B>> {
         None
     }
 
-    /// Get the underlying `BlurFilterObject`, if it exists
-    fn as_blur_filter_object(&self) -> Option<BlurFilterObject<'gc>> {
+    /// Get the underlying BlurFilterObject`, if it exists
+    fn as_blur_filter_object(&self) -> Option<BlurFilterObject<'gc, Self::B>> {
         None
     }
 
-    /// Get the underlying `BevelFilterObject`, if it exists
-    fn as_bevel_filter_object(&self) -> Option<BevelFilterObject<'gc>> {
+    /// Get the underlying BevelFilterObject`, if it exists
+    fn as_bevel_filter_object(&self) -> Option<BevelFilterObject<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying `GlowFilterObject`, if it exists
-    fn as_glow_filter_object(&self) -> Option<GlowFilterObject<'gc>> {
+    fn as_glow_filter_object(&self) -> Option<GlowFilterObject<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying `DropShadowFilterObject`, if it exists
-    fn as_drop_shadow_filter_object(&self) -> Option<DropShadowFilterObject<'gc>> {
+    fn as_drop_shadow_filter_object(&self) -> Option<DropShadowFilterObject<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying `ColorMatrixFilterObject`, if it exists
-    fn as_color_matrix_filter_object(&self) -> Option<ColorMatrixFilterObject<'gc>> {
+    fn as_color_matrix_filter_object(&self) -> Option<ColorMatrixFilterObject<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying `DisplacementMapFilterObject`, if it exists
-    fn as_displacement_map_filter_object(&self) -> Option<DisplacementMapFilterObject<'gc>> {
+    fn as_displacement_map_filter_object(
+        &self,
+    ) -> Option<DisplacementMapFilterObject<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying `ConvolutionFilterObject`, if it exists
-    fn as_convolution_filter_object(&self) -> Option<ConvolutionFilterObject<'gc>> {
+    fn as_convolution_filter_object(&self) -> Option<ConvolutionFilterObject<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying `GradientBevelFilterObject`, if it exists
-    fn as_gradient_bevel_filter_object(&self) -> Option<GradientBevelFilterObject<'gc>> {
+    fn as_gradient_bevel_filter_object(&self) -> Option<GradientBevelFilterObject<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying `GradientGlowFilterObject`, if it exists
-    fn as_gradient_glow_filter_object(&self) -> Option<GradientGlowFilterObject<'gc>> {
+    fn as_gradient_glow_filter_object(&self) -> Option<GradientGlowFilterObject<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying `BitmapDataObject`, if it exists
-    fn as_bitmap_data_object(&self) -> Option<BitmapDataObject<'gc>> {
+    fn as_bitmap_data_object(&self) -> Option<BitmapDataObject<'gc, Self::B>> {
         None
     }
 
     /// Get the underlying `TextFormatObject`, if it exists
-    fn as_text_format_object(&self) -> Option<TextFormatObject<'gc>> {
+    fn as_text_format_object(&self) -> Option<TextFormatObject<'gc, Self::B>> {
         None
     }
 
@@ -621,8 +642,8 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// Check if this object is in the prototype chain of the specified test object.
     fn is_prototype_of(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
-        other: Object<'gc>,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+        other: Object<'gc, Self::B>,
     ) -> bool {
         let mut proto = other.proto(activation);
 
@@ -638,37 +659,45 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     }
 
     /// Gets the length of this object, as if it were an array.
-    fn length(&self, activation: &mut Activation<'_, 'gc, '_>) -> Result<i32, Error<'gc>>;
+    fn length(
+        &self,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+    ) -> Result<i32, Error<'gc, Self::B>>;
 
     /// Sets the length of this object, as if it were an array.
     fn set_length(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
         length: i32,
-    ) -> Result<(), Error<'gc>>;
+    ) -> Result<(), Error<'gc, Self::B>>;
 
     /// Checks if this object has an element.
-    fn has_element(&self, activation: &mut Activation<'_, 'gc, '_>, index: i32) -> bool;
+    fn has_element(&self, activation: &mut Activation<'_, 'gc, '_, Self::B>, index: i32) -> bool;
 
     /// Gets a property of this object, as if it were an array.
-    fn get_element(&self, activation: &mut Activation<'_, 'gc, '_>, index: i32) -> Value<'gc>;
+    fn get_element(
+        &self,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+        index: i32,
+    ) -> Value<'gc, Self::B>;
 
     /// Sets a property of this object, as if it were an array.
     fn set_element(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
         index: i32,
-        value: Value<'gc>,
-    ) -> Result<(), Error<'gc>>;
+        value: Value<'gc, Self::B>,
+    ) -> Result<(), Error<'gc, Self::B>>;
 
     /// Deletes a property of this object as if it were an array.
-    fn delete_element(&self, activation: &mut Activation<'_, 'gc, '_>, index: i32) -> bool;
+    fn delete_element(&self, activation: &mut Activation<'_, 'gc, '_, Self::B>, index: i32)
+        -> bool;
 }
 
 pub enum ObjectPtr {}
 
-impl<'gc> Object<'gc> {
-    pub fn ptr_eq(a: Object<'gc>, b: Object<'gc>) -> bool {
+impl<'gc, B: Backend> Object<'gc, B> {
+    pub fn ptr_eq(a: Object<'gc, B>, b: Object<'gc, B>) -> bool {
         a.as_ptr() == b.as_ptr()
     }
 }
@@ -681,12 +710,12 @@ impl<'gc> Object<'gc> {
 ///
 /// The prototype depth can and should be used to populate the `depth`
 /// parameter necessary to make `super` work.
-pub fn search_prototype<'gc>(
-    mut proto: Value<'gc>,
+pub fn search_prototype<'gc, B: Backend>(
+    mut proto: Value<'gc, B>,
     name: AvmString<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-) -> Result<Option<(Value<'gc>, u8)>, Error<'gc>> {
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+) -> Result<Option<(Value<'gc, B>, u8)>, Error<'gc, B>> {
     let mut depth = 0;
 
     while let Value::Object(p) = proto {

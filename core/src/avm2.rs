@@ -7,6 +7,7 @@ use crate::avm2::script::{Script, TranslationUnit};
 use crate::context::UpdateContext;
 use fnv::FnvHashMap;
 use gc_arena::{Collect, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 use ruffle_types::tag_utils::{SwfSlice, SwfStream};
 use std::rc::Rc;
@@ -65,21 +66,21 @@ pub type Error = Box<dyn std::error::Error>;
 /// The state of an AVM2 interpreter.
 #[derive(Collect)]
 #[collect(no_drop)]
-pub struct Avm2<'gc> {
+pub struct Avm2<'gc, B: Backend> {
     /// Values currently present on the operand stack.
-    stack: Vec<Value<'gc>>,
+    stack: Vec<Value<'gc, B>>,
 
     /// Global scope object.
-    globals: Domain<'gc>,
+    globals: Domain<'gc, B>,
 
     /// System classes.
-    system_classes: Option<SystemClasses<'gc>>,
+    system_classes: Option<SystemClasses<'gc, B>>,
 
     #[collect(require_static)]
-    native_method_table: &'static [Option<NativeMethodImpl>],
+    native_method_table: &'static [Option<NativeMethodImpl<B>>],
 
     #[collect(require_static)]
-    native_instance_allocator_table: &'static [Option<AllocatorFn>],
+    native_instance_allocator_table: &'static [Option<AllocatorFn<B>>],
 
     /// A list of objects which are capable of recieving broadcasts.
     ///
@@ -89,13 +90,13 @@ pub struct Avm2<'gc> {
     ///
     /// TODO: These should be weak object pointers, but our current garbage
     /// collector does not support weak references.
-    broadcast_list: FnvHashMap<AvmString<'gc>, Vec<Object<'gc>>>,
+    broadcast_list: FnvHashMap<AvmString<'gc>, Vec<Object<'gc, B>>>,
 
     #[cfg(feature = "avm_debug")]
     pub debug_output: bool,
 }
 
-impl<'gc> Avm2<'gc> {
+impl<'gc, B: Backend> Avm2<'gc, B> {
     /// Construct a new AVM interpreter.
     pub fn new(mc: MutationContext<'gc, '_>) -> Self {
         let globals = Domain::global_domain(mc);
@@ -113,7 +114,7 @@ impl<'gc> Avm2<'gc> {
         }
     }
 
-    pub fn load_player_globals(context: &mut UpdateContext<'_, 'gc, '_>) -> Result<(), Error> {
+    pub fn load_player_globals(context: &mut UpdateContext<'_, 'gc, '_, B>) -> Result<(), Error> {
         let globals = context.avm2.globals;
         let mut activation = Activation::from_nothing(context.reborrow());
         globals::load_player_globals(&mut activation, globals)
@@ -122,14 +123,14 @@ impl<'gc> Avm2<'gc> {
     /// Return the current set of system classes.
     ///
     /// This function panics if the interpreter has not yet been initialized.
-    pub fn classes(&self) -> &SystemClasses<'gc> {
+    pub fn classes(&self) -> &SystemClasses<'gc, B> {
         self.system_classes.as_ref().unwrap()
     }
 
     /// Run a script's initializer method.
     pub fn run_script_initializer(
-        script: Script<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        script: Script<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         let mut init_activation = Activation::from_script(context.reborrow(), script)?;
 
@@ -154,9 +155,9 @@ impl<'gc> Avm2<'gc> {
     ///
     /// The `bool` parameter reads true if the event was cancelled.
     pub fn dispatch_event(
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        event: Object<'gc>,
-        target: Object<'gc>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        event: Object<'gc, B>,
+        target: Object<'gc, B>,
     ) -> Result<bool, Error> {
         use crate::avm2::events::dispatch_event;
         let mut activation = Activation::from_nothing(context.reborrow());
@@ -173,8 +174,8 @@ impl<'gc> Avm2<'gc> {
     /// Attempts to register the same listener for the same event will also do
     /// nothing.
     pub fn register_broadcast_listener(
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        object: Object<'gc>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        object: Object<'gc, B>,
         event_name: AvmString<'gc>,
     ) {
         if !BROADCAST_WHITELIST
@@ -203,9 +204,9 @@ impl<'gc> Avm2<'gc> {
     /// Attempts to broadcast a non-broadcast event will do nothing. To add a
     /// new broadcast type, you must add it to the `BROADCAST_WHITELIST` first.
     pub fn broadcast_event(
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        event: Object<'gc>,
-        on_type: ClassObject<'gc>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        event: Object<'gc, B>,
+        on_type: ClassObject<'gc, B>,
     ) -> Result<(), Error> {
         let base_event = event.as_event().unwrap(); // TODO: unwrap?
         let event_name = base_event.event_type();
@@ -246,10 +247,10 @@ impl<'gc> Avm2<'gc> {
     }
 
     pub fn run_stack_frame_for_callable(
-        callable: Object<'gc>,
-        reciever: Option<Object<'gc>>,
-        args: &[Value<'gc>],
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        callable: Object<'gc, B>,
+        reciever: Option<Object<'gc, B>>,
+        args: &[Value<'gc, B>],
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         let mut evt_activation = Activation::from_nothing(context.reborrow());
         callable.call(reciever, args, &mut evt_activation)?;
@@ -258,9 +259,9 @@ impl<'gc> Avm2<'gc> {
     }
 
     pub fn load_abc_from_do_abc(
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         swf: &SwfSlice,
-        domain: Domain<'gc>,
+        domain: Domain<'gc, B>,
         reader: &mut SwfStream<'_>,
         tag_len: usize,
     ) -> Result<(), Error> {
@@ -295,8 +296,8 @@ impl<'gc> Avm2<'gc> {
         abc: SwfSlice,
         _abc_name: &str,
         lazy_init: bool,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        domain: Domain<'gc>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        domain: Domain<'gc, B>,
     ) -> Result<(), Error> {
         let mut read = Reader::new(abc.as_ref());
 
@@ -314,12 +315,12 @@ impl<'gc> Avm2<'gc> {
         Ok(())
     }
 
-    pub fn global_domain(&self) -> Domain<'gc> {
+    pub fn global_domain(&self) -> Domain<'gc, B> {
         self.globals
     }
 
     /// Push a value onto the operand stack.
-    fn push(&mut self, value: impl Into<Value<'gc>>) {
+    fn push(&mut self, value: impl Into<Value<'gc, B>>) {
         let mut value = value.into();
         if let Value::Object(o) = value {
             if let Some(prim) = o.as_primitive() {
@@ -333,7 +334,7 @@ impl<'gc> Avm2<'gc> {
 
     /// Retrieve the top-most value on the operand stack.
     #[allow(clippy::let_and_return)]
-    fn pop(&mut self) -> Value<'gc> {
+    fn pop(&mut self) -> Value<'gc, B> {
         let value = self.stack.pop().unwrap_or_else(|| {
             log::warn!("Avm1::pop: Stack underflow");
             Value::Undefined
@@ -344,7 +345,7 @@ impl<'gc> Avm2<'gc> {
         value
     }
 
-    fn pop_args(&mut self, arg_count: u32) -> Vec<Value<'gc>> {
+    fn pop_args(&mut self, arg_count: u32) -> Vec<Value<'gc, B>> {
         let mut args = vec![Value::Undefined; arg_count as usize];
         for arg in args.iter_mut().rev() {
             *arg = self.pop();

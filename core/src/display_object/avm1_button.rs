@@ -11,6 +11,7 @@ use crate::events::{ClipEvent, ClipEventResult};
 use crate::prelude::*;
 use gc_arena::{Collect, GcCell, MutationContext};
 use ruffle_types::backend::ui::MouseCursor;
+use ruffle_types::backend::Backend;
 use ruffle_types::events::ButtonKeyCode;
 use ruffle_types::tag_utils::{SwfMovie, SwfSlice};
 use ruffle_types::vminterface::AvmType;
@@ -22,25 +23,25 @@ use swf::ButtonActionCondition;
 
 #[derive(Clone, Debug, Collect, Copy)]
 #[collect(no_drop)]
-pub struct Avm1Button<'gc>(GcCell<'gc, Avm1ButtonData<'gc>>);
+pub struct Avm1Button<'gc, B: Backend>(GcCell<'gc, Avm1ButtonData<'gc, B>>);
 
 #[derive(Clone, Debug, Collect)]
 #[collect(no_drop)]
-pub struct Avm1ButtonData<'gc> {
-    base: InteractiveObjectBase<'gc>,
+pub struct Avm1ButtonData<'gc, B: Backend> {
+    base: InteractiveObjectBase<'gc, B>,
     static_data: GcCell<'gc, ButtonStatic>,
     state: ButtonState,
-    hit_area: BTreeMap<Depth, DisplayObject<'gc>>,
-    container: ChildContainer<'gc>,
+    hit_area: BTreeMap<Depth, DisplayObject<'gc, B>>,
+    container: ChildContainer<'gc, B>,
     tracking: ButtonTracking,
-    object: Option<Object<'gc>>,
+    object: Option<Object<'gc, B>>,
     initialized: bool,
     has_focus: bool,
     enabled: bool,
     use_hand_cursor: bool,
 }
 
-impl<'gc> Avm1Button<'gc> {
+impl<'gc, B: Backend> Avm1Button<'gc, B> {
     pub fn from_swf_tag(
         button: &swf::Button,
         source_movie: &SwfSlice,
@@ -131,7 +132,7 @@ impl<'gc> Avm1Button<'gc> {
     /// the caller is holding a write lock on the button data.
     fn set_state(
         mut self,
-        context: &mut crate::context::UpdateContext<'_, 'gc, '_>,
+        context: &mut crate::context::UpdateContext<'_, 'gc, '_, B>,
         state: ButtonState,
     ) {
         let mut removed_depths: fnv::FnvHashSet<_> =
@@ -208,7 +209,7 @@ impl<'gc> Avm1Button<'gc> {
         self.0.read().enabled
     }
 
-    pub fn set_enabled(self, context: &mut UpdateContext<'_, 'gc, '_>, enabled: bool) {
+    pub fn set_enabled(self, context: &mut UpdateContext<'_, 'gc, '_, B>, enabled: bool) {
         self.0.write(context.gc_context).enabled = enabled;
         if !enabled {
             self.set_state(context, ButtonState::Up);
@@ -221,23 +222,28 @@ impl<'gc> Avm1Button<'gc> {
 
     pub fn set_use_hand_cursor(
         self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         use_hand_cursor: bool,
     ) {
         self.0.write(context.gc_context).use_hand_cursor = use_hand_cursor;
     }
 }
 
-impl<'gc> TDisplayObject<'gc> for Avm1Button<'gc> {
-    fn base(&self) -> Ref<DisplayObjectBase<'gc>> {
+impl<'gc, B: Backend> TDisplayObject<'gc> for Avm1Button<'gc, B> {
+    type B = B;
+
+    fn base(&self) -> Ref<DisplayObjectBase<'gc, B>> {
         Ref::map(self.0.read(), |r| &r.base.base)
     }
 
-    fn base_mut<'a>(&'a self, mc: MutationContext<'gc, '_>) -> RefMut<'a, DisplayObjectBase<'gc>> {
+    fn base_mut<'a>(
+        &'a self,
+        mc: MutationContext<'gc, '_>,
+    ) -> RefMut<'a, DisplayObjectBase<'gc, B>> {
         RefMut::map(self.0.write(mc), |w| &mut w.base.base)
     }
 
-    fn instantiate(&self, gc_context: MutationContext<'gc, '_>) -> DisplayObject<'gc> {
+    fn instantiate(&self, gc_context: MutationContext<'gc, '_>) -> DisplayObject<'gc, B> {
         Self(GcCell::allocate(gc_context, self.0.read().clone())).into()
     }
 
@@ -255,8 +261,8 @@ impl<'gc> TDisplayObject<'gc> for Avm1Button<'gc> {
 
     fn post_instantiation(
         &self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        _init_object: Option<Object<'gc>>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        _init_object: Option<Object<'gc, B>>,
         _instantiated_by: Instantiator,
         run_frame: bool,
     ) {
@@ -285,7 +291,7 @@ impl<'gc> TDisplayObject<'gc> for Avm1Button<'gc> {
         }
     }
 
-    fn run_frame(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn run_frame(&self, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         let self_display_object = (*self).into();
         let initialized = self.0.read().initialized;
 
@@ -335,7 +341,7 @@ impl<'gc> TDisplayObject<'gc> for Avm1Button<'gc> {
         }
     }
 
-    fn render_self(&self, context: &mut RenderContext<'_, 'gc>) {
+    fn render_self(&self, context: &mut RenderContext<'_, 'gc, B>) {
         self.render_children(context);
     }
 
@@ -346,7 +352,7 @@ impl<'gc> TDisplayObject<'gc> for Avm1Button<'gc> {
 
     fn hit_test_shape(
         &self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         point: (Twips, Twips),
         options: HitTestOptions,
     ) -> bool {
@@ -359,7 +365,7 @@ impl<'gc> TDisplayObject<'gc> for Avm1Button<'gc> {
         false
     }
 
-    fn object(&self) -> Value<'gc> {
+    fn object(&self) -> Value<'gc, B> {
         self.0
             .read()
             .object
@@ -371,11 +377,11 @@ impl<'gc> TDisplayObject<'gc> for Avm1Button<'gc> {
         Some(*self)
     }
 
-    fn as_interactive(self) -> Option<InteractiveObject<'gc>> {
+    fn as_interactive(self) -> Option<InteractiveObject<'gc, B>> {
         Some(self.into())
     }
 
-    fn as_container(self) -> Option<DisplayObjectContainer<'gc>> {
+    fn as_container(self) -> Option<DisplayObjectContainer<'gc, B>> {
         Some(self.into())
     }
 
@@ -391,7 +397,7 @@ impl<'gc> TDisplayObject<'gc> for Avm1Button<'gc> {
         self.0.write(gc_context).has_focus = focused;
     }
 
-    fn unload(&self, context: &mut UpdateContext<'_, 'gc, '_>) {
+    fn unload(&self, context: &mut UpdateContext<'_, 'gc, '_, B>) {
         let had_focus = self.0.read().has_focus;
         if had_focus {
             let tracker = context.focus_tracker;
@@ -406,24 +412,28 @@ impl<'gc> TDisplayObject<'gc> for Avm1Button<'gc> {
     }
 }
 
-impl<'gc> TDisplayObjectContainer<'gc> for Avm1Button<'gc> {
+impl<'gc, B: Backend> TDisplayObjectContainer<'gc> for Avm1Button<'gc, B> {
+    type B = B;
+
     impl_display_object_container!(container);
 }
 
-impl<'gc> TInteractiveObject<'gc> for Avm1Button<'gc> {
-    fn ibase(&self) -> Ref<InteractiveObjectBase<'gc>> {
+impl<'gc, B: Backend> TInteractiveObject<'gc> for Avm1Button<'gc, B> {
+    type B = B;
+
+    fn ibase(&self) -> Ref<InteractiveObjectBase<'gc, B>> {
         Ref::map(self.0.read(), |r| &r.base)
     }
 
-    fn ibase_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<InteractiveObjectBase<'gc>> {
+    fn ibase_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<InteractiveObjectBase<'gc, B>> {
         RefMut::map(self.0.write(mc), |w| &mut w.base)
     }
 
-    fn as_displayobject(self) -> DisplayObject<'gc> {
+    fn as_displayobject(self) -> DisplayObject<'gc, B> {
         self.into()
     }
 
-    fn filter_clip_event(self, event: ClipEvent) -> ClipEventResult {
+    fn filter_clip_event(self, event: ClipEvent<B>) -> ClipEventResult {
         if !self.visible() && !matches!(event, ClipEvent::ReleaseOutside) {
             return ClipEventResult::NotHandled;
         }
@@ -437,8 +447,8 @@ impl<'gc> TInteractiveObject<'gc> for Avm1Button<'gc> {
 
     fn event_dispatch(
         self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        event: ClipEvent,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
+        event: ClipEvent<B>,
     ) -> ClipEventResult {
         let self_display_object = self.into();
         let mut write = self.0.write(context.gc_context);
@@ -521,10 +531,10 @@ impl<'gc> TInteractiveObject<'gc> for Avm1Button<'gc> {
 
     fn mouse_pick(
         &self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         point: (Twips, Twips),
         require_button_mode: bool,
-    ) -> Option<InteractiveObject<'gc>> {
+    ) -> Option<InteractiveObject<'gc, B>> {
         // The button is hovered if the mouse is over any child nodes.
         if self.visible() && self.mouse_enabled() {
             for child in self.iter_render_list().rev() {
@@ -545,7 +555,7 @@ impl<'gc> TInteractiveObject<'gc> for Avm1Button<'gc> {
         None
     }
 
-    fn mouse_cursor(self, _context: &mut UpdateContext<'_, 'gc, '_>) -> MouseCursor {
+    fn mouse_cursor(self, _context: &mut UpdateContext<'_, 'gc, '_, B>) -> MouseCursor {
         if self.use_hand_cursor() && self.enabled() {
             MouseCursor::Hand
         } else {
@@ -554,10 +564,10 @@ impl<'gc> TInteractiveObject<'gc> for Avm1Button<'gc> {
     }
 }
 
-impl<'gc> Avm1ButtonData<'gc> {
+impl<'gc, B: Backend> Avm1ButtonData<'gc, B> {
     fn play_sound(
         &self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         sound: Option<&swf::ButtonSound>,
     ) {
         if let Some((id, sound_info)) = sound {
@@ -572,7 +582,7 @@ impl<'gc> Avm1ButtonData<'gc> {
     }
     fn run_actions(
         &mut self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         condition: swf::ButtonActionCondition,
         key_code: Option<ButtonKeyCode>,
     ) -> ClipEventResult {

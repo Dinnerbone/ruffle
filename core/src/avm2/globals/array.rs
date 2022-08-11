@@ -10,16 +10,17 @@ use crate::avm2::value::Value;
 use crate::avm2::Error;
 use bitflags::bitflags;
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 use std::cmp::{min, Ordering};
 use std::mem::swap;
 
 /// Implements `Array`'s instance initializer.
-pub fn instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         activation.super_init(this, &[])?;
 
@@ -49,20 +50,20 @@ pub fn instance_init<'gc>(
 }
 
 /// Implements `Array`'s class initializer.
-pub fn class_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn class_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok(Value::Undefined)
 }
 
 /// Implements `Array.length`'s getter
-pub fn length<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn length<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(array) = this.as_array_storage() {
             return Ok(array.length().into());
@@ -73,11 +74,11 @@ pub fn length<'gc>(
 }
 
 /// Implements `Array.length`'s setter
-pub fn set_length<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn set_length<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut array) = this.as_array_storage_mut(activation.context.gc_context) {
             let size = args
@@ -92,20 +93,20 @@ pub fn set_length<'gc>(
 }
 
 /// Bundle an already-constructed `ArrayStorage` in an `Object`.
-pub fn build_array<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    array: ArrayStorage<'gc>,
-) -> Result<Value<'gc>, Error> {
+pub fn build_array<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    array: ArrayStorage<'gc, B>,
+) -> Result<Value<'gc, B>, Error> {
     Ok(ArrayObject::from_storage(activation, array)?.into())
 }
 
 /// Implements `Array.concat`
 #[allow(clippy::map_clone)] //You can't clone `Option<Ref<T>>` without it
-pub fn concat<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn concat<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let mut base_array = this
         .and_then(|this| this.as_array_storage().map(|a| a.clone()))
         .unwrap_or_else(|| ArrayStorage::new(0));
@@ -122,12 +123,12 @@ pub fn concat<'gc>(
 }
 
 /// Resolves array holes.
-pub fn resolve_array_hole<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
+pub fn resolve_array_hole<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
     i: usize,
-    item: Option<Value<'gc>>,
-) -> Result<Value<'gc>, Error> {
+    item: Option<Value<'gc, B>>,
+) -> Result<Value<'gc, B>, Error> {
     item.map(Ok).unwrap_or_else(|| {
         this.proto()
             .map(|p| {
@@ -144,14 +145,17 @@ pub fn resolve_array_hole<'gc>(
     })
 }
 
-pub fn join_inner<'gc, 'a, 'ctxt, C>(
-    activation: &mut Activation<'a, 'gc, 'ctxt>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
+pub fn join_inner<'gc, 'a, 'ctxt, C, B: Backend>(
+    activation: &mut Activation<'a, 'gc, 'ctxt, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
     mut conv: C,
-) -> Result<Value<'gc>, Error>
+) -> Result<Value<'gc, B>, Error>
 where
-    C: for<'b> FnMut(Value<'gc>, &'b mut Activation<'a, 'gc, 'ctxt>) -> Result<Value<'gc>, Error>,
+    C: for<'b> FnMut(
+        Value<'gc, B>,
+        &'b mut Activation<'a, 'gc, 'ctxt, B>,
+    ) -> Result<Value<'gc, B>, Error>,
 {
     let mut separator = args.get(0).cloned().unwrap_or(Value::Undefined);
     if separator == Value::Undefined {
@@ -185,29 +189,29 @@ where
 }
 
 /// Implements `Array.join`
-pub fn join<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn join<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     join_inner(activation, this, args, |v, _act| Ok(v))
 }
 
 /// Implements `Array.toString`
-pub fn to_string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn to_string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     join_inner(activation, this, &[",".into()], |v, _act| Ok(v))
 }
 
 /// Implements `Array.toLocaleString`
-pub fn to_locale_string<'gc>(
-    act: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn to_locale_string<'gc, B: Backend>(
+    act: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     join_inner(act, this, &[",".into()], |v, activation| {
         if let Ok(o) = v.coerce_to_object(activation) {
             o.call_property(
@@ -222,11 +226,11 @@ pub fn to_locale_string<'gc>(
 }
 
 /// Implements `Array.valueOf`
-pub fn value_of<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn value_of<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     join_inner(activation, this, &[",".into()], |v, _act| Ok(v))
 }
 
@@ -248,25 +252,25 @@ pub fn value_of<'gc>(
 /// mutate the array under iteration. Normally, holding an `Iterator` on the
 /// array while this happens would cause a panic; this code exists to prevent
 /// that.
-pub struct ArrayIter<'gc> {
-    array_object: Object<'gc>,
+pub struct ArrayIter<'gc, B: Backend> {
+    array_object: Object<'gc, B>,
     pub index: u32,
     pub rev_index: u32,
 }
 
-impl<'gc> ArrayIter<'gc> {
+impl<'gc, B: Backend> ArrayIter<'gc, B> {
     /// Construct a new `ArrayIter`.
     pub fn new(
-        activation: &mut Activation<'_, 'gc, '_>,
-        array_object: Object<'gc>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        array_object: Object<'gc, B>,
     ) -> Result<Self, Error> {
         Self::with_bounds(activation, array_object, 0, u32::MAX)
     }
 
     /// Construct a new `ArrayIter` that is bounded to a given range.
     pub fn with_bounds(
-        activation: &mut Activation<'_, 'gc, '_>,
-        array_object: Object<'gc>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        array_object: Object<'gc, B>,
         start_index: u32,
         end_index: u32,
     ) -> Result<Self, Error> {
@@ -290,8 +294,8 @@ impl<'gc> ArrayIter<'gc> {
     /// a pair of the index and then the value.
     pub fn next(
         &mut self,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Option<Result<(u32, Value<'gc>), Error>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Option<Result<(u32, Value<'gc, B>), Error>> {
         if self.index < self.rev_index {
             let i = self.index;
 
@@ -320,8 +324,8 @@ impl<'gc> ArrayIter<'gc> {
     /// a pair of the index and then the value.
     pub fn next_back(
         &mut self,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Option<Result<(u32, Value<'gc>), Error>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Option<Result<(u32, Value<'gc, B>), Error>> {
         if self.index < self.rev_index {
             self.rev_index -= 1;
 
@@ -346,11 +350,11 @@ impl<'gc> ArrayIter<'gc> {
 }
 
 /// Implements `Array.forEach`
-pub fn for_each<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn for_each<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let callback = args
             .get(0)
@@ -371,11 +375,11 @@ pub fn for_each<'gc>(
 }
 
 /// Implements `Array.map`
-pub fn map<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn map<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let callback = args
             .get(0)
@@ -400,11 +404,11 @@ pub fn map<'gc>(
 }
 
 /// Implements `Array.filter`
-pub fn filter<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn filter<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let callback = args
             .get(0)
@@ -433,11 +437,11 @@ pub fn filter<'gc>(
 }
 
 /// Implements `Array.every`
-pub fn every<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn every<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let callback = args
             .get(0)
@@ -466,11 +470,11 @@ pub fn every<'gc>(
 }
 
 /// Implements `Array.some`
-pub fn some<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn some<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let callback = args
             .get(0)
@@ -499,11 +503,11 @@ pub fn some<'gc>(
 }
 
 /// Implements `Array.indexOf`
-pub fn index_of<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn index_of<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(array) = this.as_array_storage() {
             let search_val = args.get(0).cloned().unwrap_or(Value::Undefined);
@@ -528,11 +532,11 @@ pub fn index_of<'gc>(
 }
 
 /// Implements `Array.lastIndexOf`
-pub fn last_index_of<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn last_index_of<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(array) = this.as_array_storage() {
             let search_val = args.get(0).cloned().unwrap_or(Value::Undefined);
@@ -557,11 +561,11 @@ pub fn last_index_of<'gc>(
 }
 
 /// Implements `Array.pop`
-pub fn pop<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn pop<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut array) = this.as_array_storage_mut(activation.context.gc_context) {
             return Ok(array.pop());
@@ -572,11 +576,11 @@ pub fn pop<'gc>(
 }
 
 /// Implements `Array.push`
-pub fn push<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn push<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut array) = this.as_array_storage_mut(activation.context.gc_context) {
             for arg in args {
@@ -588,11 +592,11 @@ pub fn push<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn reverse<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn reverse<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut array) = this.as_array_storage_mut(activation.context.gc_context) {
             let mut last_non_hole_index = None;
@@ -626,11 +630,11 @@ pub fn reverse<'gc>(
 }
 
 /// Implements `Array.shift`
-pub fn shift<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn shift<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut array) = this.as_array_storage_mut(activation.context.gc_context) {
             return Ok(array.shift());
@@ -641,11 +645,11 @@ pub fn shift<'gc>(
 }
 
 /// Implements `Array.unshift`
-pub fn unshift<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn unshift<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut array) = this.as_array_storage_mut(activation.context.gc_context) {
             for arg in args.iter().rev() {
@@ -658,9 +662,9 @@ pub fn unshift<'gc>(
 }
 
 /// Resolve a possibly-negative array index to something guaranteed to be positive.
-pub fn resolve_index<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    index: Value<'gc>,
+pub fn resolve_index<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    index: Value<'gc, B>,
     length: usize,
 ) -> Result<usize, Error> {
     let index = index.coerce_to_i32(activation)?;
@@ -674,11 +678,11 @@ pub fn resolve_index<'gc>(
 }
 
 /// Implements `Array.slice`
-pub fn slice<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn slice<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let array_length = this.as_array_storage().map(|a| a.length());
 
@@ -715,11 +719,11 @@ pub fn slice<'gc>(
 }
 
 /// Implements `Array.splice`
-pub fn splice<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn splice<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let array_length = this.as_array_storage().map(|a| a.length());
 
@@ -741,7 +745,7 @@ pub fn splice<'gc>(
 
                 let contents = this
                     .as_array_storage()
-                    .map(|a| a.iter().collect::<Vec<Option<Value<'gc>>>>())
+                    .map(|a| a.iter().collect::<Vec<Option<Value<'gc, B>>>>())
                     .unwrap();
 
                 let mut resolved = Vec::with_capacity(contents.len());
@@ -751,7 +755,7 @@ pub fn splice<'gc>(
 
                 let removed = resolved
                     .splice(actual_start..actual_end, args_slice)
-                    .collect::<Vec<Value<'gc>>>();
+                    .collect::<Vec<Value<'gc, B>>>();
                 let removed_array = ArrayStorage::from_args(&removed[..]);
 
                 let mut resolved_array = ArrayStorage::from_args(&resolved[..]);
@@ -792,9 +796,13 @@ bitflags! {
 
 /// Identity closure shim which exists purely to decorate closure types with
 /// the HRTB necessary to accept an activation.
-fn constrain<'a, 'gc, 'ctxt, F>(f: F) -> F
+fn constrain<'a, 'gc, 'ctxt, F, B: Backend>(f: F) -> F
 where
-    F: FnMut(&mut Activation<'a, 'gc, 'ctxt>, Value<'gc>, Value<'gc>) -> Result<Ordering, Error>,
+    F: FnMut(
+        &mut Activation<'a, 'gc, 'ctxt, B>,
+        Value<'gc, B>,
+        Value<'gc, B>,
+    ) -> Result<Ordering, Error>,
 {
     f
 }
@@ -812,14 +820,18 @@ where
 /// this case, you should cancel the in-place sorting operation and return 0 to
 /// the caller. In the event that this function yields a runtime error, the
 /// contents of the `values` array will be sorted in a random order.
-fn sort_inner<'a, 'gc, 'ctxt, C>(
-    activation: &mut Activation<'a, 'gc, 'ctxt>,
-    values: &mut [(usize, Value<'gc>)],
+fn sort_inner<'a, 'gc, 'ctxt, C, B: Backend>(
+    activation: &mut Activation<'a, 'gc, 'ctxt, B>,
+    values: &mut [(usize, Value<'gc, B>)],
     options: SortOptions,
     mut sort_func: C,
 ) -> Result<bool, Error>
 where
-    C: FnMut(&mut Activation<'a, 'gc, 'ctxt>, Value<'gc>, Value<'gc>) -> Result<Ordering, Error>,
+    C: FnMut(
+        &mut Activation<'a, 'gc, 'ctxt, B>,
+        Value<'gc, B>,
+        Value<'gc, B>,
+    ) -> Result<Ordering, Error>,
 {
     let mut unique_sort_satisfied = true;
     let mut error_signal = Ok(());
@@ -856,10 +868,10 @@ where
     Ok(!options.contains(SortOptions::UNIQUE_SORT) || unique_sort_satisfied)
 }
 
-pub fn compare_string_case_sensitive<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    a: Value<'gc>,
-    b: Value<'gc>,
+pub fn compare_string_case_sensitive<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    a: Value<'gc, B>,
+    b: Value<'gc, B>,
 ) -> Result<Ordering, Error> {
     let string_a = a.coerce_to_string(activation)?;
     let string_b = b.coerce_to_string(activation)?;
@@ -867,10 +879,10 @@ pub fn compare_string_case_sensitive<'gc>(
     Ok(string_a.cmp(&string_b))
 }
 
-pub fn compare_string_case_insensitive<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    a: Value<'gc>,
-    b: Value<'gc>,
+pub fn compare_string_case_insensitive<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    a: Value<'gc, B>,
+    b: Value<'gc, B>,
 ) -> Result<Ordering, Error> {
     let string_a = a.coerce_to_string(activation)?;
     let string_b = b.coerce_to_string(activation)?;
@@ -878,10 +890,10 @@ pub fn compare_string_case_insensitive<'gc>(
     Ok(string_a.cmp_ignore_case(&string_b))
 }
 
-pub fn compare_numeric<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    a: Value<'gc>,
-    b: Value<'gc>,
+pub fn compare_numeric<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    a: Value<'gc, B>,
+    b: Value<'gc, B>,
 ) -> Result<Ordering, Error> {
     let num_a = a.coerce_to_number(activation)?;
     let num_b = b.coerce_to_number(activation)?;
@@ -898,13 +910,13 @@ pub fn compare_numeric<'gc>(
 }
 
 /// Take a sorted set of values and produce the result requested by the caller.
-fn sort_postprocess<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
+fn sort_postprocess<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
     options: SortOptions,
     unique_satisfied: bool,
-    values: Vec<(usize, Value<'gc>)>,
-) -> Result<Value<'gc>, Error> {
+    values: Vec<(usize, Value<'gc, B>)>,
+) -> Result<Value<'gc, B>, Error> {
     if unique_satisfied {
         if options.contains(SortOptions::RETURN_INDEXED_ARRAY) {
             return build_array(
@@ -943,10 +955,10 @@ fn sort_postprocess<'gc>(
 /// Given a value, extract its array values.
 ///
 /// If the value is not an array, this function yields `None`.
-fn extract_array_values<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    value: Value<'gc>,
-) -> Result<Option<Vec<Value<'gc>>>, Error> {
+fn extract_array_values<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    value: Value<'gc, B>,
+) -> Result<Option<Vec<Value<'gc, B>>>, Error> {
     let object = value.as_object();
     let holey_vec = if let Some(object) = object {
         if let Some(field_array) = object.as_array_storage() {
@@ -967,11 +979,11 @@ fn extract_array_values<'gc>(
 }
 
 /// Impl `Array.sort`
-pub fn sort<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn sort<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let (compare_fnc, options) = if args.len() > 1 {
             (
@@ -1005,7 +1017,7 @@ pub fn sort<'gc>(
                 .iter()
                 .enumerate()
                 .map(|(i, v)| (i, *v))
-                .collect::<Vec<(usize, Value<'gc>)>>()
+                .collect::<Vec<(usize, Value<'gc, B>)>>()
         } else {
             return Ok(0.into());
         };
@@ -1058,10 +1070,10 @@ pub fn sort<'gc>(
 /// If the value is not an array, it will be returned as if it was present in a
 /// one-element array containing itself. This is intended for use with parsing
 /// parameters which are optionally arrays.
-fn extract_maybe_array_values<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    value: Value<'gc>,
-) -> Result<Vec<Value<'gc>>, Error> {
+fn extract_maybe_array_values<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    value: Value<'gc, B>,
+) -> Result<Vec<Value<'gc, B>>, Error> {
     Ok(extract_array_values(activation, value)?.unwrap_or_else(|| vec![value]))
 }
 
@@ -1071,9 +1083,9 @@ fn extract_maybe_array_values<'gc>(
 /// one-element array containing itself. This is intended for use with parsing
 /// parameters which are optionally arrays. The returned value will still be
 /// coerced into a string in this case.
-fn extract_maybe_array_strings<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    value: Value<'gc>,
+fn extract_maybe_array_strings<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    value: Value<'gc, B>,
 ) -> Result<Vec<AvmString<'gc>>, Error> {
     let values = extract_maybe_array_values(activation, value)?;
 
@@ -1090,9 +1102,9 @@ fn extract_maybe_array_strings<'gc>(
 /// one-element array containing itself. This is intended for use with parsing
 /// parameters which are optionally arrays. The returned value will still be
 /// coerced into a string in this case.
-fn extract_maybe_array_sort_options<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    value: Value<'gc>,
+fn extract_maybe_array_sort_options<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    value: Value<'gc, B>,
 ) -> Result<Vec<SortOptions>, Error> {
     let values = extract_maybe_array_values(activation, value)?;
 
@@ -1106,11 +1118,11 @@ fn extract_maybe_array_sort_options<'gc>(
 }
 
 /// Impl `Array.sortOn`
-pub fn sort_on<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn sort_on<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(field_names_value) = args.get(0).cloned() {
             let field_names = extract_maybe_array_strings(activation, field_names_value)?;
@@ -1126,7 +1138,7 @@ pub fn sort_on<'gc>(
                     .iter()
                     .enumerate()
                     .map(|(i, v)| (i, *v))
-                    .collect::<Vec<(usize, Value<'gc>)>>()
+                    .collect::<Vec<(usize, Value<'gc, B>)>>()
             } else {
                 return Ok(0.into());
             };
@@ -1187,7 +1199,7 @@ pub fn sort_on<'gc>(
 }
 
 /// Construct `Array`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::public(), "Array"),
         Some(QName::new(Namespace::public(), "Object").into()),
@@ -1200,21 +1212,21 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
 
     write.set_instance_allocator(array_allocator);
 
-    const PUBLIC_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] = &[
+    let public_instance_methods: &[(&str, NativeMethodImpl<B>)] = &[
         ("toString", to_string),
         ("toLocaleString", to_locale_string),
         ("valueOf", value_of),
     ];
-    write.define_public_builtin_instance_methods(mc, PUBLIC_INSTANCE_METHODS);
+    write.define_public_builtin_instance_methods(mc, public_instance_methods);
 
-    const PUBLIC_INSTANCE_PROPERTIES: &[(
+    let public_instance_properties: &[(
         &str,
-        Option<NativeMethodImpl>,
-        Option<NativeMethodImpl>,
+        Option<NativeMethodImpl<B>>,
+        Option<NativeMethodImpl<B>>,
     )] = &[("length", Some(length), Some(set_length))];
-    write.define_public_builtin_instance_properties(mc, PUBLIC_INSTANCE_PROPERTIES);
+    write.define_public_builtin_instance_properties(mc, public_instance_properties);
 
-    const AS3_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] = &[
+    let as3_instance_methods: &[(&str, NativeMethodImpl<B>)] = &[
         ("concat", concat),
         ("join", join),
         ("forEach", for_each),
@@ -1234,9 +1246,9 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
         ("sort", sort),
         ("sortOn", sort_on),
     ];
-    write.define_as3_builtin_instance_methods(mc, AS3_INSTANCE_METHODS);
+    write.define_as3_builtin_instance_methods(mc, as3_instance_methods);
 
-    const CONSTANTS: &[(&str, u32)] = &[
+    let constants: &[(&str, u32)] = &[
         (
             "CASEINSENSITIVE",
             SortOptions::CASE_INSENSITIVE.bits() as u32,
@@ -1249,7 +1261,7 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
         ),
         ("UNIQUESORT", SortOptions::UNIQUE_SORT.bits() as u32),
     ];
-    write.define_public_constant_uint_class_traits(CONSTANTS);
+    write.define_public_constant_uint_class_traits(constants);
 
     class
 }

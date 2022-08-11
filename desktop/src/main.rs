@@ -168,7 +168,7 @@ struct App {
     window: Rc<Window>,
     event_loop: EventLoop<RuffleEvent>,
     executor: Arc<Mutex<GlutinAsyncExecutor>>,
-    player: Arc<Mutex<Player>>,
+    player: Arc<Mutex<Player<B>>>,
 }
 
 impl App {

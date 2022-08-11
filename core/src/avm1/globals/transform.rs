@@ -8,6 +8,7 @@ use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{Object, TObject, Value};
 use crate::display_object::{MovieClip, TDisplayObject};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 
 macro_rules! tx_getter {
     ( $get:ident ) => {
@@ -36,19 +37,11 @@ macro_rules! tx_setter {
     };
 }
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "concatenatedColorTransform" => property(tx_getter!(concatenated_color_transform));
-    "concatenatedMatrix" => property(tx_getter!(concatenated_matrix));
-    "colorTransform" => property(tx_getter!(color_transform), tx_setter!(set_color_transform));
-    "matrix" => property(tx_getter!(matrix), tx_setter!(set_matrix));
-    "pixelBounds" => property(tx_getter!(pixel_bounds));
-};
-
-pub fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // `Tranform` constructor accepts exactly 1 argument.
     if let [Value::Object(clip)] = args {
         if let (Some(transform), Some(clip)) = (
@@ -63,21 +56,30 @@ pub fn constructor<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let transform_object = TransformObject::empty(gc_context, Some(proto));
     let object = transform_object.as_script_object().unwrap();
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "concatenatedColorTransform" => property(tx_getter!(concatenated_color_transform));
+        "concatenatedMatrix" => property(tx_getter!(concatenated_matrix));
+        "colorTransform" => property(tx_getter!(color_transform), tx_setter!(set_color_transform));
+        "matrix" => property(tx_getter!(matrix), tx_setter!(set_matrix));
+        "pixelBounds" => property(tx_getter!(pixel_bounds));
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     transform_object.into()
 }
 
-fn concatenated_color_transform<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    clip: MovieClip<'gc>,
-) -> Result<Value<'gc>, Error<'gc>> {
+fn concatenated_color_transform<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    clip: MovieClip<'gc, B>,
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // Walk through parents to get combined color transform.
     let mut color_transform = *clip.base().color_transform();
     let mut node = clip.avm1_parent();
@@ -89,28 +91,28 @@ fn concatenated_color_transform<'gc>(
     Ok(color_transform)
 }
 
-fn concatenated_matrix<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    clip: MovieClip<'gc>,
-) -> Result<Value<'gc>, Error<'gc>> {
+fn concatenated_matrix<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    clip: MovieClip<'gc, B>,
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let matrix = matrix::matrix_to_object(clip.local_to_global_matrix(), activation)?;
     Ok(matrix)
 }
 
-fn color_transform<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    clip: MovieClip<'gc>,
-) -> Result<Value<'gc>, Error<'gc>> {
+fn color_transform<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    clip: MovieClip<'gc, B>,
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let color_transform =
         color_transform::color_transform_to_object(*clip.base().color_transform(), activation)?;
     Ok(color_transform)
 }
 
-fn set_color_transform<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    clip: MovieClip<'gc>,
-    value: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_color_transform<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    clip: MovieClip<'gc, B>,
+    value: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     let as_color_transform = value.coerce_to_object(activation);
     // Set only occurs for an object with actual ColorTransform data.
     if as_color_transform.as_color_transform_object().is_some() {
@@ -123,19 +125,19 @@ fn set_color_transform<'gc>(
     Ok(())
 }
 
-fn matrix<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    clip: MovieClip<'gc>,
-) -> Result<Value<'gc>, Error<'gc>> {
+fn matrix<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    clip: MovieClip<'gc, B>,
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let matrix = matrix::matrix_to_object(*clip.base().matrix(), activation)?;
     Ok(matrix)
 }
 
-fn set_matrix<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    clip: MovieClip<'gc>,
-    value: Value<'gc>,
-) -> Result<(), Error<'gc>> {
+fn set_matrix<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    clip: MovieClip<'gc, B>,
+    value: Value<'gc, B>,
+) -> Result<(), Error<'gc, B>> {
     let as_matrix = value.coerce_to_object(activation);
     // Assignment only occurs for an object with Matrix properties (a, b, c, d, tx, ty).
     let is_matrix = ["a", "b", "c", "d", "tx", "ty"]
@@ -150,10 +152,10 @@ fn set_matrix<'gc>(
     Ok(())
 }
 
-fn pixel_bounds<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    clip: MovieClip<'gc>,
-) -> Result<Value<'gc>, Error<'gc>> {
+fn pixel_bounds<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    clip: MovieClip<'gc, B>,
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // This is equivalent to `clip.getBounds()`.
     let bounds = clip.world_bounds();
 

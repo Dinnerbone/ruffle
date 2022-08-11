@@ -45,6 +45,7 @@ pub use object::script_object::ScriptObject;
 pub use object::sound_object::SoundObject;
 pub use object::stage_object::StageObject;
 pub use object::{Object, ObjectPtr, TObject};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 use scope::Scope;
 use smallvec::alloc::borrow::Cow;
@@ -82,32 +83,32 @@ macro_rules! avm_error {
 
 #[derive(Collect)]
 #[collect(no_drop)]
-pub struct Avm1<'gc> {
+pub struct Avm1<'gc, B: Backend> {
     /// The Flash Player version we're emulating.
     player_version: u8,
 
     /// The constant pool to use for new activations from code sources that
     /// don't close over the constant pool they were defined with.
-    constant_pool: GcCell<'gc, Vec<Value<'gc>>>,
+    constant_pool: GcCell<'gc, Vec<Value<'gc, B>>>,
 
     /// The global object.
-    globals: Object<'gc>,
+    globals: Object<'gc, B>,
 
     /// System built-ins that we use internally to construct new objects.
-    prototypes: globals::SystemPrototypes<'gc>,
+    prototypes: globals::SystemPrototypes<'gc, B>,
 
     /// Cached functions for the AsBroadcaster
-    broadcaster_functions: BroadcasterFunctions<'gc>,
+    broadcaster_functions: BroadcasterFunctions<'gc, B>,
 
     /// DisplayObject property map.
-    display_properties: GcCell<'gc, stage_object::DisplayPropertyMap<'gc>>,
+    display_properties: GcCell<'gc, stage_object::DisplayPropertyMap<'gc, B>>,
 
     /// The operand stack (shared across functions).
-    stack: Vec<Value<'gc>>,
+    stack: Vec<Value<'gc, B>>,
 
     /// The register slots (also shared across functions).
     /// `ActionDefineFunction2` defined functions do not use these slots.
-    registers: [Value<'gc>; 4],
+    registers: [Value<'gc, B>; 4],
 
     /// If a serious error has occurred, or a user has requested it, the AVM may be halted.
     /// This will completely prevent any further actions from being executed.
@@ -122,20 +123,20 @@ pub struct Avm1<'gc> {
     has_mouse_listener: bool,
 
     /// The list of all movie clips in execution order.
-    clip_exec_list: Option<DisplayObject<'gc>>,
+    clip_exec_list: Option<DisplayObject<'gc, B>>,
 
     /// The mappings between symbol names and constructors registered
     /// with `Object.registerClass()`.
     /// Because SWFs v6 and v7+ use different case-sensitivity rules, Flash
     /// keeps two separate registries, one case-sensitive, the other not.
-    constructor_registry_case_insensitive: PropertyMap<'gc, FunctionObject<'gc>>,
-    constructor_registry_case_sensitive: PropertyMap<'gc, FunctionObject<'gc>>,
+    constructor_registry_case_insensitive: PropertyMap<'gc, FunctionObject<'gc, B>>,
+    constructor_registry_case_sensitive: PropertyMap<'gc, FunctionObject<'gc, B>>,
 
     #[cfg(feature = "avm_debug")]
     pub debug_output: bool,
 }
 
-impl<'gc> Avm1<'gc> {
+impl<'gc, B: Backend> Avm1<'gc, B> {
     pub fn new(gc_context: MutationContext<'gc, '_>, player_version: u8) -> Self {
         let (prototypes, globals, broadcaster_functions) = create_globals(gc_context);
 
@@ -169,10 +170,10 @@ impl<'gc> Avm1<'gc> {
     ///
     /// This creates a new frame stack.
     pub fn run_stack_frame_for_action<S: Into<Cow<'static, str>>>(
-        active_clip: DisplayObject<'gc>,
+        active_clip: DisplayObject<'gc, B>,
         name: S,
         code: SwfSlice,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
     ) {
         if context.avm1.halted {
             // We've been told to ignore all future execution.
@@ -219,12 +220,12 @@ impl<'gc> Avm1<'gc> {
     ///
     /// This creates a new frame stack.
     pub fn run_with_stack_frame_for_display_object<'a, F, R>(
-        active_clip: DisplayObject<'gc>,
-        action_context: &mut UpdateContext<'_, 'gc, '_>,
+        active_clip: DisplayObject<'gc, B>,
+        action_context: &mut UpdateContext<'_, 'gc, '_, B>,
         function: F,
     ) -> R
     where
-        for<'b> F: FnOnce(&mut Activation<'b, 'gc, '_>) -> R,
+        for<'b> F: FnOnce(&mut Activation<'b, 'gc, '_, B>) -> R,
     {
         let clip_obj = match active_clip.object() {
             Value::Object(o) => o,
@@ -256,9 +257,9 @@ impl<'gc> Avm1<'gc> {
     ///
     /// This creates a new frame stack.
     pub fn run_stack_frame_for_init_action(
-        active_clip: DisplayObject<'gc>,
+        active_clip: DisplayObject<'gc, B>,
         code: SwfSlice,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
     ) {
         if context.avm1.halted {
             // We've been told to ignore all future execution.
@@ -307,11 +308,11 @@ impl<'gc> Avm1<'gc> {
     ///
     /// This creates a new frame stack.
     pub fn run_stack_frame_for_method<'a, 'b>(
-        active_clip: DisplayObject<'gc>,
-        obj: Object<'gc>,
-        context: &'a mut UpdateContext<'b, 'gc, '_>,
+        active_clip: DisplayObject<'gc, B>,
+        obj: Object<'gc, B>,
+        context: &'a mut UpdateContext<'b, 'gc, '_, B>,
         name: AvmString<'gc>,
-        args: &[Value<'gc>],
+        args: &[Value<'gc, B>],
     ) {
         if context.avm1.halted {
             // We've been told to ignore all future execution.
@@ -330,11 +331,11 @@ impl<'gc> Avm1<'gc> {
     }
 
     pub fn notify_system_listeners(
-        active_clip: DisplayObject<'gc>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        active_clip: DisplayObject<'gc, B>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
         broadcaster_name: AvmString<'gc>,
         method: AvmString<'gc>,
-        args: &[Value<'gc>],
+        args: &[Value<'gc, B>],
     ) {
         let global = context.avm1.global_object_cell();
 
@@ -379,13 +380,13 @@ impl<'gc> Avm1<'gc> {
         }
     }
 
-    fn push(&mut self, value: Value<'gc>) {
+    fn push(&mut self, value: Value<'gc, B>) {
         avm_debug!(self, "Stack push {}: {:?}", self.stack.len(), value);
         self.stack.push(value);
     }
 
     #[allow(clippy::let_and_return)]
-    fn pop(&mut self) -> Value<'gc> {
+    fn pop(&mut self) -> Value<'gc, B> {
         let value = self.stack.pop().unwrap_or_else(|| {
             log::warn!("Avm1::pop: Stack underflow");
             Value::Undefined
@@ -397,17 +398,17 @@ impl<'gc> Avm1<'gc> {
     }
 
     /// Obtain the value of `_global`.
-    pub fn global_object(&self) -> Value<'gc> {
+    pub fn global_object(&self) -> Value<'gc, B> {
         Value::Object(self.globals)
     }
 
     /// Obtain a reference to `_global`.
-    pub fn global_object_cell(&self) -> Object<'gc> {
+    pub fn global_object_cell(&self) -> Object<'gc, B> {
         self.globals
     }
 
     /// Obtain system built-in prototypes for this instance.
-    pub fn prototypes(&self) -> &globals::SystemPrototypes<'gc> {
+    pub fn prototypes(&self) -> &globals::SystemPrototypes<'gc, B> {
         &self.prototypes
     }
 
@@ -419,12 +420,12 @@ impl<'gc> Avm1<'gc> {
         self.max_recursion_depth = max_recursion_depth
     }
 
-    pub fn broadcaster_functions(&self) -> BroadcasterFunctions<'gc> {
+    pub fn broadcaster_functions(&self) -> BroadcasterFunctions<'gc, B> {
         self.broadcaster_functions
     }
 
     /// Returns an iterator over all movie clips in execution order.
-    pub fn clip_exec_iter(&self) -> DisplayObjectIter<'gc> {
+    pub fn clip_exec_iter(&self) -> DisplayObjectIter<'gc, B> {
         DisplayObjectIter {
             clip: self.clip_exec_list,
         }
@@ -437,7 +438,7 @@ impl<'gc> Avm1<'gc> {
     pub fn add_to_exec_list(
         &mut self,
         gc_context: MutationContext<'gc, '_>,
-        clip: DisplayObject<'gc>,
+        clip: DisplayObject<'gc, B>,
     ) {
         // Adding while iterating is safe, as this does not modify any active nodes.
         if clip.next_avm1_clip().is_none() && clip.prev_avm1_clip().is_none() {
@@ -453,7 +454,7 @@ impl<'gc> Avm1<'gc> {
     pub fn remove_from_exec_list(
         &mut self,
         gc_context: MutationContext<'gc, '_>,
-        clip: DisplayObject<'gc>,
+        clip: DisplayObject<'gc, B>,
     ) -> bool {
         let prev = clip.prev_avm1_clip();
         let next = clip.next_avm1_clip();
@@ -482,7 +483,7 @@ impl<'gc> Avm1<'gc> {
         &self,
         swf_version: u8,
         symbol: AvmString<'gc>,
-    ) -> Option<&FunctionObject<'gc>> {
+    ) -> Option<&FunctionObject<'gc, B>> {
         let is_case_sensitive = swf_version >= 7;
         let registry = if is_case_sensitive {
             &self.constructor_registry_case_sensitive
@@ -496,7 +497,7 @@ impl<'gc> Avm1<'gc> {
         &mut self,
         swf_version: u8,
         symbol: AvmString<'gc>,
-        constructor: Option<FunctionObject<'gc>>,
+        constructor: Option<FunctionObject<'gc, B>>,
     ) {
         let is_case_sensitive = swf_version >= 7;
         let registry = if is_case_sensitive {
@@ -531,7 +532,10 @@ impl<'gc> Avm1<'gc> {
     pub const fn set_show_debug_output(&self, _visible: bool) {}
 }
 
-pub fn root_error_handler<'gc>(activation: &mut Activation<'_, 'gc, '_>, error: Error<'gc>) {
+pub fn root_error_handler<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    error: Error<'gc, B>,
+) {
     match &error {
         Error::ThrownValue(value) => {
             let message = value
@@ -563,10 +567,10 @@ fn skip_actions(reader: &mut Reader<'_>, num_actions_to_skip: u8) {
 
 /// Starts dragging this display object, making it follow the cursor.
 /// Runs via the `startDrag` method or `StartDrag` AVM1 action.
-pub fn start_drag<'gc>(
-    display_object: DisplayObject<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-    args: &[Value<'gc>],
+pub fn start_drag<'gc, B: Backend>(
+    display_object: DisplayObject<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    args: &[Value<'gc, B>],
 ) {
     let lock_center = args
         .get(0)
@@ -642,12 +646,12 @@ pub fn start_drag<'gc>(
     *activation.context.drag_object = Some(drag_object);
 }
 
-pub struct DisplayObjectIter<'gc> {
-    clip: Option<DisplayObject<'gc>>,
+pub struct DisplayObjectIter<'gc, B: Backend> {
+    clip: Option<DisplayObject<'gc, B>>,
 }
 
-impl<'gc> Iterator for DisplayObjectIter<'gc> {
-    type Item = DisplayObject<'gc>;
+impl<'gc, B: Backend> Iterator for DisplayObjectIter<'gc, B> {
+    type Item = DisplayObject<'gc, B>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let clip = self.clip;

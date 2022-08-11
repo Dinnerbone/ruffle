@@ -9,33 +9,15 @@ use crate::avm_warn;
 use crate::character::Character;
 use crate::display_object::{SoundTransform, TDisplayObject};
 use gc_arena::MutationContext;
-
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "attachSound" => method(attach_sound; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "duration" => property(duration; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "getDuration" => method(duration; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "setDuration" => method(set_duration; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "id3" => method(id3; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "getBytesLoaded" => method(get_bytes_loaded; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "getBytesTotal" => method(get_bytes_total; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "getPan" => method(get_pan; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "getTransform" => method(get_transform; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "getVolume" => method(get_volume; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "loadSound" => method(load_sound; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "position" => property(position; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "setPan" => method(set_pan; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "setTransform" => method(set_transform; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "setVolume" => method(set_volume; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "start" => method(start; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "stop" => method(stop; DONT_ENUM | DONT_DELETE | READ_ONLY);
-};
+use num_traits::real::Real;
+use ruffle_types::backend::Backend;
 
 /// Implements `Sound`
-pub fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // 1st parameter is the movie clip that "owns" all sounds started by this object.
     // `Sound.setTransform`, `Sound.stop`, etc. will affect all sounds owned by this clip.
     let owner = if let Some(owner) = args.get(0) {
@@ -54,22 +36,43 @@ pub fn constructor<'gc>(
     Ok(this.into())
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let sound = SoundObject::empty_sound(gc_context, Some(proto));
     let object = sound.as_script_object().unwrap();
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "attachSound" => method(attach_sound; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "duration" => property(duration; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "getDuration" => method(duration; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "setDuration" => method(set_duration; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "id3" => method(id3; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "getBytesLoaded" => method(get_bytes_loaded; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "getBytesTotal" => method(get_bytes_total; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "getPan" => method(get_pan; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "getTransform" => method(get_transform; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "getVolume" => method(get_volume; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "loadSound" => method(load_sound; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "position" => property(position; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "setPan" => method(set_pan; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "setTransform" => method(set_transform; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "setVolume" => method(set_volume; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "start" => method(start; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "stop" => method(stop; DONT_ENUM | DONT_DELETE | READ_ONLY);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     sound.into()
 }
 
-fn attach_sound<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn attach_sound<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let name = args.get(0).unwrap_or(&Value::Undefined);
     if let Some(sound_object) = this.as_sound_object() {
         let name = name.coerce_to_string(activation)?;
@@ -110,11 +113,11 @@ fn attach_sound<'gc>(
     Ok(Value::Undefined)
 }
 
-fn duration<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn duration<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // TODO: Sound.duration was only added in SWFv6, but it is not version gated.
     // Return undefined for player <6 if we ever add player version emulation.
     if let Some(sound_object) = this.as_sound_object() {
@@ -127,19 +130,19 @@ fn duration<'gc>(
     Ok(Value::Undefined)
 }
 
-fn set_duration<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_duration<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(Value::Undefined)
 }
 
-fn get_bytes_loaded<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_bytes_loaded<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if activation.swf_version() >= 6 {
         avm_warn!(activation, "Sound.getBytesLoaded: Unimplemented");
         Ok(1.into())
@@ -148,11 +151,11 @@ fn get_bytes_loaded<'gc>(
     }
 }
 
-fn get_bytes_total<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_bytes_total<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if activation.swf_version() >= 6 {
         avm_warn!(activation, "Sound.getBytesTotal: Unimplemented");
         Ok(1.into())
@@ -161,11 +164,11 @@ fn get_bytes_total<'gc>(
     }
 }
 
-fn get_pan<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_pan<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let transform = this.as_sound_object().map(|sound| {
         sound
             .owner()
@@ -180,11 +183,11 @@ fn get_pan<'gc>(
     }
 }
 
-fn get_transform<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_transform<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let transform = this.as_sound_object().map(|sound| {
         sound
             .owner()
@@ -208,11 +211,11 @@ fn get_transform<'gc>(
     }
 }
 
-fn get_volume<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_volume<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let transform = this.as_sound_object().map(|sound| {
         sound
             .owner()
@@ -227,33 +230,33 @@ fn get_volume<'gc>(
     }
 }
 
-fn id3<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn id3<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if activation.swf_version() >= 6 {
         avm_warn!(activation, "Sound.id3: Unimplemented");
     }
     Ok(Value::Undefined)
 }
 
-fn load_sound<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn load_sound<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if activation.swf_version() >= 6 {
         avm_warn!(activation, "Sound.loadSound: Unimplemented");
     }
     Ok(Value::Undefined)
 }
 
-fn position<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn position<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // TODO: Sound.position was only added in SWFv6, but it is not version gated.
     // Return undefined for player <6 if we ever add player version emulation.
     if let Some(sound_object) = this.as_sound_object() {
@@ -266,11 +269,11 @@ fn position<'gc>(
     Ok(Value::Undefined)
 }
 
-fn set_pan<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_pan<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let value = args.get(0).unwrap_or(&0.into()).coerce_to_f64(activation)?;
     let pan = clamp_sound_transform_value(value);
 
@@ -289,11 +292,11 @@ fn set_pan<'gc>(
     Ok(Value::Undefined)
 }
 
-fn set_transform<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_transform<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let obj = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -329,11 +332,11 @@ fn set_transform<'gc>(
     Ok(Value::Undefined)
 }
 
-fn set_volume<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_volume<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let value = args.get(0).unwrap_or(&0.into()).coerce_to_f64(activation)?;
     let volume = clamp_sound_transform_value(value);
 
@@ -356,11 +359,11 @@ fn set_volume<'gc>(
     Ok(Value::Undefined)
 }
 
-fn start<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn start<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let start_offset = args.get(0).unwrap_or(&0.into()).coerce_to_f64(activation)?;
     let loops = args.get(1).unwrap_or(&1.into()).coerce_to_f64(activation)?;
 
@@ -400,11 +403,11 @@ fn start<'gc>(
     Ok(Value::Undefined)
 }
 
-fn stop<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn stop<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(sound) = this.as_sound_object() {
         if let Some(name) = args.get(0) {
             // Usage 1: Stop all instances of a particular sound, using the name parameter.

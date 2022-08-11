@@ -2,6 +2,7 @@
 
 use crate::avm2::value::Value;
 use gc_arena::Collect;
+use ruffle_types::backend::Backend;
 use std::ops::RangeBounds;
 
 /// The array storage portion of an array object.
@@ -11,11 +12,11 @@ use std::ops::RangeBounds;
 /// the prototype.
 #[derive(Clone, Collect, Debug)]
 #[collect(no_drop)]
-pub struct ArrayStorage<'gc> {
-    storage: Vec<Option<Value<'gc>>>,
+pub struct ArrayStorage<'gc, B: Backend> {
+    storage: Vec<Option<Value<'gc, B>>>,
 }
 
-impl<'gc> ArrayStorage<'gc> {
+impl<'gc, B: Backend> ArrayStorage<'gc, B> {
     /// Construct new array storage.
     ///
     /// The length parameter indicates how big the array storage should start
@@ -27,17 +28,17 @@ impl<'gc> ArrayStorage<'gc> {
     }
 
     /// Convert a set of arguments into array storage.
-    pub fn from_args(values: &[Value<'gc>]) -> Self {
+    pub fn from_args(values: &[Value<'gc, B>]) -> Self {
         let storage = values
             .iter()
             .map(|v| Some(*v))
-            .collect::<Vec<Option<Value<'gc>>>>();
+            .collect::<Vec<Option<Value<'gc, B>>>>();
 
         Self { storage }
     }
 
     /// Wrap an existing storage Vec in an `ArrayStorage`.
-    pub fn from_storage(storage: Vec<Option<Value<'gc>>>) -> Self {
+    pub fn from_storage(storage: Vec<Option<Value<'gc, B>>>) -> Self {
         Self { storage }
     }
 
@@ -45,7 +46,7 @@ impl<'gc> ArrayStorage<'gc> {
     ///
     /// Array holes and out of bounds values will be treated the same way, by
     /// yielding `None`.
-    pub fn get(&self, item: usize) -> Option<Value<'gc>> {
+    pub fn get(&self, item: usize) -> Option<Value<'gc, B>> {
         self.storage.get(item).cloned().unwrap_or(None)
     }
 
@@ -53,7 +54,7 @@ impl<'gc> ArrayStorage<'gc> {
     ///
     /// If the item index extends beyond the length of the array, then the
     /// array will be extended with holes.
-    pub fn set(&mut self, item: usize, value: Value<'gc>) {
+    pub fn set(&mut self, item: usize, value: Value<'gc, B>) {
         if self.storage.len() < (item + 1) {
             self.storage.resize(item + 1, None)
         }
@@ -93,7 +94,7 @@ impl<'gc> ArrayStorage<'gc> {
     /// Push a single value onto the end of this array.
     ///
     /// It is not possible to push a hole onto the array.
-    pub fn push(&mut self, item: Value<'gc>) {
+    pub fn push(&mut self, item: Value<'gc, B>) {
         self.storage.push(Some(item))
     }
 
@@ -106,7 +107,7 @@ impl<'gc> ArrayStorage<'gc> {
     ///
     /// This method preferrentially pops non-holes from the array first. If a
     /// hole is popped, it will become `undefined`.
-    pub fn pop(&mut self) -> Value<'gc> {
+    pub fn pop(&mut self) -> Value<'gc, B> {
         let mut non_hole = None;
 
         for (i, item) in self.storage.iter().enumerate().rev() {
@@ -130,7 +131,7 @@ impl<'gc> ArrayStorage<'gc> {
     ///
     /// This method preferrentially pops non-holes from the array first. If a
     /// hole is popped, it will become `undefined`.
-    pub fn shift(&mut self) -> Value<'gc> {
+    pub fn shift(&mut self) -> Value<'gc, B> {
         if !self.storage.is_empty() {
             self.storage.remove(0).unwrap_or(Value::Undefined)
         } else {
@@ -141,15 +142,15 @@ impl<'gc> ArrayStorage<'gc> {
     /// Unshift a single value onto the start of this array.
     ///
     /// It is not possible to push a hole onto the array.
-    pub fn unshift(&mut self, item: Value<'gc>) {
+    pub fn unshift(&mut self, item: Value<'gc, B>) {
         self.storage.insert(0, Some(item))
     }
 
     /// Iterate over array values.
     pub fn iter<'a>(
         &'a self,
-    ) -> impl DoubleEndedIterator<Item = Option<Value<'gc>>>
-           + ExactSizeIterator<Item = Option<Value<'gc>>>
+    ) -> impl DoubleEndedIterator<Item = Option<Value<'gc, B>>>
+           + ExactSizeIterator<Item = Option<Value<'gc, B>>>
            + 'a {
         self.storage.iter().cloned()
     }
@@ -158,10 +159,10 @@ impl<'gc> ArrayStorage<'gc> {
         &'a mut self,
         range: R,
         replace_with: I,
-    ) -> impl Iterator<Item = Option<Value<'gc>>> + 'a
+    ) -> impl Iterator<Item = Option<Value<'gc, B>>> + 'a
     where
         R: RangeBounds<usize>,
-        I: IntoIterator<Item = Value<'gc>>,
+        I: IntoIterator<Item = Value<'gc, B>>,
         <I as IntoIterator>::IntoIter: 'a,
     {
         self.storage
@@ -169,9 +170,9 @@ impl<'gc> ArrayStorage<'gc> {
     }
 }
 
-impl<'gc, V> FromIterator<V> for ArrayStorage<'gc>
+impl<'gc, V, B: Backend> FromIterator<V> for ArrayStorage<'gc, B>
 where
-    V: Into<Value<'gc>>,
+    V: Into<Value<'gc, B>>,
 {
     fn from_iter<I>(values: I) -> Self
     where

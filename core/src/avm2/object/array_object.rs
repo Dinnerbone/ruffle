@@ -8,14 +8,15 @@ use crate::avm2::object::{ClassObject, Object, ObjectPtr, TObject};
 use crate::avm2::value::Value;
 use crate::avm2::Error;
 use gc_arena::{Collect, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 use std::cell::{Ref, RefMut};
 
 /// A class instance allocator that allocates array objects.
-pub fn array_allocator<'gc>(
-    class: ClassObject<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Object<'gc>, Error> {
+pub fn array_allocator<'gc, B: Backend>(
+    class: ClassObject<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Object<'gc, B>, Error> {
     let base = ScriptObjectData::new(class);
 
     Ok(ArrayObject(GcCell::allocate(
@@ -31,21 +32,21 @@ pub fn array_allocator<'gc>(
 /// An Object which stores numerical properties in an array.
 #[derive(Collect, Debug, Clone, Copy)]
 #[collect(no_drop)]
-pub struct ArrayObject<'gc>(GcCell<'gc, ArrayObjectData<'gc>>);
+pub struct ArrayObject<'gc, B: Backend>(GcCell<'gc, ArrayObjectData<'gc, B>>);
 
 #[derive(Collect, Debug, Clone)]
 #[collect(no_drop)]
-pub struct ArrayObjectData<'gc> {
+pub struct ArrayObjectData<'gc, B: Backend> {
     /// Base script object
-    base: ScriptObjectData<'gc>,
+    base: ScriptObjectData<'gc, B>,
 
     /// Array-structured properties
-    array: ArrayStorage<'gc>,
+    array: ArrayStorage<'gc, B>,
 }
 
-impl<'gc> ArrayObject<'gc> {
+impl<'gc, B: Backend> ArrayObject<'gc, B> {
     /// Construct an empty array.
-    pub fn empty(activation: &mut Activation<'_, 'gc, '_>) -> Result<Object<'gc>, Error> {
+    pub fn empty(activation: &mut Activation<'_, 'gc, '_, B>) -> Result<Object<'gc, B>, Error> {
         Self::from_storage(activation, ArrayStorage::new(0))
     }
 
@@ -53,13 +54,13 @@ impl<'gc> ArrayObject<'gc> {
     ///
     /// This will produce an instance of the system `Array` class.
     pub fn from_storage(
-        activation: &mut Activation<'_, 'gc, '_>,
-        array: ArrayStorage<'gc>,
-    ) -> Result<Object<'gc>, Error> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        array: ArrayStorage<'gc, B>,
+    ) -> Result<Object<'gc, B>, Error> {
         let class = activation.avm2().classes().array;
         let base = ScriptObjectData::new(class);
 
-        let mut instance: Object<'gc> = ArrayObject(GcCell::allocate(
+        let mut instance: Object<'gc, B> = ArrayObject(GcCell::allocate(
             activation.context.gc_context,
             ArrayObjectData { base, array },
         ))
@@ -72,12 +73,14 @@ impl<'gc> ArrayObject<'gc> {
     }
 }
 
-impl<'gc> TObject<'gc> for ArrayObject<'gc> {
-    fn base(&self) -> Ref<ScriptObjectData<'gc>> {
+impl<'gc, B: Backend> TObject<'gc> for ArrayObject<'gc, B> {
+    type B = B;
+
+    fn base(&self) -> Ref<ScriptObjectData<'gc, B>> {
         Ref::map(self.0.read(), |read| &read.base)
     }
 
-    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc>> {
+    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc, B>> {
         RefMut::map(self.0.write(mc), |write| &mut write.base)
     }
 
@@ -88,8 +91,8 @@ impl<'gc> TObject<'gc> for ArrayObject<'gc> {
     fn get_property_local(
         self,
         name: &Multiname<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         let read = self.0.read();
 
         if name.contains_public_namespace() {
@@ -108,8 +111,8 @@ impl<'gc> TObject<'gc> for ArrayObject<'gc> {
     fn set_property_local(
         self,
         name: &Multiname<'gc>,
-        value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        value: Value<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         let mut write = self.0.write(activation.context.gc_context);
 
@@ -128,8 +131,8 @@ impl<'gc> TObject<'gc> for ArrayObject<'gc> {
     fn init_property_local(
         self,
         name: &Multiname<'gc>,
-        value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        value: Value<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         let mut write = self.0.write(activation.context.gc_context);
 
@@ -147,7 +150,7 @@ impl<'gc> TObject<'gc> for ArrayObject<'gc> {
 
     fn delete_property_local(
         self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         name: &Multiname<'gc>,
     ) -> Result<bool, Error> {
         if name.contains_public_namespace() {
@@ -184,7 +187,7 @@ impl<'gc> TObject<'gc> for ArrayObject<'gc> {
     fn get_next_enumerant(
         self,
         last_index: u32,
-        _activation: &mut Activation<'_, 'gc, '_>,
+        _activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<Option<u32>, Error> {
         let read = self.0.read();
         let num_enumerants = read.base.num_enumerants();
@@ -200,8 +203,8 @@ impl<'gc> TObject<'gc> for ArrayObject<'gc> {
     fn get_enumerant_name(
         self,
         index: u32,
-        _activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        _activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         let arr_len = self.0.read().array.length() as u32;
         if arr_len >= index {
             Ok(index
@@ -223,26 +226,26 @@ impl<'gc> TObject<'gc> for ArrayObject<'gc> {
             || self.base().property_is_enumerable(name)
     }
 
-    fn to_string(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc>, Error> {
+    fn to_string(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc, B>, Error> {
         Ok(Value::Object(Object::from(*self)))
     }
 
-    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc>, Error> {
+    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc, B>, Error> {
         Ok(Value::Object(Object::from(*self)))
     }
 
-    fn as_array_object(&self) -> Option<ArrayObject<'gc>> {
+    fn as_array_object(&self) -> Option<ArrayObject<'gc, B>> {
         Some(*self)
     }
 
-    fn as_array_storage(&self) -> Option<Ref<ArrayStorage<'gc>>> {
+    fn as_array_storage(&self) -> Option<Ref<ArrayStorage<'gc, B>>> {
         Some(Ref::map(self.0.read(), |aod| &aod.array))
     }
 
     fn as_array_storage_mut(
         &self,
         mc: MutationContext<'gc, '_>,
-    ) -> Option<RefMut<ArrayStorage<'gc>>> {
+    ) -> Option<RefMut<ArrayStorage<'gc, B>>> {
         Some(RefMut::map(self.0.write(mc), |aod| &mut aod.array))
     }
 }

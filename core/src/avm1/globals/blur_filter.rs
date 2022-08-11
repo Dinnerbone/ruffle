@@ -6,18 +6,13 @@ use crate::avm1::object::blur_filter::BlurFilterObject;
 use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{Object, TObject, Value};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "blurX" => property(blur_x, set_blur_x);
-    "blurY" => property(get_blur_y, set_blur_y);
-    "quality" => property(get_quality, set_quality);
-};
-
-pub fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     set_blur_x(activation, this, args.get(0..1).unwrap_or_default())?;
     set_blur_y(activation, this, args.get(1..2).unwrap_or_default())?;
     set_quality(activation, this, args.get(2..3).unwrap_or_default())?;
@@ -25,11 +20,11 @@ pub fn constructor<'gc>(
     Ok(this.into())
 }
 
-pub fn blur_x<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn blur_x<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_blur_filter_object() {
         return Ok(filter.blur_x().into());
     }
@@ -37,11 +32,11 @@ pub fn blur_x<'gc>(
     Ok(this.into())
 }
 
-pub fn set_blur_x<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_blur_x<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let blur_x = args
         .get(0)
         .unwrap_or(&4.into())
@@ -55,11 +50,11 @@ pub fn set_blur_x<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn get_blur_y<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_blur_y<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_blur_filter_object() {
         return Ok(filter.blur_y().into());
     }
@@ -67,11 +62,11 @@ pub fn get_blur_y<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_blur_y<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_blur_y<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let blur_y = args
         .get(0)
         .unwrap_or(&4.into())
@@ -85,11 +80,11 @@ pub fn set_blur_y<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn get_quality<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_quality<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(filter) = this.as_blur_filter_object() {
         return Ok(filter.quality().into());
     }
@@ -97,11 +92,11 @@ pub fn get_quality<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_quality<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_quality<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let quality = args
         .get(0)
         .unwrap_or(&1.into())
@@ -115,13 +110,20 @@ pub fn set_quality<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let blur_filter = BlurFilterObject::empty_object(gc_context, Some(proto));
     let object = blur_filter.as_script_object().unwrap();
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "blurX" => property(blur_x, set_blur_x);
+        "blurY" => property(get_blur_y, set_blur_y);
+        "quality" => property(get_quality, set_quality);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     blur_filter.into()
 }

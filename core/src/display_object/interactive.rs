@@ -17,6 +17,7 @@ use gc_arena::{Collect, MutationContext};
 use instant::Instant;
 use ruffle_macros::enum_trait_object;
 use ruffle_types::backend::ui::MouseCursor;
+use ruffle_types::backend::Backend;
 use std::cell::{Ref, RefMut};
 use std::fmt::Debug;
 use std::time::Duration;
@@ -26,10 +27,10 @@ use swf::Twips;
 /// `to`.
 ///
 /// If no such common ancestor exists, this returns `None`.
-fn lowest_common_ancestor<'gc>(
-    from: DisplayObject<'gc>,
-    to: DisplayObject<'gc>,
-) -> Option<DisplayObject<'gc>> {
+fn lowest_common_ancestor<'gc, B: Backend>(
+    from: DisplayObject<'gc, B>,
+    to: DisplayObject<'gc, B>,
+) -> Option<DisplayObject<'gc, B>> {
     let mut from_parents = vec![];
     let mut us = Some(from);
     while let Some(parent) = us {
@@ -76,10 +77,10 @@ bitflags! {
 
 #[derive(Collect, Clone, Debug)]
 #[collect(no_drop)]
-pub struct InteractiveObjectBase<'gc> {
-    pub base: DisplayObjectBase<'gc>,
+pub struct InteractiveObjectBase<'gc, B: Backend> {
+    pub base: DisplayObjectBase<'gc, B>,
     flags: InteractiveObjectFlags,
-    context_menu: Avm2Value<'gc>,
+    context_menu: Avm2Value<'gc, B>,
 
     /// The time of the last click registered on this object.
     ///
@@ -89,7 +90,7 @@ pub struct InteractiveObjectBase<'gc> {
     last_click: Option<Instant>,
 }
 
-impl<'gc> Default for InteractiveObjectBase<'gc> {
+impl<'gc, B: Backend> Default for InteractiveObjectBase<'gc, B> {
     fn default() -> Self {
         Self {
             base: Default::default(),
@@ -103,22 +104,27 @@ impl<'gc> Default for InteractiveObjectBase<'gc> {
 #[enum_trait_object(
     #[derive(Clone, Collect, Debug, Copy)]
     #[collect(no_drop)]
-    pub enum InteractiveObject<'gc> {
-        Stage(Stage<'gc>),
-        Avm1Button(Avm1Button<'gc>),
-        Avm2Button(Avm2Button<'gc>),
-        MovieClip(MovieClip<'gc>),
-        EditText(EditText<'gc>),
+    pub enum InteractiveObject<'gc, B: Backend> {
+        Stage(Stage<'gc, B>),
+        Avm1Button(Avm1Button<'gc, B>),
+        Avm2Button(Avm2Button<'gc, B>),
+        MovieClip(MovieClip<'gc, B>),
+        EditText(EditText<'gc, B>),
     }
 )]
 pub trait TInteractiveObject<'gc>:
-    'gc + Clone + Copy + Collect + Debug + Into<InteractiveObject<'gc>>
+    'gc + Clone + Copy + Collect + Debug + Into<InteractiveObject<'gc, Self::B>>
 {
-    fn ibase(&self) -> Ref<InteractiveObjectBase<'gc>>;
+    type B: Backend;
 
-    fn ibase_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<InteractiveObjectBase<'gc>>;
+    fn ibase(&self) -> Ref<InteractiveObjectBase<'gc, Self::B>>;
 
-    fn as_displayobject(self) -> DisplayObject<'gc>;
+    fn ibase_mut(
+        &self,
+        mc: MutationContext<'gc, '_>,
+    ) -> RefMut<InteractiveObjectBase<'gc, Self::B>>;
+
+    fn as_displayobject(self) -> DisplayObject<'gc, Self::B>;
 
     /// Check if the interactive object accepts user input.
     fn mouse_enabled(self) -> bool {
@@ -148,11 +154,11 @@ pub trait TInteractiveObject<'gc>:
             .set(InteractiveObjectFlags::DOUBLE_CLICK_ENABLED, value)
     }
 
-    fn context_menu(self) -> Avm2Value<'gc> {
+    fn context_menu(self) -> Avm2Value<'gc, Self::B> {
         self.ibase().context_menu
     }
 
-    fn set_context_menu(self, mc: MutationContext<'gc, '_>, value: Avm2Value<'gc>) {
+    fn set_context_menu(self, mc: MutationContext<'gc, '_>, value: Avm2Value<'gc, Self::B>) {
         self.ibase_mut(mc).context_menu = value;
     }
 
@@ -162,7 +168,7 @@ pub trait TInteractiveObject<'gc>:
     /// machinery should run. Otherwise, the event will not be handled, neither
     /// by this interactive object nor it's children. The event will be passed
     /// onto other siblings of the display object instead.
-    fn filter_clip_event(self, event: ClipEvent) -> ClipEventResult;
+    fn filter_clip_event(self, event: ClipEvent<Self::B>) -> ClipEventResult;
 
     /// Propagate the event to children.
     ///
@@ -170,8 +176,8 @@ pub trait TInteractiveObject<'gc>:
     /// terminate, including the event default.
     fn propagate_to_children(
         self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        event: ClipEvent<'gc>,
+        context: &mut UpdateContext<'_, 'gc, '_, Self::B>,
+        event: ClipEvent<'gc, Self::B>,
     ) -> ClipEventResult {
         if event.propagates() {
             if let Some(container) = self.as_displayobject().as_container() {
@@ -197,8 +203,8 @@ pub trait TInteractiveObject<'gc>:
     /// if the event will be passed onto siblings and parents.
     fn event_dispatch(
         self,
-        _context: &mut UpdateContext<'_, 'gc, '_>,
-        _event: ClipEvent<'gc>,
+        _context: &mut UpdateContext<'_, 'gc, '_, Self::B>,
+        _event: ClipEvent<'gc, Self::B>,
     ) -> ClipEventResult;
 
     /// Convert the clip event into an AVM2 event and dispatch it into the
@@ -209,8 +215,8 @@ pub trait TInteractiveObject<'gc>:
     /// event types should dispatch them in `event_dispatch`.
     fn event_dispatch_to_avm2(
         self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        event: ClipEvent<'gc>,
+        context: &mut UpdateContext<'_, 'gc, '_, Self::B>,
+        event: ClipEvent<'gc, Self::B>,
     ) -> ClipEventResult {
         let target = if let Avm2Value::Object(target) = self.as_displayobject().object2() {
             target
@@ -441,8 +447,8 @@ pub trait TInteractiveObject<'gc>:
     /// by its parent, and so forth.
     fn handle_clip_event(
         self,
-        context: &mut UpdateContext<'_, 'gc, '_>,
-        event: ClipEvent<'gc>,
+        context: &mut UpdateContext<'_, 'gc, '_, Self::B>,
+        event: ClipEvent<'gc, Self::B>,
     ) -> ClipEventResult {
         if !self.mouse_enabled() {
             return ClipEventResult::NotHandled;
@@ -468,36 +474,36 @@ pub trait TInteractiveObject<'gc>:
     /// an `InteractiveObject`.
     fn mouse_pick(
         &self,
-        _context: &mut UpdateContext<'_, 'gc, '_>,
+        _context: &mut UpdateContext<'_, 'gc, '_, Self::B>,
         _pos: (Twips, Twips),
         _require_button_mode: bool,
-    ) -> Option<InteractiveObject<'gc>> {
+    ) -> Option<InteractiveObject<'gc, Self::B>> {
         None
     }
 
     /// The cursor to use when this object is the hovered element under a mouse.
-    fn mouse_cursor(self, _context: &mut UpdateContext<'_, 'gc, '_>) -> MouseCursor {
+    fn mouse_cursor(self, _context: &mut UpdateContext<'_, 'gc, '_, Self::B>) -> MouseCursor {
         MouseCursor::Hand
     }
 }
 
-impl<'gc> InteractiveObject<'gc> {
-    pub fn ptr_eq<T: TInteractiveObject<'gc>>(a: T, b: T) -> bool {
+impl<'gc, B: Backend> InteractiveObject<'gc, B> {
+    pub fn ptr_eq<T: TInteractiveObject<'gc, B = B>>(a: T, b: T) -> bool {
         a.as_displayobject().as_ptr() == b.as_displayobject().as_ptr()
     }
 
     pub fn option_ptr_eq(
-        a: Option<InteractiveObject<'gc>>,
-        b: Option<InteractiveObject<'gc>>,
+        a: Option<InteractiveObject<'gc, B>>,
+        b: Option<InteractiveObject<'gc, B>>,
     ) -> bool {
         a.map(|o| o.as_displayobject().as_ptr()) == b.map(|o| o.as_displayobject().as_ptr())
     }
 }
 
-impl<'gc> PartialEq for InteractiveObject<'gc> {
+impl<'gc, B: Backend> PartialEq for InteractiveObject<'gc, B> {
     fn eq(&self, other: &Self) -> bool {
         InteractiveObject::ptr_eq(*self, *other)
     }
 }
 
-impl<'gc> Eq for InteractiveObject<'gc> {}
+impl<'gc, B: Backend> Eq for InteractiveObject<'gc, B> {}

@@ -9,12 +9,13 @@ use crate::avm2::Error;
 use crate::avm2::{ArrayObject, ArrayStorage, Object};
 use bitflags::bitflags;
 use gc_arena::Collect;
+use ruffle_types::backend::Backend;
 use ruffle_types::string::WString;
 use ruffle_types::string::{AvmString, Units, WStrToUtf8};
 
 #[derive(Collect, Debug)]
 #[collect(no_drop)]
-pub struct RegExp<'gc> {
+pub struct RegExp<'gc, B: Backend> {
     source: AvmString<'gc>,
     flags: RegExpFlags,
     last_index: usize,
@@ -24,7 +25,7 @@ pub struct RegExp<'gc> {
     cached_text: Option<CachedText<'gc>>,
 }
 
-impl<'gc> Clone for RegExp<'gc> {
+impl<'gc, B: Backend> Clone for RegExp<'gc, B> {
     fn clone(&self) -> Self {
         Self {
             source: self.source,
@@ -48,7 +49,7 @@ bitflags! {
     }
 }
 
-impl<'gc> RegExp<'gc> {
+impl<'gc, B: Backend> RegExp<'gc, B> {
     pub fn new<S>(source: S) -> Self
     where
         S: Into<AvmString<'gc>>,
@@ -208,9 +209,9 @@ impl<'gc> RegExp<'gc> {
     /// a function.
     pub fn replace_fn(
         &mut self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         text: AvmString<'gc>,
-        f: &FunctionObject<'gc>,
+        f: &FunctionObject<'gc, B>,
     ) -> Result<AvmString<'gc>, Error> {
         self.replace_with_fn(activation, &text, |activation, txt, m| {
             let args = std::iter::once(Some(&m.range))
@@ -233,7 +234,7 @@ impl<'gc> RegExp<'gc> {
     /// a string with $-sequences.
     pub fn replace_string(
         &mut self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         text: AvmString<'gc>,
         replacement: AvmString<'gc>,
     ) -> Result<AvmString<'gc>, Error> {
@@ -247,13 +248,13 @@ impl<'gc> RegExp<'gc> {
     // Replaces occurrences of regex with results of f(activation, &text, &match)
     fn replace_with_fn<F>(
         &mut self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         text: &AvmString<'gc>,
         mut f: F,
     ) -> Result<AvmString<'gc>, Error>
     where
         F: FnMut(
-            &mut Activation<'_, 'gc, '_>,
+            &mut Activation<'_, 'gc, '_, B>,
             &AvmString<'gc>,
             &regress::Match,
         ) -> Result<WString, Error>,
@@ -285,10 +286,10 @@ impl<'gc> RegExp<'gc> {
 
     pub fn split(
         &mut self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         text: AvmString<'gc>,
         limit: usize,
-    ) -> Result<Object<'gc>, Error> {
+    ) -> Result<Object<'gc, B>, Error> {
         let mut storage = ArrayStorage::new(0);
         // The empty regex is a special case which splits into characters.
         if self.source.is_empty() {

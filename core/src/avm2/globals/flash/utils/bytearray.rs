@@ -14,12 +14,13 @@ use flash_lso::amf0::read::AMF0Decoder;
 use flash_lso::amf3::read::AMF3Decoder;
 use flash_lso::types::Value as AmfValue;
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 
-pub fn deserialize_value<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+pub fn deserialize_value<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     value: &AmfValue,
-) -> Result<Value<'gc>, Error> {
+) -> Result<Value<'gc, B>, Error> {
     Ok(match value {
         AmfValue::Undefined => Value::Undefined,
         AmfValue::Null => Value::Null,
@@ -33,7 +34,7 @@ pub fn deserialize_value<'gc>(
             bytearray.into()
         }
         AmfValue::StrictArray(values) => {
-            let mut arr: Vec<Option<Value<'gc>>> = Vec::with_capacity(values.len());
+            let mut arr: Vec<Option<Value<'gc, B>>> = Vec::with_capacity(values.len());
             for value in values {
                 arr.push(Some(deserialize_value(activation, value)?));
             }
@@ -43,7 +44,7 @@ pub fn deserialize_value<'gc>(
         }
         AmfValue::ECMAArray(values, elements, _) => {
             // First lets create an array out of `values` (dense portion), then we add the elements onto it.
-            let mut arr: Vec<Option<Value<'gc>>> = Vec::with_capacity(values.len());
+            let mut arr: Vec<Option<Value<'gc, B>>> = Vec::with_capacity(values.len());
             for value in values {
                 arr.push(Some(deserialize_value(activation, value)?));
             }
@@ -86,11 +87,11 @@ pub fn deserialize_value<'gc>(
 }
 
 /// Implements `flash.utils.ByteArray`'s instance constructor.
-pub fn instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         activation.super_init(this, &[])?;
 
@@ -120,20 +121,20 @@ pub fn instance_init<'gc>(
 }
 
 /// Implements `flash.utils.ByteArray`'s class constructor.
-pub fn class_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn class_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok(Value::Undefined)
 }
 
 /// Writes a single byte to the bytearray
-pub fn write_byte<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn write_byte<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut bytearray) = this.as_bytearray_mut(activation.context.gc_context) {
             let byte = args
@@ -149,11 +150,11 @@ pub fn write_byte<'gc>(
 }
 
 /// Writes multiple bytes to the bytearray from another bytearray
-pub fn write_bytes<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn write_bytes<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let bytearray = args
             .get(0)
@@ -203,11 +204,11 @@ pub fn write_bytes<'gc>(
 }
 
 // Reads the bytes from the current bytearray into another bytearray
-pub fn read_bytes<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn read_bytes<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let bytearray = args
             .get(0)
@@ -251,11 +252,11 @@ pub fn read_bytes<'gc>(
     }
     Ok(Value::Undefined)
 }
-pub fn write_utf<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn write_utf<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut bytearray) = this.as_bytearray_mut(activation.context.gc_context) {
             if let Some(utf_string) = args.get(0) {
@@ -272,11 +273,11 @@ pub fn write_utf<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn read_utf<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn read_utf<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             return Ok(AvmString::new_utf8_bytes(
@@ -289,11 +290,11 @@ pub fn read_utf<'gc>(
 
     Ok(Value::Undefined)
 }
-pub fn to_string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn to_string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             return Ok(
@@ -305,11 +306,11 @@ pub fn to_string<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn clear<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn clear<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut bytearray) = this.as_bytearray_mut(activation.context.gc_context) {
             bytearray.clear();
@@ -320,11 +321,11 @@ pub fn clear<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn position<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn position<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             return Ok(Value::Unsigned(bytearray.position() as u32));
@@ -334,11 +335,11 @@ pub fn position<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_position<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn set_position<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             let num = args
@@ -352,11 +353,11 @@ pub fn set_position<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn bytes_available<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn bytes_available<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             return Ok(Value::Unsigned(bytearray.bytes_available() as u32));
@@ -366,11 +367,11 @@ pub fn bytes_available<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn length<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn length<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             return Ok(Value::Unsigned(bytearray.len() as u32));
@@ -380,11 +381,11 @@ pub fn length<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_length<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn set_length<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut bytearray) = this.as_bytearray_mut(activation.context.gc_context) {
             let len = args
@@ -398,11 +399,11 @@ pub fn set_length<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn endian<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn endian<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             return Ok(match bytearray.endian() {
@@ -415,11 +416,11 @@ pub fn endian<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_endian<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn set_endian<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut bytearray) = this.as_bytearray_mut(activation.context.gc_context) {
             let endian = args
@@ -439,11 +440,11 @@ pub fn set_endian<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn read_short<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn read_short<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             return Ok(Value::Integer(bytearray.read_short()? as i32));
@@ -453,11 +454,11 @@ pub fn read_short<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn read_unsigned_short<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn read_unsigned_short<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             return Ok(Value::Unsigned(bytearray.read_unsigned_short()? as u32));
@@ -467,11 +468,11 @@ pub fn read_unsigned_short<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn read_double<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn read_double<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             return Ok(Value::Number(bytearray.read_double()?));
@@ -481,11 +482,11 @@ pub fn read_double<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn read_float<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn read_float<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             return Ok(Value::Number(bytearray.read_float()? as f64));
@@ -495,11 +496,11 @@ pub fn read_float<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn read_int<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn read_int<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             return Ok(Value::Integer(bytearray.read_int()?));
@@ -509,11 +510,11 @@ pub fn read_int<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn read_unsigned_int<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn read_unsigned_int<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             return Ok(Value::Unsigned(bytearray.read_unsigned_int()?));
@@ -523,11 +524,11 @@ pub fn read_unsigned_int<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn read_boolean<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn read_boolean<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             return Ok(Value::Bool(bytearray.read_boolean()?));
@@ -537,11 +538,11 @@ pub fn read_boolean<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn read_byte<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn read_byte<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             return Ok(Value::Integer(bytearray.read_byte()? as i32));
@@ -551,11 +552,11 @@ pub fn read_byte<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn read_utf_bytes<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn read_utf_bytes<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             let len = args
@@ -573,11 +574,11 @@ pub fn read_utf_bytes<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn read_unsigned_byte<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn read_unsigned_byte<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             return Ok(Value::Unsigned(bytearray.read_unsigned_byte()? as u32));
@@ -587,11 +588,11 @@ pub fn read_unsigned_byte<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn write_float<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn write_float<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut bytearray) = this.as_bytearray_mut(activation.context.gc_context) {
             let num = args
@@ -605,11 +606,11 @@ pub fn write_float<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn write_double<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn write_double<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut bytearray) = this.as_bytearray_mut(activation.context.gc_context) {
             let num = args
@@ -623,11 +624,11 @@ pub fn write_double<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn write_boolean<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn write_boolean<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut bytearray) = this.as_bytearray_mut(activation.context.gc_context) {
             let num = args.get(0).unwrap_or(&Value::Undefined).coerce_to_boolean();
@@ -638,11 +639,11 @@ pub fn write_boolean<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn write_int<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn write_int<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut bytearray) = this.as_bytearray_mut(activation.context.gc_context) {
             let num = args
@@ -656,11 +657,11 @@ pub fn write_int<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn write_unsigned_int<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn write_unsigned_int<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut bytearray) = this.as_bytearray_mut(activation.context.gc_context) {
             let num = args
@@ -674,11 +675,11 @@ pub fn write_unsigned_int<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn write_short<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn write_short<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut bytearray) = this.as_bytearray_mut(activation.context.gc_context) {
             let num = args
@@ -692,11 +693,11 @@ pub fn write_short<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn write_multibyte<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn write_multibyte<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut bytearray) = this.as_bytearray_mut(activation.context.gc_context) {
             let string = args
@@ -718,11 +719,11 @@ pub fn write_multibyte<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn read_multibyte<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn read_multibyte<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             let len = args
@@ -744,11 +745,11 @@ pub fn read_multibyte<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn write_utf_bytes<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn write_utf_bytes<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut bytearray) = this.as_bytearray_mut(activation.context.gc_context) {
             let string = args
@@ -762,11 +763,11 @@ pub fn write_utf_bytes<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn compress<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn compress<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut bytearray) = this.as_bytearray_mut(activation.context.gc_context) {
             let algorithm = args
@@ -782,11 +783,11 @@ pub fn compress<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn uncompress<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn uncompress<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut bytearray) = this.as_bytearray_mut(activation.context.gc_context) {
             let algorithm = args
@@ -802,11 +803,11 @@ pub fn uncompress<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn deflate<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn deflate<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut bytearray) = this.as_bytearray_mut(activation.context.gc_context) {
             let buffer = bytearray.compress(CompressionAlgorithm::Deflate)?;
@@ -818,11 +819,11 @@ pub fn deflate<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn inflate<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn inflate<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut bytearray) = this.as_bytearray_mut(activation.context.gc_context) {
             let buffer = bytearray.decompress(CompressionAlgorithm::Deflate)?;
@@ -834,11 +835,11 @@ pub fn inflate<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn read_object<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn read_object<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             let bytes = bytearray.read_at(bytearray.bytes_available(), bytearray.position())?;
@@ -867,11 +868,11 @@ pub fn read_object<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn object_encoding<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn object_encoding<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(bytearray) = this.as_bytearray() {
             return Ok((bytearray.object_encoding() as u8).into());
@@ -881,11 +882,11 @@ pub fn object_encoding<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_object_encoding<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn set_object_encoding<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut bytearray) = this.as_bytearray_mut(activation.context.gc_context) {
             let new_encoding = args
@@ -903,7 +904,7 @@ pub fn set_object_encoding<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::package("flash.utils"), "ByteArray"),
         Some(QName::new(Namespace::public(), "Object").into()),
@@ -917,7 +918,7 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
     write.set_attributes(ClassAttributes::SEALED);
     write.set_instance_allocator(bytearray_allocator);
 
-    const PUBLIC_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] = &[
+    let public_instance_methods: &[(&str, NativeMethodImpl<B>)] = &[
         ("writeByte", write_byte),
         ("writeBytes", write_bytes),
         ("readBytes", read_bytes),
@@ -950,12 +951,12 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
         ("readUTFBytes", read_utf_bytes),
         ("readObject", read_object),
     ];
-    write.define_public_builtin_instance_methods(mc, PUBLIC_INSTANCE_METHODS);
+    write.define_public_builtin_instance_methods(mc, public_instance_methods);
 
-    const PUBLIC_INSTANCE_PROPERTIES: &[(
+    let public_instance_properties: &[(
         &str,
-        Option<NativeMethodImpl>,
-        Option<NativeMethodImpl>,
+        Option<NativeMethodImpl<B>>,
+        Option<NativeMethodImpl<B>>,
     )] = &[
         ("bytesAvailable", Some(bytes_available), None),
         ("length", Some(length), Some(set_length)),
@@ -967,7 +968,7 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
             Some(set_object_encoding),
         ),
     ];
-    write.define_public_builtin_instance_properties(mc, PUBLIC_INSTANCE_PROPERTIES);
+    write.define_public_builtin_instance_properties(mc, public_instance_properties);
 
     // TODO: This property should have a setter
     const CONSTANTS: &[(&str, u32)] = &[("defaultObjectEncoding", 3)];

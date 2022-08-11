@@ -10,53 +10,32 @@ use crate::display_object::TDisplayObject;
 use flash_lso::types::Value as AmfValue;
 use flash_lso::types::{AMFVersion, Element, Lso};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 use std::borrow::Cow;
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "clear" => method(clear; DONT_ENUM | DONT_DELETE);
-    "close" => method(close; DONT_ENUM | DONT_DELETE);
-    "connect" => method(connect; DONT_ENUM | DONT_DELETE);
-    "flush" => method(flush; DONT_ENUM | DONT_DELETE);
-    "getSize" => method(get_size; DONT_ENUM | DONT_DELETE);
-    "send" => method(send; DONT_ENUM | DONT_DELETE);
-    "setFps" => method(set_fps; DONT_ENUM | DONT_DELETE);
-    "onStatus" => method(on_status; DONT_ENUM | DONT_DELETE);
-    "onSync" => method(on_sync; DONT_ENUM | DONT_DELETE);
-};
-
-const OBJECT_DECLS: &[Declaration] = declare_properties! {
-    "deleteAll" => method(delete_all; DONT_ENUM);
-    "getDiskUsage" => method(get_disk_usage; DONT_ENUM);
-    "getLocal" => method(get_local);
-    "getRemote" => method(get_remote);
-    "getMaxSize" => method(get_max_size);
-    "addListener" => method(add_listener);
-    "removeListener" => method(remove_listener);
-};
-
-pub fn delete_all<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn delete_all<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     avm_warn!(activation, "SharedObject.deleteAll() not implemented");
     Ok(Value::Undefined)
 }
 
-pub fn get_disk_usage<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_disk_usage<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     avm_warn!(activation, "SharedObject.getDiskUsage() not implemented");
     Ok(Value::Undefined)
 }
 
 /// Serialize a Value to an AmfValue
-fn serialize_value<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    elem: Value<'gc>,
+fn serialize_value<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    elem: Value<'gc, B>,
 ) -> Option<AmfValue> {
     match elem {
         Value::Undefined => Some(AmfValue::Undefined),
@@ -95,9 +74,9 @@ fn serialize_value<'gc>(
 }
 
 /// Serialize an Object and any children to a JSON object
-fn recursive_serialize<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    obj: Object<'gc>,
+fn recursive_serialize<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    obj: Object<'gc, B>,
     elements: &mut Vec<Element>,
 ) {
     // Reversed to match flash player ordering
@@ -111,7 +90,10 @@ fn recursive_serialize<'gc>(
 }
 
 /// Deserialize a AmfValue to a Value
-fn deserialize_value<'gc>(activation: &mut Activation<'_, 'gc, '_>, val: &AmfValue) -> Value<'gc> {
+fn deserialize_value<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    val: &AmfValue,
+) -> Value<'gc, B> {
     match val {
         AmfValue::Null => Value::Null,
         AmfValue::Undefined => Value::Undefined,
@@ -191,10 +173,10 @@ fn deserialize_value<'gc>(activation: &mut Activation<'_, 'gc, '_>, val: &AmfVal
 }
 
 /// Deserializes a Lso into an object containing the properties stored
-fn deserialize_lso<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn deserialize_lso<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     lso: &Lso,
-) -> Result<Object<'gc>, Error<'gc>> {
+) -> Result<Object<'gc, B>, Error<'gc, B>> {
     let obj = ScriptObject::object(
         activation.context.gc_context,
         Some(activation.context.avm1.prototypes.object),
@@ -212,11 +194,11 @@ fn deserialize_lso<'gc>(
     Ok(obj.into())
 }
 
-pub fn get_local<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_local<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // TODO: It appears that Flash does some kind of escaping here:
     // the name "foo\uD800" correspond to a file named "fooE#FB#FB#D.sol".
 
@@ -381,47 +363,47 @@ pub fn get_local<'gc>(
     Ok(this.into())
 }
 
-pub fn get_remote<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_remote<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     avm_warn!(activation, "SharedObject.getRemote() not implemented");
     Ok(Value::Undefined)
 }
 
-pub fn get_max_size<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_max_size<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     avm_warn!(activation, "SharedObject.getMaxSize() not implemented");
     Ok(Value::Undefined)
 }
 
-pub fn add_listener<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn add_listener<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     avm_warn!(activation, "SharedObject.addListener() not implemented");
     Ok(Value::Undefined)
 }
 
-pub fn remove_listener<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn remove_listener<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     avm_warn!(activation, "SharedObject.removeListener() not implemented");
     Ok(Value::Undefined)
 }
 
-pub fn create_shared_object_object<'gc>(
+pub fn create_shared_object_object<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    shared_object_proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    shared_object_proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let shared_obj = FunctionObject::constructor(
         gc_context,
         Executable::Native(constructor),
@@ -430,15 +412,26 @@ pub fn create_shared_object_object<'gc>(
         shared_object_proto,
     );
     let object = shared_obj.as_script_object().unwrap();
+
+    let OBJECT_DECLS: &[Declaration<B>] = declare_properties! {
+        "deleteAll" => method(delete_all; DONT_ENUM);
+        "getDiskUsage" => method(get_disk_usage; DONT_ENUM);
+        "getLocal" => method(get_local);
+        "getRemote" => method(get_remote);
+        "getMaxSize" => method(get_max_size);
+        "addListener" => method(add_listener);
+        "removeListener" => method(remove_listener);
+    };
     define_properties_on(OBJECT_DECLS, gc_context, object, fn_proto);
+
     shared_obj
 }
 
-pub fn clear<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn clear<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let data = this.get("data", activation)?.coerce_to_object(activation);
 
     for k in &data.get_keys(activation) {
@@ -453,29 +446,29 @@ pub fn clear<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn close<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn close<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     avm_warn!(activation, "SharedObject.close() not implemented");
     Ok(Value::Undefined)
 }
 
-pub fn connect<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn connect<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     avm_warn!(activation, "SharedObject.connect() not implemented");
     Ok(Value::Undefined)
 }
 
-pub fn flush<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn flush<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let data = this.get("data", activation)?.coerce_to_object(activation);
 
     let this_obj = this.as_shared_object().unwrap();
@@ -498,66 +491,79 @@ pub fn flush<'gc>(
     Ok(activation.context.storage.put(&name, &bytes).into())
 }
 
-pub fn get_size<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn get_size<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     avm_warn!(activation, "SharedObject.getSize() not implemented");
     Ok(Value::Undefined)
 }
 
-pub fn send<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn send<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     avm_warn!(activation, "SharedObject.send() not implemented");
     Ok(Value::Undefined)
 }
 
-pub fn set_fps<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_fps<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     avm_warn!(activation, "SharedObject.setFps() not implemented");
     Ok(Value::Undefined)
 }
 
-pub fn on_status<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn on_status<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     avm_warn!(activation, "SharedObject.onStatus() not implemented");
     Ok(Value::Undefined)
 }
 
-pub fn on_sync<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn on_sync<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     avm_warn!(activation, "SharedObject.onSync() not implemented");
     Ok(Value::Undefined)
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let shared_obj = SharedObject::empty_shared_obj(gc_context, Some(proto));
     let object = shared_obj.as_script_object().unwrap();
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "clear" => method(clear; DONT_ENUM | DONT_DELETE);
+        "close" => method(close; DONT_ENUM | DONT_DELETE);
+        "connect" => method(connect; DONT_ENUM | DONT_DELETE);
+        "flush" => method(flush; DONT_ENUM | DONT_DELETE);
+        "getSize" => method(get_size; DONT_ENUM | DONT_DELETE);
+        "send" => method(send; DONT_ENUM | DONT_DELETE);
+        "setFps" => method(set_fps; DONT_ENUM | DONT_DELETE);
+        "onStatus" => method(on_status; DONT_ENUM | DONT_DELETE);
+        "onSync" => method(on_sync; DONT_ENUM | DONT_DELETE);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     shared_obj.into()
 }
 
-pub fn constructor<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(this.into())
 }

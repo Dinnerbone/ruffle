@@ -10,29 +10,15 @@ use crate::avm_warn;
 use crate::xml::{XmlNode, ELEMENT_NODE, TEXT_NODE};
 use gc_arena::MutationContext;
 use ruffle_types::backend::navigator::Request;
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "docTypeDecl" => property(doc_type_decl; READ_ONLY);
-    "ignoreWhite" => bool(false);
-    "contentType" => string("application/x-www-form-urlencoded"; READ_ONLY);
-    "xmlDecl" => property(xml_decl);
-    "idMap" => property(id_map);
-    "status" => property(status);
-    "createElement" => method(create_element);
-    "createTextNode" => method(create_text_node);
-    "parseXML" => method(parse_xml);
-    "load" => method(load);
-    "sendAndLoad" => method(send_and_load);
-    "onData" => method(on_data);
-};
-
 /// XML (document) constructor
-pub fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let (Some(Ok(ref string)), Some(ref mut document)) = (
         args.get(0).map(|v| v.coerce_to_string(activation)),
         this.as_xml(),
@@ -53,11 +39,11 @@ pub fn constructor<'gc>(
     Ok(this.into())
 }
 
-fn create_element<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn create_element<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(_document) = this.as_xml() {
         if let Some(name) = args.get(0) {
             let name = name.coerce_to_string(activation)?;
@@ -69,11 +55,11 @@ fn create_element<'gc>(
     Ok(Value::Undefined)
 }
 
-fn create_text_node<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn create_text_node<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(_document) = this.as_xml() {
         if let Some(text) = args.get(0) {
             let text = text.coerce_to_string(activation)?;
@@ -85,11 +71,11 @@ fn create_text_node<'gc>(
     Ok(Value::Undefined)
 }
 
-fn parse_xml<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn parse_xml<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(mut document) = this.as_xml() {
         let xmlstring =
             if let Some(Ok(xmlstring)) = args.get(0).map(|s| s.coerce_to_string(activation)) {
@@ -116,11 +102,11 @@ fn parse_xml<'gc>(
     Ok(Value::Undefined)
 }
 
-fn send_and_load<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn send_and_load<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let url_val = args.get(0).cloned().unwrap_or(Value::Undefined);
 
     if let Value::Null = url_val {
@@ -139,11 +125,11 @@ fn send_and_load<'gc>(
     Ok(Value::Undefined)
 }
 
-fn load<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn load<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let url_val = args.get(0).cloned().unwrap_or(Value::Undefined);
 
     if let Value::Null = url_val {
@@ -160,11 +146,11 @@ fn load<'gc>(
     }
 }
 
-fn on_data<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn on_data<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let src = args.get(0).cloned().unwrap_or(Value::Undefined);
 
     if let Value::Undefined = src {
@@ -196,11 +182,11 @@ fn on_data<'gc>(
     Ok(Value::Undefined)
 }
 
-fn doc_type_decl<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn doc_type_decl<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(document) = this.as_xml() {
         if let Some(doctype) = document.doctype() {
             return Ok(doctype.into());
@@ -210,11 +196,11 @@ fn doc_type_decl<'gc>(
     Ok(Value::Undefined)
 }
 
-fn xml_decl<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn xml_decl<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(document) = this.as_xml() {
         if let Some(xml_decl) = document.xml_decl() {
             return Ok(xml_decl.into());
@@ -224,11 +210,11 @@ fn xml_decl<'gc>(
     Ok(Value::Undefined)
 }
 
-fn id_map<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn id_map<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(document) = this.as_xml() {
         return Ok(document.id_map().into());
     }
@@ -236,11 +222,11 @@ fn id_map<'gc>(
     Ok(Value::Undefined)
 }
 
-fn status<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn status<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(document) = this.as_xml() {
         return Ok((document.status() as i8).into());
     }
@@ -248,13 +234,13 @@ fn status<'gc>(
     Ok(Value::Undefined)
 }
 
-fn spawn_xml_fetch<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    loader_object: Object<'gc>,
+fn spawn_xml_fetch<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    loader_object: Object<'gc, B>,
     url: AvmString<'gc>,
-    send_object: Option<XmlNode<'gc>>,
-) -> Result<Value<'gc>, Error<'gc>> {
+    send_object: Option<XmlNode<'gc, B>>,
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let url = url.to_utf8_lossy().into_owned();
 
     let request = if let Some(node) = send_object {
@@ -285,13 +271,29 @@ fn spawn_xml_fetch<'gc>(
 }
 
 /// Construct the prototype for `XML`.
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let xml_proto = XmlObject::empty(gc_context, Some(proto));
     let object = xml_proto.as_script_object().unwrap();
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "docTypeDecl" => property(doc_type_decl; READ_ONLY);
+        "ignoreWhite" => bool(false);
+        "contentType" => string("application/x-www-form-urlencoded"; READ_ONLY);
+        "xmlDecl" => property(xml_decl);
+        "idMap" => property(id_map);
+        "status" => property(status);
+        "createElement" => method(create_element);
+        "createTextNode" => method(create_text_node);
+        "parseXML" => method(parse_xml);
+        "load" => method(load);
+        "sendAndLoad" => method(send_and_load);
+        "onData" => method(on_data);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     xml_proto.into()
 }

@@ -12,13 +12,14 @@ use crate::avm2::traits::Trait;
 use crate::avm2::value::Value;
 use crate::avm2::{Avm2, Error};
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 
 /// Implements `flash.events.EventDispatcher`'s instance constructor.
-pub fn instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(mut this) = this {
         activation.super_init(this, &[])?;
 
@@ -39,10 +40,10 @@ pub fn instance_init<'gc>(
 }
 
 /// Get an object's dispatch list, lazily initializing it if necessary.
-fn dispatch_list<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    mut this: Object<'gc>,
-) -> Result<Object<'gc>, Error> {
+fn dispatch_list<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    mut this: Object<'gc, B>,
+) -> Result<Object<'gc, B>, Error> {
     match this.get_property(
         &QName::new(Namespace::private(NS_EVENT_DISPATCHER), "dispatch_list").into(),
         activation,
@@ -62,11 +63,11 @@ fn dispatch_list<'gc>(
 }
 
 /// Implements `EventDispatcher.addEventListener`.
-pub fn add_event_listener<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn add_event_listener<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let dispatch_list = dispatch_list(activation, this)?;
         let event_type = args
@@ -103,11 +104,11 @@ pub fn add_event_listener<'gc>(
 }
 
 /// Implements `EventDispatcher.removeEventListener`.
-pub fn remove_event_listener<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn remove_event_listener<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let dispatch_list = dispatch_list(activation, this)?;
         let event_type = args
@@ -136,11 +137,11 @@ pub fn remove_event_listener<'gc>(
 }
 
 /// Implements `EventDispatcher.hasEventListener`.
-pub fn has_event_listener<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn has_event_listener<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let dispatch_list = dispatch_list(activation, this)?;
         let event_type = args
@@ -160,11 +161,11 @@ pub fn has_event_listener<'gc>(
 }
 
 /// Implements `EventDispatcher.willTrigger`.
-pub fn will_trigger<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn will_trigger<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let dispatch_list = dispatch_list(activation, this)?;
         let event_type = args
@@ -198,11 +199,11 @@ pub fn will_trigger<'gc>(
 }
 
 /// Implements `EventDispatcher.dispatchEvent`.
-pub fn dispatch_event<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn dispatch_event<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let event = args.get(0).cloned().unwrap_or(Value::Undefined).as_object();
 
     if event.map(|o| o.as_event().is_none()).unwrap_or(true) {
@@ -217,11 +218,11 @@ pub fn dispatch_event<'gc>(
 }
 
 /// Implements `flash.events.EventDispatcher`'s class constructor.
-pub fn class_init<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn class_init<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok(Value::Undefined)
 }
 
@@ -229,11 +230,11 @@ pub fn class_init<'gc>(
 ///
 /// This is an undocumented function, but MX will VerifyError if this isn't
 /// present.
-pub fn to_string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn to_string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let object_proto = activation.avm2().classes().object.prototype();
     let name = QName::dynamic_name("toString").into();
     object_proto
@@ -243,7 +244,7 @@ pub fn to_string<'gc>(
 }
 
 /// Construct `EventDispatcher`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::package("flash.events"), "EventDispatcher"),
         Some(QName::new(Namespace::public(), "Object").into()),
@@ -258,7 +259,7 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
 
     write.implements(QName::new(Namespace::package("flash.events"), "IEventDispatcher").into());
 
-    const PUBLIC_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] = &[
+    let public_instance_methods: &[(&str, NativeMethodImpl<B>)] = &[
         ("addEventListener", add_event_listener),
         ("removeEventListener", remove_event_listener),
         ("hasEventListener", has_event_listener),
@@ -266,7 +267,7 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
         ("dispatchEvent", dispatch_event),
         ("toString", to_string),
     ];
-    write.define_public_builtin_instance_methods(mc, PUBLIC_INSTANCE_METHODS);
+    write.define_public_builtin_instance_methods(mc, public_instance_methods);
 
     write.define_instance_trait(Trait::from_slot(
         QName::new(Namespace::private(NS_EVENT_DISPATCHER), "target"),

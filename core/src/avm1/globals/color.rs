@@ -10,20 +10,14 @@ use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{Object, ScriptObject, TObject, Value};
 use crate::display_object::{DisplayObject, TDisplayObject};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 use swf::Fixed8;
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "getRGB" => method(get_rgb; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "getTransform" => method(get_transform; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "setRGB" => method(set_rgb; DONT_ENUM | DONT_DELETE | READ_ONLY);
-    "setTransform" => method(set_transform; DONT_ENUM | DONT_DELETE | READ_ONLY);
-};
-
-pub fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // The target display object that this color will modify.
     let target = args.get(0).cloned().unwrap_or(Value::Undefined);
     // Set undocumented `target` property
@@ -36,21 +30,29 @@ pub fn constructor<'gc>(
     Ok(this.into())
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let object = ScriptObject::object(gc_context, Some(proto));
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "getRGB" => method(get_rgb; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "getTransform" => method(get_transform; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "setRGB" => method(set_rgb; DONT_ENUM | DONT_DELETE | READ_ONLY);
+        "setTransform" => method(set_transform; DONT_ENUM | DONT_DELETE | READ_ONLY);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     object.into()
 }
 
 /// Gets the target display object of this color transform.
-fn target<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-) -> Result<Option<DisplayObject<'gc>>, Error<'gc>> {
+fn target<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+) -> Result<Option<DisplayObject<'gc, B>>, Error<'gc, B>> {
     // The target path resolves based on the active tellTarget clip of the stack frame.
     // This means calls on the same `Color` object could set the color of different clips
     // depending on which timeline its called from!
@@ -64,11 +66,11 @@ fn target<'gc>(
     }
 }
 
-fn get_rgb<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_rgb<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(target) = target(activation, this)? {
         let base = target.base();
         let color_transform = base.color_transform();
@@ -81,11 +83,11 @@ fn get_rgb<'gc>(
     }
 }
 
-fn get_transform<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_transform<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(target) = target(activation, this)? {
         let base = target.base();
         let color_transform = base.color_transform();
@@ -123,11 +125,11 @@ fn get_transform<'gc>(
     }
 }
 
-fn set_rgb<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_rgb<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(target) = target(activation, this)? {
         target.set_transformed_by_script(activation.context.gc_context, true);
 
@@ -149,17 +151,17 @@ fn set_rgb<'gc>(
     Ok(Value::Undefined)
 }
 
-fn set_transform<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
-    fn set_color_mult<'gc>(
-        activation: &mut Activation<'_, 'gc, '_>,
-        transform: Object<'gc>,
+fn set_transform<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
+    fn set_color_mult<'gc, B: Backend>(
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        transform: Object<'gc, B>,
         property: &'static str,
         out: &mut Fixed8,
-    ) -> Result<(), Error<'gc>> {
+    ) -> Result<(), Error<'gc, B>> {
         // The parameters are set only if the property exists on the object itself (prototype excluded).
         if transform.has_own_property(activation, property.into()) {
             let n = transform
@@ -172,12 +174,12 @@ fn set_transform<'gc>(
         Ok(())
     }
 
-    fn set_color_add<'gc>(
-        activation: &mut Activation<'_, 'gc, '_>,
-        transform: Object<'gc>,
+    fn set_color_add<'gc, B: Backend>(
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        transform: Object<'gc, B>,
         property: &'static str,
         out: &mut i16,
-    ) -> Result<(), Error<'gc>> {
+    ) -> Result<(), Error<'gc, B>> {
         // The parameters are set only if the property exists on the object itself (prototype excluded).
         if transform.has_own_property(activation, property.into()) {
             *out = transform

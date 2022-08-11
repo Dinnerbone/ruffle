@@ -2,24 +2,25 @@ use crate::avm1::{Avm1, Value};
 use crate::context::UpdateContext;
 pub use crate::display_object::{DisplayObject, TDisplayObject, TDisplayObjectContainer};
 use gc_arena::{Collect, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 
 #[derive(Clone, Copy, Collect, Debug)]
 #[collect(no_drop)]
-pub struct FocusTracker<'gc>(GcCell<'gc, Option<DisplayObject<'gc>>>);
+pub struct FocusTracker<'gc, B: Backend>(GcCell<'gc, Option<DisplayObject<'gc, B>>>);
 
-impl<'gc> FocusTracker<'gc> {
+impl<'gc, B: Backend> FocusTracker<'gc, B> {
     pub fn new(gc_context: MutationContext<'gc, '_>) -> Self {
         Self(GcCell::allocate(gc_context, None))
     }
 
-    pub fn get(&self) -> Option<DisplayObject<'gc>> {
+    pub fn get(&self) -> Option<DisplayObject<'gc, B>> {
         *self.0.read()
     }
 
     pub fn set(
         &self,
-        focused_element: Option<DisplayObject<'gc>>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        focused_element: Option<DisplayObject<'gc, B>>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
     ) {
         let old = std::mem::replace(&mut *self.0.write(context.gc_context), focused_element);
 

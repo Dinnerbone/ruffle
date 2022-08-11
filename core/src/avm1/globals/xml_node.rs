@@ -6,38 +6,15 @@ use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{ArrayObject, Object, ScriptObject, TObject, Value};
 use crate::xml::XmlNode;
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 use ruffle_types::string::{AvmString, WStr};
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "localName" => property(local_name);
-    "nodeName" => property(node_name, set_node_value);
-    "nodeType" => property(node_type);
-    "nodeValue" => property(node_value, set_node_value);
-    "prefix" => property(prefix);
-    "childNodes" => property(child_nodes);
-    "firstChild" => property(first_child);
-    "lastChild" => property(last_child);
-    "parentNode" => property(parent_node);
-    "previousSibling" => property(previous_sibling);
-    "nextSibling" => property(next_sibling);
-    "attributes" => property(attributes);
-    "namespaceURI" => property(namespace_uri);
-    "appendChild" => method(append_child);
-    "insertBefore" => method(insert_before);
-    "cloneNode" => method(clone_node);
-    "getNamespaceForPrefix" => method(get_namespace_for_prefix);
-    "getPrefixForNamespace" => method(get_prefix_for_namespace);
-    "hasChildNodes" => method(has_child_nodes);
-    "removeNode" => method(remove_node);
-    "toString" => method(to_string);
-};
-
 /// XMLNode constructor
-pub fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let [node_type, value, ..] = args {
         let node_type = node_type.coerce_to_u8(activation)?;
         let node_value = value.coerce_to_string(activation)?;
@@ -48,11 +25,11 @@ pub fn constructor<'gc>(
     Ok(this.into())
 }
 
-fn append_child<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn append_child<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let (Some(mut xmlnode), Some(child_xmlnode)) = (
         this.as_xml_node(),
         args.get(0)
@@ -67,11 +44,11 @@ fn append_child<'gc>(
     Ok(Value::Undefined)
 }
 
-fn insert_before<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn insert_before<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let (Some(mut xmlnode), Some(child_xmlnode), Some(insertpoint_xmlnode)) = (
         this.as_xml_node(),
         args.get(0)
@@ -89,11 +66,11 @@ fn insert_before<'gc>(
     Ok(Value::Undefined)
 }
 
-fn clone_node<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn clone_node<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let (Some(xmlnode), deep) = (
         this.as_xml_node(),
         args.get(0)
@@ -107,11 +84,11 @@ fn clone_node<'gc>(
     Ok(Value::Undefined)
 }
 
-fn get_namespace_for_prefix<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_namespace_for_prefix<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let (Some(xmlnode), Some(prefix_string)) = (
         this.as_xml_node(),
         args.get(0).map(|v| v.coerce_to_string(activation)),
@@ -124,11 +101,11 @@ fn get_namespace_for_prefix<'gc>(
     }
 }
 
-fn get_prefix_for_namespace<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_prefix_for_namespace<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let (Some(node), Some(uri)) = (this.as_xml_node(), args.get(0)) {
         let uri = uri.coerce_to_string(activation)?;
         for ancestor in node.ancestors() {
@@ -152,11 +129,11 @@ fn get_prefix_for_namespace<'gc>(
     Ok(Value::Undefined)
 }
 
-fn has_child_nodes<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn has_child_nodes<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(xmlnode) = this.as_xml_node() {
         Ok((xmlnode.children_len() > 0).into())
     } else {
@@ -164,11 +141,11 @@ fn has_child_nodes<'gc>(
     }
 }
 
-fn remove_node<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn remove_node<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(mut node) = this.as_xml_node() {
         node.remove_node(activation.context.gc_context);
     }
@@ -176,11 +153,11 @@ fn remove_node<'gc>(
     Ok(Value::Undefined)
 }
 
-fn to_string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn to_string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(node) = this.as_xml_node() {
         let string = node.into_string(activation)?;
         return Ok(AvmString::new(activation.context.gc_context, string).into());
@@ -189,22 +166,22 @@ fn to_string<'gc>(
     Ok("".into())
 }
 
-fn local_name<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn local_name<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(this
         .as_xml_node()
         .and_then(|n| n.local_name(activation.context.gc_context))
         .map_or(Value::Null, Value::from))
 }
 
-fn node_name<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn node_name<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(this
         .as_xml_node()
         .and_then(|n| n.node_name())
@@ -212,11 +189,11 @@ fn node_name<'gc>(
 }
 
 /// This functions acts as a setter for both `nodeName` and `nodeValue`.
-fn set_node_value<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_node_value<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let [name, ..] = args {
         if name == &Value::Undefined {
             return Ok(Value::Undefined);
@@ -232,22 +209,22 @@ fn set_node_value<'gc>(
     Ok(Value::Undefined)
 }
 
-fn node_type<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn node_type<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(this
         .as_xml_node()
         .map(|n| n.node_type().into())
         .unwrap_or_else(|| Value::Undefined))
 }
 
-fn node_value<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn node_value<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(this
         .as_xml_node()
         .and_then(|n| n.node_value())
@@ -255,22 +232,22 @@ fn node_value<'gc>(
         .unwrap_or_else(|| Value::Null))
 }
 
-fn prefix<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn prefix<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     Ok(this
         .as_xml_node()
         .and_then(|n| n.prefix(activation.context.gc_context))
         .map_or(Value::Null, Value::from))
 }
 
-fn child_nodes<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn child_nodes<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(node) = this.as_xml_node() {
         return Ok(ArrayObject::new(
             activation.context.gc_context,
@@ -284,11 +261,11 @@ fn child_nodes<'gc>(
     Ok(Value::Undefined)
 }
 
-fn first_child<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn first_child<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(node) = this.as_xml_node() {
         return Ok(node
             .children()
@@ -300,11 +277,11 @@ fn first_child<'gc>(
     Ok(Value::Undefined)
 }
 
-fn last_child<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn last_child<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(node) = this.as_xml_node() {
         return Ok(node
             .children()
@@ -316,11 +293,11 @@ fn last_child<'gc>(
     Ok(Value::Undefined)
 }
 
-fn parent_node<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn parent_node<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(node) = this.as_xml_node() {
         return Ok(node
             .parent()
@@ -331,11 +308,11 @@ fn parent_node<'gc>(
     Ok(Value::Undefined)
 }
 
-fn previous_sibling<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn previous_sibling<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(node) = this.as_xml_node() {
         return Ok(node
             .prev_sibling()
@@ -346,11 +323,11 @@ fn previous_sibling<'gc>(
     Ok(Value::Undefined)
 }
 
-fn next_sibling<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn next_sibling<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(node) = this.as_xml_node() {
         return Ok(node
             .next_sibling()
@@ -361,11 +338,11 @@ fn next_sibling<'gc>(
     Ok(Value::Undefined)
 }
 
-fn attributes<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn attributes<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(node) = this.as_xml_node() {
         return Ok(node.attributes().into());
     }
@@ -373,11 +350,11 @@ fn attributes<'gc>(
     Ok(Value::Undefined)
 }
 
-fn namespace_uri<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn namespace_uri<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(node) = this.as_xml_node() {
         if let Some(prefix) = node.prefix(activation.context.gc_context) {
             return Ok(node
@@ -392,12 +369,37 @@ fn namespace_uri<'gc>(
 }
 
 /// Construct the prototype for `XMLNode`.
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let xml_node_proto = ScriptObject::object(gc_context, Some(proto));
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "localName" => property(local_name);
+        "nodeName" => property(node_name, set_node_value);
+        "nodeType" => property(node_type);
+        "nodeValue" => property(node_value, set_node_value);
+        "prefix" => property(prefix);
+        "childNodes" => property(child_nodes);
+        "firstChild" => property(first_child);
+        "lastChild" => property(last_child);
+        "parentNode" => property(parent_node);
+        "previousSibling" => property(previous_sibling);
+        "nextSibling" => property(next_sibling);
+        "attributes" => property(attributes);
+        "namespaceURI" => property(namespace_uri);
+        "appendChild" => method(append_child);
+        "insertBefore" => method(insert_before);
+        "cloneNode" => method(clone_node);
+        "getNamespaceForPrefix" => method(get_namespace_for_prefix);
+        "getPrefixForNamespace" => method(get_prefix_for_namespace);
+        "hasChildNodes" => method(has_child_nodes);
+        "removeNode" => method(remove_node);
+        "toString" => method(to_string);
+    };
     define_properties_on(PROTO_DECLS, gc_context, xml_node_proto, fn_proto);
+
     xml_node_proto.into()
 }

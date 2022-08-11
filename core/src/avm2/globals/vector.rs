@@ -14,15 +14,16 @@ use crate::avm2::value::Value;
 use crate::avm2::vector::VectorStorage;
 use crate::avm2::Error;
 use gc_arena::{GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 use std::cmp::{max, min, Ordering};
 
 /// Implements `Vector`'s instance constructor.
-pub fn instance_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn instance_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         activation.super_init(this, &[])?;
 
@@ -46,11 +47,11 @@ pub fn instance_init<'gc>(
     Ok(Value::Undefined)
 }
 
-fn class_call<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+fn class_call<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if args.len() != 1 {
         return Err("Argument count mismatch on class coercion".into());
     }
@@ -87,11 +88,11 @@ fn class_call<'gc>(
 }
 
 /// Implements `Vector`'s class constructor.
-pub fn class_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn class_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let mut globals = activation.global_scope().unwrap();
         let mut domain = activation.domain();
@@ -172,11 +173,11 @@ pub fn class_init<'gc>(
 }
 
 /// Implements `Vector`'s specialized-class constructor.
-pub fn specialized_class_init<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn specialized_class_init<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let mut proto = this
             .get_property(&QName::dynamic_name("prototype").into(), activation)?
@@ -189,7 +190,7 @@ pub fn specialized_class_init<'gc>(
             })?;
         let scope = activation.create_scopechain();
 
-        const PUBLIC_PROTOTYPE_METHODS: &[(&str, NativeMethodImpl)] = &[
+        let PUBLIC_PROTOTYPE_METHODS: &[(&str, NativeMethodImpl<B>)] = &[
             ("concat", concat),
             ("join", join),
             ("toString", to_string),
@@ -233,11 +234,11 @@ pub fn specialized_class_init<'gc>(
 }
 
 /// `Vector.length` getter
-pub fn length<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn length<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(vector) = this.as_vector_storage() {
             return Ok(vector.length().into());
@@ -248,11 +249,11 @@ pub fn length<'gc>(
 }
 
 /// `Vector.length` setter
-pub fn set_length<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn set_length<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut vector) = this.as_vector_storage_mut(activation.context.gc_context) {
             let new_length = args
@@ -269,11 +270,11 @@ pub fn set_length<'gc>(
 }
 
 /// `Vector.fixed` getter
-pub fn fixed<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn fixed<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(vector) = this.as_vector_storage() {
             return Ok(vector.is_fixed().into());
@@ -284,11 +285,11 @@ pub fn fixed<'gc>(
 }
 
 /// `Vector.fixed` setter
-pub fn set_fixed<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn set_fixed<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut vector) = this.as_vector_storage_mut(activation.context.gc_context) {
             let new_fixed = args
@@ -305,11 +306,11 @@ pub fn set_fixed<'gc>(
 }
 
 /// `Vector.concat` impl
-pub fn concat<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn concat<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let mut new_vector_storage = if let Some(vector) = this.as_vector_storage() {
             vector.clone()
@@ -339,7 +340,7 @@ pub fn concat<'gc>(
             }
 
             let old_vec = arg_obj.as_vector_storage();
-            let old_vec: Vec<Value<'gc>> = if let Some(old_vec) = old_vec {
+            let old_vec: Vec<Value<'gc, B>> = if let Some(old_vec) = old_vec {
                 old_vec.iter().collect()
             } else {
                 continue;
@@ -371,14 +372,17 @@ pub fn concat<'gc>(
     Ok(Value::Undefined)
 }
 
-fn join_inner<'gc, 'a, 'ctxt, C>(
-    activation: &mut Activation<'a, 'gc, 'ctxt>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
+fn join_inner<'gc, 'a, 'ctxt, C, B: Backend>(
+    activation: &mut Activation<'a, 'gc, 'ctxt, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
     mut conv: C,
-) -> Result<Value<'gc>, Error>
+) -> Result<Value<'gc, B>, Error>
 where
-    C: for<'b> FnMut(Value<'gc>, &'b mut Activation<'a, 'gc, 'ctxt>) -> Result<Value<'gc>, Error>,
+    C: for<'b> FnMut(
+        Value<'gc, B>,
+        &'b mut Activation<'a, 'gc, 'ctxt, B>,
+    ) -> Result<Value<'gc, B>, Error>,
 {
     let mut separator = args.get(0).cloned().unwrap_or(Value::Undefined);
     if separator == Value::Undefined {
@@ -410,29 +414,29 @@ where
 }
 
 /// Implements `Vector.join`
-pub fn join<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn join<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     join_inner(activation, this, args, |v, _act| Ok(v))
 }
 
 /// Implements `Vector.toString`
-pub fn to_string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn to_string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     join_inner(activation, this, &[",".into()], |v, _act| Ok(v))
 }
 
 /// Implements `Vector.toLocaleString`
-pub fn to_locale_string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn to_locale_string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     join_inner(activation, this, &[",".into()], |v, act| {
         if let Ok(o) = v.coerce_to_object(act) {
             o.call_property(
@@ -447,11 +451,11 @@ pub fn to_locale_string<'gc>(
 }
 
 /// Implements `Vector.every`
-pub fn every<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn every<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let callback = args
             .get(0)
@@ -480,11 +484,11 @@ pub fn every<'gc>(
 }
 
 /// Implements `Vector.some`
-pub fn some<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn some<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let callback = args
             .get(0)
@@ -513,11 +517,11 @@ pub fn some<'gc>(
 }
 
 /// Implements `Vector.filter`
-pub fn filter<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn filter<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let callback = args
             .get(0)
@@ -554,11 +558,11 @@ pub fn filter<'gc>(
 }
 
 /// Implements `Vector.forEach`
-pub fn for_each<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn for_each<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let callback = args
             .get(0)
@@ -579,11 +583,11 @@ pub fn for_each<'gc>(
 }
 
 /// Implements `Vector.indexOf`
-pub fn index_of<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn index_of<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let search_for = args.get(0).cloned().unwrap_or(Value::Undefined);
         let from_index = args
@@ -619,11 +623,11 @@ pub fn index_of<'gc>(
 }
 
 /// Implements `Vector.lastIndexOf`
-pub fn last_index_of<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn last_index_of<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let search_for = args.get(0).cloned().unwrap_or(Value::Undefined);
         let from_index = args
@@ -659,11 +663,11 @@ pub fn last_index_of<'gc>(
 }
 
 /// Implements `Vector.map`
-pub fn map<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn map<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         let callback = args
             .get(0)
@@ -697,11 +701,11 @@ pub fn map<'gc>(
 }
 
 /// Implements `Vector.pop`
-pub fn pop<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn pop<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut vs) = this.as_vector_storage_mut(activation.context.gc_context) {
             return vs.pop(activation);
@@ -712,11 +716,11 @@ pub fn pop<'gc>(
 }
 
 /// Implements `Vector.push`
-pub fn push<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn push<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut vs) = this.as_vector_storage_mut(activation.context.gc_context) {
             let value_type = vs.value_type();
@@ -735,11 +739,11 @@ pub fn push<'gc>(
 }
 
 /// Implements `Vector.shift`
-pub fn shift<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn shift<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut vs) = this.as_vector_storage_mut(activation.context.gc_context) {
             return vs.shift(activation);
@@ -750,11 +754,11 @@ pub fn shift<'gc>(
 }
 
 /// Implements `Vector.unshift`
-pub fn unshift<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn unshift<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut vs) = this.as_vector_storage_mut(activation.context.gc_context) {
             let value_type = vs.value_type();
@@ -773,11 +777,11 @@ pub fn unshift<'gc>(
 }
 
 /// Implements `Vector.insertAt`
-pub fn insert_at<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn insert_at<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut vs) = this.as_vector_storage_mut(activation.context.gc_context) {
             let index = args
@@ -800,11 +804,11 @@ pub fn insert_at<'gc>(
 }
 
 /// Implements `Vector.removeAt`
-pub fn remove_at<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn remove_at<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut vs) = this.as_vector_storage_mut(activation.context.gc_context) {
             let index = args
@@ -821,11 +825,11 @@ pub fn remove_at<'gc>(
 }
 
 /// Implements `Vector.reverse`
-pub fn reverse<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn reverse<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut vs) = this.as_vector_storage_mut(activation.context.gc_context) {
             vs.reverse();
@@ -838,11 +842,11 @@ pub fn reverse<'gc>(
 }
 
 /// Implements `Vector.slice`
-pub fn slice<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn slice<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(vs) = this.as_vector_storage_mut(activation.context.gc_context) {
             let from = args
@@ -878,11 +882,11 @@ pub fn slice<'gc>(
 }
 
 /// Implements `Vector.sort`
-pub fn sort<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn sort<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(vs) = this.as_vector_storage_mut(activation.context.gc_context) {
             let fn_or_options = args.get(0).cloned().unwrap_or(Value::Undefined);
@@ -902,7 +906,7 @@ pub fn sort<'gc>(
                 )
             };
 
-            let compare = move |activation: &mut Activation<'_, 'gc, '_>, a, b| {
+            let compare = move |activation: &mut Activation<'_, 'gc, '_, B>, a, b| {
                 if let Some(compare_fnc) = compare_fnc {
                     let order = compare_fnc
                         .call(Some(this), &[a, b], activation)?
@@ -965,11 +969,11 @@ pub fn sort<'gc>(
 }
 
 /// Implements `Vector.splice`
-pub fn splice<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn splice<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     if let Some(this) = this {
         if let Some(mut vs) = this.as_vector_storage_mut(activation.context.gc_context) {
             let start_len = args
@@ -1014,7 +1018,7 @@ pub fn splice<'gc>(
 }
 
 /// Construct `Vector`'s class.
-pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>> {
+pub fn create_class<'gc, B: Backend>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc, B>> {
     let class = Class::new(
         QName::new(Namespace::package(NS_VECTOR), "Vector"),
         Some(QName::new(Namespace::public(), "Object").into()),
@@ -1038,17 +1042,17 @@ pub fn create_class<'gc>(mc: MutationContext<'gc, '_>) -> GcCell<'gc, Class<'gc>
         mc,
     ));
 
-    const PUBLIC_INSTANCE_PROPERTIES: &[(
+    let PUBLIC_INSTANCE_PROPERTIES: &[(
         &str,
-        Option<NativeMethodImpl>,
-        Option<NativeMethodImpl>,
+        Option<NativeMethodImpl<B>>,
+        Option<NativeMethodImpl<B>>,
     )] = &[
         ("length", Some(length), Some(set_length)),
         ("fixed", Some(fixed), Some(set_fixed)),
     ];
     write.define_public_builtin_instance_properties(mc, PUBLIC_INSTANCE_PROPERTIES);
 
-    const AS3_INSTANCE_METHODS: &[(&str, NativeMethodImpl)] = &[
+    let AS3_INSTANCE_METHODS: &[(&str, NativeMethodImpl<B>)] = &[
         ("concat", concat),
         ("join", join),
         ("toString", to_string),

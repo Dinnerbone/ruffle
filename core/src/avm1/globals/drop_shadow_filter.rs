@@ -6,26 +6,13 @@ use crate::avm1::object::drop_shadow_filter::DropShadowFilterObject;
 use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{Object, TObject, Value};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "alpha" => property(alpha, set_alpha);
-    "angle" => property(angle, set_angle);
-    "blurX" => property(blur_x, set_blur_x);
-    "blurY" => property(blur_y, set_blur_y);
-    "color" => property(color, set_color);
-    "distance" => property(distance, set_distance);
-    "hideObject" => property(hide_object, set_hide_object);
-    "inner" => property(inner, set_inner);
-    "knockout" => property(knockout, set_knockout);
-    "quality" => property(quality, set_quality);
-    "strength" => property(strength, set_strength);
-};
-
-pub fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     set_distance(activation, this, args.get(0..1).unwrap_or_default())?;
     set_angle(activation, this, args.get(1..2).unwrap_or_default())?;
     set_color(activation, this, args.get(2..3).unwrap_or_default())?;
@@ -41,11 +28,11 @@ pub fn constructor<'gc>(
     Ok(this.into())
 }
 
-pub fn alpha<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn alpha<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_drop_shadow_filter_object() {
         return Ok(object.alpha().into());
     }
@@ -53,11 +40,11 @@ pub fn alpha<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_alpha<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_alpha<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let alpha = args
         .get(0)
         .unwrap_or(&1.into())
@@ -71,11 +58,11 @@ pub fn set_alpha<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn distance<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn distance<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_drop_shadow_filter_object() {
         return Ok(object.distance().into());
     }
@@ -83,11 +70,11 @@ pub fn distance<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_distance<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_distance<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let distance = args.get(0).unwrap_or(&4.into()).coerce_to_f64(activation)?;
 
     if let Some(object) = this.as_drop_shadow_filter_object() {
@@ -97,11 +84,11 @@ pub fn set_distance<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn angle<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn angle<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_drop_shadow_filter_object() {
         return Ok(object.angle().into());
     }
@@ -109,11 +96,11 @@ pub fn angle<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_angle<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_angle<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let angle = args
         .get(0)
         .unwrap_or(&44.9999999772279.into())
@@ -132,11 +119,11 @@ pub fn set_angle<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn blur_x<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn blur_x<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_drop_shadow_filter_object() {
         return Ok(object.blur_x().into());
     }
@@ -144,11 +131,11 @@ pub fn blur_x<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_blur_x<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_blur_x<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let blur_x = args
         .get(0)
         .unwrap_or(&4.into())
@@ -162,11 +149,11 @@ pub fn set_blur_x<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn blur_y<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn blur_y<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_drop_shadow_filter_object() {
         return Ok(object.blur_y().into());
     }
@@ -174,11 +161,11 @@ pub fn blur_y<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_blur_y<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_blur_y<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let blur_y = args
         .get(0)
         .unwrap_or(&4.into())
@@ -192,11 +179,11 @@ pub fn set_blur_y<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn color<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn color<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_drop_shadow_filter_object() {
         return Ok(object.color().into());
     }
@@ -204,11 +191,11 @@ pub fn color<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_color<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_color<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let color = args
         .get(0)
         .unwrap_or(&0x000000.into())
@@ -221,11 +208,11 @@ pub fn set_color<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn hide_object<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn hide_object<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_drop_shadow_filter_object() {
         return Ok(object.hide_object().into());
     }
@@ -233,11 +220,11 @@ pub fn hide_object<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_hide_object<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_hide_object<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let hide_object = args
         .get(0)
         .unwrap_or(&false.into())
@@ -250,11 +237,11 @@ pub fn set_hide_object<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn inner<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn inner<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_drop_shadow_filter_object() {
         return Ok(object.inner().into());
     }
@@ -262,11 +249,11 @@ pub fn inner<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_inner<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_inner<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let inner = args
         .get(0)
         .unwrap_or(&false.into())
@@ -279,11 +266,11 @@ pub fn set_inner<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn knockout<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn knockout<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_drop_shadow_filter_object() {
         return Ok(object.knockout().into());
     }
@@ -291,11 +278,11 @@ pub fn knockout<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_knockout<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_knockout<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let knockout = args
         .get(0)
         .unwrap_or(&false.into())
@@ -308,11 +295,11 @@ pub fn set_knockout<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn quality<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn quality<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_drop_shadow_filter_object() {
         return Ok(object.quality().into());
     }
@@ -320,11 +307,11 @@ pub fn quality<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_quality<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_quality<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let quality = args
         .get(0)
         .unwrap_or(&1.into())
@@ -338,11 +325,11 @@ pub fn set_quality<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn strength<'gc>(
-    _activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn strength<'gc, B: Backend>(
+    _activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(object) = this.as_drop_shadow_filter_object() {
         return Ok(object.strength().into());
     }
@@ -350,11 +337,11 @@ pub fn strength<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn set_strength<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+pub fn set_strength<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let strength = args
         .get(0)
         .unwrap_or(&1.into())
@@ -368,13 +355,28 @@ pub fn set_strength<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let drop_shadow_filter = DropShadowFilterObject::empty_object(gc_context, Some(proto));
     let object = drop_shadow_filter.as_script_object().unwrap();
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "alpha" => property(alpha, set_alpha);
+        "angle" => property(angle, set_angle);
+        "blurX" => property(blur_x, set_blur_x);
+        "blurY" => property(blur_y, set_blur_y);
+        "color" => property(color, set_color);
+        "distance" => property(distance, set_distance);
+        "hideObject" => property(hide_object, set_hide_object);
+        "inner" => property(inner, set_inner);
+        "knockout" => property(knockout, set_knockout);
+        "quality" => property(quality, set_quality);
+        "strength" => property(strength, set_strength);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     drop_shadow_filter.into()
 }

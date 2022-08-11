@@ -3,18 +3,19 @@ use crate::avm1::{Object, ScriptObject, TObject};
 use crate::impl_custom_object;
 use gc_arena::{Collect, GcCell, MutationContext};
 
+use ruffle_types::backend::Backend;
 use std::fmt;
 
 /// A DropShadowFilter
 #[derive(Clone, Copy, Collect)]
 #[collect(no_drop)]
-pub struct DropShadowFilterObject<'gc>(GcCell<'gc, DropShadowFilterData<'gc>>);
+pub struct DropShadowFilterObject<'gc, B: Backend>(GcCell<'gc, DropShadowFilterData<'gc, B>>);
 
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct DropShadowFilterData<'gc> {
+pub struct DropShadowFilterData<'gc, B: Backend> {
     /// The underlying script object.
-    base: ScriptObject<'gc>,
+    base: ScriptObject<'gc, B>,
 
     alpha: f64,
     angle: f64,
@@ -29,7 +30,7 @@ pub struct DropShadowFilterData<'gc> {
     strength: f64,
 }
 
-impl fmt::Debug for DropShadowFilterObject<'_> {
+impl<B: Backend> fmt::Debug for DropShadowFilterObject<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let this = self.0.read();
         f.debug_struct("DropShadowFilter")
@@ -48,7 +49,7 @@ impl fmt::Debug for DropShadowFilterObject<'_> {
     }
 }
 
-impl<'gc> DropShadowFilterObject<'gc> {
+impl<'gc, B: Backend> DropShadowFilterObject<'gc, B> {
     add_field_accessors!(
         [set_alpha, alpha, alpha, f64],
         [set_angle, angle, angle, f64],
@@ -63,7 +64,10 @@ impl<'gc> DropShadowFilterObject<'gc> {
         [set_strength, strength, strength, f64],
     );
 
-    pub fn empty_object(gc_context: MutationContext<'gc, '_>, proto: Option<Object<'gc>>) -> Self {
+    pub fn empty_object(
+        gc_context: MutationContext<'gc, '_>,
+        proto: Option<Object<'gc, B>>,
+    ) -> Self {
         DropShadowFilterObject(GcCell::allocate(
             gc_context,
             DropShadowFilterData {
@@ -84,8 +88,10 @@ impl<'gc> DropShadowFilterObject<'gc> {
     }
 }
 
-impl<'gc> TObject<'gc> for DropShadowFilterObject<'gc> {
-    impl_custom_object!(base {
+impl<'gc, B: Backend> TObject<'gc> for DropShadowFilterObject<'gc, B> {
+    type B = B;
+
+    impl_custom_object!(B, base {
         bare_object(as_drop_shadow_filter_object -> DropShadowFilterObject::empty_object);
     });
 }

@@ -21,6 +21,7 @@ use crate::html::TextFormat;
 use gc_arena::{Collect, GcCell, MutationContext};
 use ruffle_macros::enum_trait_object;
 use ruffle_types::backend::audio::{SoundHandle, SoundInstanceHandle};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 use std::cell::{Ref, RefMut};
 use std::fmt::Debug;
@@ -82,37 +83,39 @@ pub use crate::avm2::object::xml_object::{xml_allocator, XmlObject};
     #[allow(clippy::enum_variant_names)]
     #[derive(Clone, Collect, Debug, Copy)]
     #[collect(no_drop)]
-    pub enum Object<'gc> {
-        ScriptObject(ScriptObject<'gc>),
-        FunctionObject(FunctionObject<'gc>),
-        PrimitiveObject(PrimitiveObject<'gc>),
-        NamespaceObject(NamespaceObject<'gc>),
-        ArrayObject(ArrayObject<'gc>),
-        StageObject(StageObject<'gc>),
-        DomainObject(DomainObject<'gc>),
-        EventObject(EventObject<'gc>),
-        DispatchObject(DispatchObject<'gc>),
-        XmlObject(XmlObject<'gc>),
-        RegExpObject(RegExpObject<'gc>),
-        ByteArrayObject(ByteArrayObject<'gc>),
-        LoaderInfoObject(LoaderInfoObject<'gc>),
-        ClassObject(ClassObject<'gc>),
-        VectorObject(VectorObject<'gc>),
-        SoundObject(SoundObject<'gc>),
-        SoundChannelObject(SoundChannelObject<'gc>),
-        BitmapDataObject(BitmapDataObject<'gc>),
-        DateObject(DateObject<'gc>),
-        DictionaryObject(DictionaryObject<'gc>),
-        QNameObject(QNameObject<'gc>),
-        TextFormatObject(TextFormatObject<'gc>),
-        ProxyObject(ProxyObject<'gc>),
+    pub enum Object<'gc, B: Backend> {
+        ScriptObject(ScriptObject<'gc, B>),
+        FunctionObject(FunctionObject<'gc, B>),
+        PrimitiveObject(PrimitiveObject<'gc, B>),
+        NamespaceObject(NamespaceObject<'gc, B>),
+        ArrayObject(ArrayObject<'gc, B>),
+        StageObject(StageObject<'gc, B>),
+        DomainObject(DomainObject<'gc, B>),
+        EventObject(EventObject<'gc, B>),
+        DispatchObject(DispatchObject<'gc, B>),
+        XmlObject(XmlObject<'gc, B>),
+        RegExpObject(RegExpObject<'gc, B>),
+        ByteArrayObject(ByteArrayObject<'gc, B>),
+        LoaderInfoObject(LoaderInfoObject<'gc, B>),
+        ClassObject(ClassObject<'gc, B>),
+        VectorObject(VectorObject<'gc, B>),
+        SoundObject(SoundObject<'gc, B>),
+        SoundChannelObject(SoundChannelObject<'gc, B>),
+        BitmapDataObject(BitmapDataObject<'gc, B>),
+        DateObject(DateObject<'gc, B>),
+        DictionaryObject(DictionaryObject<'gc, B>),
+        QNameObject(QNameObject<'gc, B>),
+        TextFormatObject(TextFormatObject<'gc, B>),
+        ProxyObject(ProxyObject<'gc, B>),
     }
 )]
-pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy {
+pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc, Self::B>> + Clone + Copy {
+    type B: Backend;
+
     /// Get the base of this object.
     /// Any trait method implementations that were not overrided will forward the call to this instead.
-    fn base(&self) -> Ref<ScriptObjectData<'gc>>;
-    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc>>;
+    fn base(&self) -> Ref<ScriptObjectData<'gc, Self::B>>;
+    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc, Self::B>>;
 
     /// Retrieve a local property of the object. The Multiname should always be public.
     ///
@@ -123,8 +126,8 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn get_property_local(
         self,
         name: &Multiname<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+    ) -> Result<Value<'gc, Self::B>, Error> {
         self.base().get_property_local(name, activation)
     }
 
@@ -139,8 +142,8 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn get_property(
         mut self,
         multiname: &Multiname<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+    ) -> Result<Value<'gc, Self::B>, Error> {
         match self.vtable().and_then(|vtable| vtable.get_trait(multiname)) {
             Some(Property::Slot { slot_id }) | Some(Property::ConstSlot { slot_id }) => {
                 self.base().get_slot(slot_id)
@@ -177,8 +180,8 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn set_property_local(
         self,
         name: &Multiname<'gc>,
-        value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        value: Value<'gc, Self::B>,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
     ) -> Result<(), Error> {
         let mut base = self.base_mut(activation.context.gc_context);
         base.set_property_local(name, value, activation)
@@ -194,8 +197,8 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn set_property(
         &mut self,
         multiname: &Multiname<'gc>,
-        value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        value: Value<'gc, Self::B>,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
     ) -> Result<(), Error> {
         match self.vtable().and_then(|vtable| vtable.get_trait(multiname)) {
             Some(Property::Slot { slot_id }) => {
@@ -232,8 +235,8 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn init_property_local(
         self,
         name: &Multiname<'gc>,
-        value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        value: Value<'gc, Self::B>,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
     ) -> Result<(), Error> {
         let mut base = self.base_mut(activation.context.gc_context);
         base.init_property_local(name, value, activation)
@@ -247,8 +250,8 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn init_property(
         &mut self,
         multiname: &Multiname<'gc>,
-        value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        value: Value<'gc, Self::B>,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
     ) -> Result<(), Error> {
         match self.vtable().and_then(|vtable| vtable.get_trait(multiname)) {
             Some(Property::Slot { slot_id }) | Some(Property::ConstSlot { slot_id }) => {
@@ -282,9 +285,9 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn call_property_local(
         self,
         multiname: &Multiname<'gc>,
-        arguments: &[Value<'gc>],
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        arguments: &[Value<'gc, Self::B>],
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+    ) -> Result<Value<'gc, Self::B>, Error> {
         // Note: normally this would just call into ScriptObjectData::call_property_local
         // but because calling into ScriptObjectData borrows it for entire duration,
         // we run a risk of a double borrow if the inner call borrows again.
@@ -305,9 +308,9 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn call_property(
         mut self,
         multiname: &Multiname<'gc>,
-        arguments: &[Value<'gc>],
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        arguments: &[Value<'gc, Self::B>],
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+    ) -> Result<Value<'gc, Self::B>, Error> {
         match self.vtable().and_then(|vtable| vtable.get_trait(multiname)) {
             Some(Property::Slot { slot_id }) | Some(Property::ConstSlot { slot_id }) => {
                 let obj = self.base().get_slot(slot_id)?.as_callable(
@@ -368,7 +371,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     }
 
     /// Retrieve a slot by its index.
-    fn get_slot(self, id: u32) -> Result<Value<'gc>, Error> {
+    fn get_slot(self, id: u32) -> Result<Value<'gc, Self::B>, Error> {
         let base = self.base();
 
         base.get_slot(id)
@@ -378,7 +381,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn set_slot(
         self,
         id: u32,
-        value: Value<'gc>,
+        value: Value<'gc, Self::B>,
         mc: MutationContext<'gc, '_>,
     ) -> Result<(), Error> {
         let mut base = self.base_mut(mc);
@@ -390,7 +393,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn init_slot(
         self,
         id: u32,
-        value: Value<'gc>,
+        value: Value<'gc, Self::B>,
         mc: MutationContext<'gc, '_>,
     ) -> Result<(), Error> {
         let mut base = self.base_mut(mc);
@@ -405,9 +408,9 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn call_method(
         mut self,
         id: u32,
-        arguments: &[Value<'gc>],
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        arguments: &[Value<'gc, Self::B>],
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+    ) -> Result<Value<'gc, Self::B>, Error> {
         if self.get_bound_method(id).is_none() {
             if let Some(vtable) = self.vtable() {
                 if let Some(bound_method) = vtable.make_bound_method(activation, self.into(), id) {
@@ -430,7 +433,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// other object types to change the behavior of the `in` operator only.
     fn has_property_via_in(
         self,
-        _activation: &mut Activation<'_, 'gc, '_>,
+        _activation: &mut Activation<'_, 'gc, '_, Self::B>,
         name: &Multiname<'gc>,
     ) -> Result<bool, Error> {
         Ok(self.has_property(name))
@@ -466,7 +469,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// methods.
     fn delete_property_local(
         self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
         name: &Multiname<'gc>,
     ) -> Result<bool, Error> {
         let mut base = self.base_mut(activation.context.gc_context);
@@ -479,7 +482,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// Returns false if the property cannot be deleted.
     fn delete_property(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
         multiname: &Multiname<'gc>,
     ) -> Result<bool, Error> {
         match self.vtable().and_then(|vtable| vtable.get_trait(multiname)) {
@@ -503,7 +506,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// The proto is another object used to resolve methods across a class of
     /// multiple objects. It should also be accessible as `__proto__` from
     /// `get`.
-    fn proto(&self) -> Option<Object<'gc>> {
+    fn proto(&self) -> Option<Object<'gc, Self::B>> {
         let base = self.base();
 
         base.proto()
@@ -514,7 +517,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// This method primarily exists so that the global scope that player
     /// globals loads into can be created before its superclasses are. It
     /// should be used sparingly, if at all.
-    fn set_proto(self, mc: MutationContext<'gc, '_>, proto: Object<'gc>) {
+    fn set_proto(self, mc: MutationContext<'gc, '_>, proto: Object<'gc, Self::B>) {
         let mut base = self.base_mut(mc);
 
         base.set_proto(proto)
@@ -534,7 +537,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn get_next_enumerant(
         self,
         last_index: u32,
-        _activation: &mut Activation<'_, 'gc, '_>,
+        _activation: &mut Activation<'_, 'gc, '_, Self::B>,
     ) -> Result<Option<u32>, Error> {
         let base = self.base();
 
@@ -550,8 +553,8 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn get_enumerant_name(
         self,
         index: u32,
-        _activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        _activation: &mut Activation<'_, 'gc, '_, Self::B>,
+    ) -> Result<Value<'gc, Self::B>, Error> {
         let base = self.base();
 
         Ok(base.get_enumerant_name(index).unwrap_or(Value::Undefined))
@@ -564,8 +567,8 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn get_enumerant_value(
         self,
         index: u32,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+    ) -> Result<Value<'gc, Self::B>, Error> {
         let name = self
             .get_enumerant_name(index, activation)?
             .coerce_to_string(activation)?;
@@ -598,7 +601,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         &mut self,
         mc: MutationContext<'gc, '_>,
         disp_id: u32,
-        function: FunctionObject<'gc>,
+        function: FunctionObject<'gc, Self::B>,
     ) {
         let mut base = self.base_mut(mc);
 
@@ -611,8 +614,8 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         &mut self,
         mc: MutationContext<'gc, '_>,
         name: QName<'gc>,
-        value: Value<'gc>,
-        class: ClassObject<'gc>,
+        value: Value<'gc, Self::B>,
+        class: ClassObject<'gc, Self::B>,
     ) {
         let new_slot_id = self
             .vtable()
@@ -622,7 +625,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
             .install_const_slot_late(new_slot_id, value);
     }
 
-    fn install_instance_slots(&mut self, activation: &mut Activation<'_, 'gc, '_>) {
+    fn install_instance_slots(&mut self, activation: &mut Activation<'_, 'gc, '_, Self::B>) {
         self.base_mut(activation.context.gc_context)
             .install_instance_slots();
     }
@@ -630,10 +633,10 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// Call the object.
     fn call(
         self,
-        _reciever: Option<Object<'gc>>,
-        _arguments: &[Value<'gc>],
-        _activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        _reciever: Option<Object<'gc, Self::B>>,
+        _arguments: &[Value<'gc, Self::B>],
+        _activation: &mut Activation<'_, 'gc, '_, Self::B>,
+    ) -> Result<Value<'gc, Self::B>, Error> {
         Err("Object is not callable".into())
     }
 
@@ -655,9 +658,9 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// ignored.)
     fn construct(
         self,
-        _activation: &mut Activation<'_, 'gc, '_>,
-        _args: &[Value<'gc>],
-    ) -> Result<Object<'gc>, Error> {
+        _activation: &mut Activation<'_, 'gc, '_, Self::B>,
+        _args: &[Value<'gc, Self::B>],
+    ) -> Result<Object<'gc, Self::B>, Error> {
         Err("Object is not constructable".into())
     }
 
@@ -667,9 +670,9 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn construct_prop(
         self,
         multiname: &Multiname<'gc>,
-        args: &[Value<'gc>],
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Object<'gc>, Error> {
+        args: &[Value<'gc, Self::B>],
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+    ) -> Result<Object<'gc, Self::B>, Error> {
         let ctor = self.get_property(multiname, activation)?.as_callable(
             activation,
             Some(multiname),
@@ -696,9 +699,9 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// parameters.
     fn apply(
         &self,
-        _activation: &mut Activation<'_, 'gc, '_>,
-        _params: &[Value<'gc>],
-    ) -> Result<ClassObject<'gc>, Error> {
+        _activation: &mut Activation<'_, 'gc, '_, Self::B>,
+        _params: &[Value<'gc, Self::B>],
+    ) -> Result<ClassObject<'gc, Self::B>, Error> {
         Err("Not a parameterized type".into())
     }
 
@@ -720,7 +723,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// coercions happen by defining `toString` in a downstream class or
     /// prototype; this is then picked up by the VM runtime when doing
     /// coercions.
-    fn to_string(&self, mc: MutationContext<'gc, '_>) -> Result<Value<'gc>, Error> {
+    fn to_string(&self, mc: MutationContext<'gc, '_>) -> Result<Value<'gc, Self::B>, Error> {
         let class_name = self
             .instance_of_class_definition()
             .map(|c| c.read().name().local_name())
@@ -737,7 +740,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// generate a debug-style string based on the name of the class this
     /// object is, in the format of `[object Class]` (where `Class` is the name
     /// of the class that created this object).
-    fn to_locale_string(&self, mc: MutationContext<'gc, '_>) -> Result<Value<'gc>, Error> {
+    fn to_locale_string(&self, mc: MutationContext<'gc, '_>) -> Result<Value<'gc, Self::B>, Error> {
         let class_name = self
             .instance_of_class_definition()
             .map(|c| c.read().name().local_name())
@@ -751,7 +754,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     ///
     /// `valueOf` is a method used to request an object be coerced to a
     /// primitive value. Typically, this would be a number of some kind.
-    fn value_of(&self, mc: MutationContext<'gc, '_>) -> Result<Value<'gc>, Error>;
+    fn value_of(&self, mc: MutationContext<'gc, '_>) -> Result<Value<'gc, Self::B>, Error>;
 
     /// Determine if this object is an instance of a given type.
     ///
@@ -764,8 +767,8 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// searched in the prototype chain of this object.
     fn is_instance_of(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
-        class: Object<'gc>,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
+        class: Object<'gc, Self::B>,
     ) -> Result<bool, Error> {
         let type_proto = class
             .get_property(&QName::dynamic_name("prototype").into(), activation)?
@@ -782,7 +785,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     ///
     /// The given object `type_proto` should be the prototype we are checking
     /// against this object.
-    fn has_prototype_in_chain(&self, type_proto: Object<'gc>) -> Result<bool, Error> {
+    fn has_prototype_in_chain(&self, type_proto: Object<'gc, Self::B>) -> Result<bool, Error> {
         let mut my_proto = self.proto();
 
         //TODO: Is it a verification error to do `obj instanceof bare_object`?
@@ -807,8 +810,8 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// checking against this object.
     fn is_of_type(
         &self,
-        test_class: ClassObject<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        test_class: ClassObject<'gc, Self::B>,
+        activation: &mut Activation<'_, 'gc, '_, Self::B>,
     ) -> Result<bool, Error> {
         let my_class = self.instance_of();
 
@@ -827,25 +830,25 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn as_ptr(&self) -> *const ObjectPtr;
 
     /// Get this object's class, if it has one.
-    fn instance_of(&self) -> Option<ClassObject<'gc>> {
+    fn instance_of(&self) -> Option<ClassObject<'gc, Self::B>> {
         let base = self.base();
         base.instance_of()
     }
 
     /// Get this object's vtable, if it has one.
     /// Every object with class should have a vtable
-    fn vtable(&self) -> Option<VTable<'gc>> {
+    fn vtable(&self) -> Option<VTable<'gc, Self::B>> {
         let base = self.base();
         base.vtable()
     }
 
-    fn get_bound_method(&self, id: u32) -> Option<FunctionObject<'gc>> {
+    fn get_bound_method(&self, id: u32) -> Option<FunctionObject<'gc, Self::B>> {
         let base = self.base();
         base.get_bound_method(id)
     }
 
     /// Get this object's class's `Class`, if it has one.
-    fn instance_of_class_definition(&self) -> Option<GcCell<'gc, Class<'gc>>> {
+    fn instance_of_class_definition(&self) -> Option<GcCell<'gc, Class<'gc, Self::B>>> {
         self.instance_of().map(|cls| cls.inner_class_definition())
     }
 
@@ -856,7 +859,11 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
             .unwrap_or_else(|| "<Unknown type>".into())
     }
 
-    fn set_instance_of(&self, mc: MutationContext<'gc, '_>, instance_of: ClassObject<'gc>) {
+    fn set_instance_of(
+        &self,
+        mc: MutationContext<'gc, '_>,
+        instance_of: ClassObject<'gc, Self::B>,
+    ) {
         let instance_vtable = instance_of.instance_vtable();
 
         let mut base = self.base_mut(mc);
@@ -864,7 +871,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     }
 
     // Sets a different vtable for object, without changing instance_of.
-    fn set_vtable(&self, mc: MutationContext<'gc, '_>, vtable: VTable<'gc>) {
+    fn set_vtable(&self, mc: MutationContext<'gc, '_>, vtable: VTable<'gc, Self::B>) {
         let mut base = self.base_mut(mc);
         base.set_vtable(vtable);
     }
@@ -878,16 +885,16 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     }
 
     /// Try to corece this object into a `ClassObject`.
-    fn as_class_object(&self) -> Option<ClassObject<'gc>> {
+    fn as_class_object(&self) -> Option<ClassObject<'gc, Self::B>> {
         None
     }
 
-    fn as_function_object(&self) -> Option<FunctionObject<'gc>> {
+    fn as_function_object(&self) -> Option<FunctionObject<'gc, Self::B>> {
         None
     }
 
     /// Get this object's `Executable`, if it has one.
-    fn as_executable(&self) -> Option<Ref<Executable<'gc>>> {
+    fn as_executable(&self) -> Option<Ref<Executable<'gc, Self::B>>> {
         None
     }
 
@@ -897,16 +904,16 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     }
 
     /// Unwrap this object as a `QNameObject`
-    fn as_qname_object(self) -> Option<QNameObject<'gc>> {
+    fn as_qname_object(self) -> Option<QNameObject<'gc, Self::B>> {
         None
     }
 
-    fn as_array_object(&self) -> Option<ArrayObject<'gc>> {
+    fn as_array_object(&self) -> Option<ArrayObject<'gc, Self::B>> {
         None
     }
 
     /// Unwrap this object as array storage.
-    fn as_array_storage(&self) -> Option<Ref<ArrayStorage<'gc>>> {
+    fn as_array_storage(&self) -> Option<Ref<ArrayStorage<'gc, Self::B>>> {
         None
     }
 
@@ -919,7 +926,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
         None
     }
 
-    fn as_bytearray_object(&self) -> Option<ByteArrayObject<'gc>> {
+    fn as_bytearray_object(&self) -> Option<ByteArrayObject<'gc, Self::B>> {
         None
     }
 
@@ -927,12 +934,12 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn as_array_storage_mut(
         &self,
         _mc: MutationContext<'gc, '_>,
-    ) -> Option<RefMut<ArrayStorage<'gc>>> {
+    ) -> Option<RefMut<ArrayStorage<'gc, Self::B>>> {
         None
     }
 
     /// Unwrap this object as vector storage.
-    fn as_vector_storage(&self) -> Option<Ref<VectorStorage<'gc>>> {
+    fn as_vector_storage(&self) -> Option<Ref<VectorStorage<'gc, Self::B>>> {
         None
     }
 
@@ -940,12 +947,12 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn as_vector_storage_mut(
         &self,
         _mc: MutationContext<'gc, '_>,
-    ) -> Option<RefMut<VectorStorage<'gc>>> {
+    ) -> Option<RefMut<VectorStorage<'gc, Self::B>>> {
         None
     }
 
     /// Get this object's `DisplayObject`, if it has one.
-    fn as_display_object(&self) -> Option<DisplayObject<'gc>> {
+    fn as_display_object(&self) -> Option<DisplayObject<'gc, Self::B>> {
         None
     }
 
@@ -953,30 +960,38 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// association.
     ///
     /// If not, then this function does nothing.
-    fn init_display_object(&self, _mc: MutationContext<'gc, '_>, _obj: DisplayObject<'gc>) {}
+    fn init_display_object(
+        &self,
+        _mc: MutationContext<'gc, '_>,
+        _obj: DisplayObject<'gc, Self::B>,
+    ) {
+    }
 
     /// Unwrap this object as an ApplicationDomain.
-    fn as_application_domain(&self) -> Option<Domain<'gc>> {
+    fn as_application_domain(&self) -> Option<Domain<'gc, Self::B>> {
         None
     }
 
     /// Unwrap this object as an event.
-    fn as_event(&self) -> Option<Ref<Event<'gc>>> {
+    fn as_event(&self) -> Option<Ref<Event<'gc, Self::B>>> {
         None
     }
 
     /// Unwrap this object as a mutable event.
-    fn as_event_mut(&self, _mc: MutationContext<'gc, '_>) -> Option<RefMut<Event<'gc>>> {
+    fn as_event_mut(&self, _mc: MutationContext<'gc, '_>) -> Option<RefMut<Event<'gc, Self::B>>> {
         None
     }
 
     /// Unwrap this object as a list of event handlers.
-    fn as_dispatch(&self) -> Option<Ref<DispatchList<'gc>>> {
+    fn as_dispatch(&self) -> Option<Ref<DispatchList<'gc, Self::B>>> {
         None
     }
 
     /// Unwrap this object as a mutable list of event handlers.
-    fn as_dispatch_mut(&self, _mc: MutationContext<'gc, '_>) -> Option<RefMut<DispatchList<'gc>>> {
+    fn as_dispatch_mut(
+        &self,
+        _mc: MutationContext<'gc, '_>,
+    ) -> Option<RefMut<DispatchList<'gc, Self::B>>> {
         None
     }
 
@@ -985,34 +1000,37 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     /// This function should not be called in cases where a normal `Value`
     /// coercion would do. It *only* accounts for boxed primitives, and not
     /// `valueOf`.
-    fn as_primitive(&self) -> Option<Ref<Value<'gc>>> {
+    fn as_primitive(&self) -> Option<Ref<Value<'gc, Self::B>>> {
         None
     }
 
     /// Unwrap this object as a mutable primitive value.
-    fn as_primitive_mut(&self, _mc: MutationContext<'gc, '_>) -> Option<RefMut<Value<'gc>>> {
+    fn as_primitive_mut(
+        &self,
+        _mc: MutationContext<'gc, '_>,
+    ) -> Option<RefMut<Value<'gc, Self::B>>> {
         None
     }
 
     /// Unwrap this object as a regexp.
-    fn as_regexp_object(&self) -> Option<RegExpObject<'gc>> {
+    fn as_regexp_object(&self) -> Option<RegExpObject<'gc, Self::B>> {
         None
     }
 
     /// Unwrap this object as a regexp.
-    fn as_regexp(&self) -> Option<Ref<RegExp<'gc>>> {
+    fn as_regexp(&self) -> Option<Ref<RegExp<'gc, Self::B>>> {
         None
     }
 
     /// Unwrap this object as a mutable regexp.
-    fn as_regexp_mut(&self, _mc: MutationContext<'gc, '_>) -> Option<RefMut<RegExp<'gc>>> {
+    fn as_regexp_mut(&self, _mc: MutationContext<'gc, '_>) -> Option<RefMut<RegExp<'gc, Self::B>>> {
         None
     }
 
-    fn loader_stream_init(&self, _context: &mut UpdateContext<'_, 'gc, '_>) {}
+    fn loader_stream_init(&self, _context: &mut UpdateContext<'_, 'gc, '_, Self::B>) {}
 
     /// Unwrap this object's loader stream
-    fn as_loader_stream(&self) -> Option<Ref<LoaderStream<'gc>>> {
+    fn as_loader_stream(&self) -> Option<Ref<LoaderStream<'gc, Self::B>>> {
         None
     }
 
@@ -1027,7 +1045,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn set_sound(self, _mc: MutationContext<'gc, '_>, _sound: SoundHandle) {}
 
     /// Unwrap this object's sound instance handle.
-    fn as_sound_channel(self) -> Option<SoundChannelObject<'gc>> {
+    fn as_sound_channel(self) -> Option<SoundChannelObject<'gc, Self::B>> {
         None
     }
 
@@ -1037,7 +1055,7 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn set_sound_instance(self, _mc: MutationContext<'gc, '_>, _sound: SoundInstanceHandle) {}
 
     /// Unwrap this object's bitmap data
-    fn as_bitmap_data(&self) -> Option<GcCell<'gc, BitmapData<'gc>>> {
+    fn as_bitmap_data(&self) -> Option<GcCell<'gc, BitmapData<'gc, Self::B>>> {
         None
     }
 
@@ -1050,17 +1068,17 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     fn init_bitmap_data(
         &self,
         _mc: MutationContext<'gc, '_>,
-        _new_bitmap: GcCell<'gc, BitmapData<'gc>>,
+        _new_bitmap: GcCell<'gc, BitmapData<'gc, Self::B>>,
     ) {
     }
 
     /// Get this objects `DateObject`, if it has one.
-    fn as_date_object(&self) -> Option<DateObject<'gc>> {
+    fn as_date_object(&self) -> Option<DateObject<'gc, Self::B>> {
         None
     }
 
     /// Get this object as a `DictionaryObject`, if it is one.
-    fn as_dictionary_object(self) -> Option<DictionaryObject<'gc>> {
+    fn as_dictionary_object(self) -> Option<DictionaryObject<'gc, Self::B>> {
         None
     }
 
@@ -1077,21 +1095,21 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
 
 pub enum ObjectPtr {}
 
-impl<'gc> Object<'gc> {
-    pub fn ptr_eq<T: TObject<'gc>>(a: T, b: T) -> bool {
+impl<'gc, B: Backend> Object<'gc, B> {
+    pub fn ptr_eq<T: TObject<'gc, B = B>>(a: T, b: T) -> bool {
         a.as_ptr() == b.as_ptr()
     }
 }
 
-impl<'gc> PartialEq for Object<'gc> {
+impl<'gc, B: Backend> PartialEq for Object<'gc, B> {
     fn eq(&self, other: &Self) -> bool {
         Object::ptr_eq(*self, *other)
     }
 }
 
-impl<'gc> Eq for Object<'gc> {}
+impl<'gc, B: Backend> Eq for Object<'gc, B> {}
 
-impl<'gc> Hash for Object<'gc> {
+impl<'gc, B: Backend> Hash for Object<'gc, B> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.as_ptr().hash(state);
     }

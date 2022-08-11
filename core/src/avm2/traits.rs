@@ -9,6 +9,7 @@ use crate::avm2::value::{abc_default_value, Value};
 use crate::avm2::Error;
 use bitflags::bitflags;
 use gc_arena::{Collect, GcCell};
+use ruffle_types::backend::Backend;
 use swf::avm2::types::{
     DefaultValue as AbcDefaultValue, Trait as AbcTrait, TraitKind as AbcTraitKind,
 };
@@ -38,7 +39,7 @@ bitflags! {
 /// dynamically originate traits that do not come from any particular ABC file.
 #[derive(Clone, Debug, Collect)]
 #[collect(no_drop)]
-pub struct Trait<'gc> {
+pub struct Trait<'gc, B: Backend> {
     /// The name of this trait.
     name: QName<'gc>,
 
@@ -47,7 +48,7 @@ pub struct Trait<'gc> {
     attributes: TraitAttributes,
 
     /// The kind of trait in use.
-    kind: TraitKind<'gc>,
+    kind: TraitKind<'gc, B>,
 }
 
 fn trait_attribs_from_abc_traits(abc_trait: &AbcTrait) -> TraitAttributes {
@@ -63,47 +64,59 @@ fn trait_attribs_from_abc_traits(abc_trait: &AbcTrait) -> TraitAttributes {
 /// See each individual variant for more information.
 #[derive(Clone, Debug, Collect)]
 #[collect(no_drop)]
-pub enum TraitKind<'gc> {
+pub enum TraitKind<'gc, B: Backend> {
     /// A data field on an object instance that can be read from and written
     /// to.
     Slot {
         slot_id: u32,
         type_name: Multiname<'gc>,
-        default_value: Value<'gc>,
-        unit: Option<TranslationUnit<'gc>>,
+        default_value: Value<'gc, B>,
+        unit: Option<TranslationUnit<'gc, B>>,
     },
 
     /// A method on an object that can be called.
-    Method { disp_id: u32, method: Method<'gc> },
+    Method {
+        disp_id: u32,
+        method: Method<'gc, B>,
+    },
 
     /// A getter property on an object that can be read.
-    Getter { disp_id: u32, method: Method<'gc> },
+    Getter {
+        disp_id: u32,
+        method: Method<'gc, B>,
+    },
 
     /// A setter property on an object that can be written.
-    Setter { disp_id: u32, method: Method<'gc> },
+    Setter {
+        disp_id: u32,
+        method: Method<'gc, B>,
+    },
 
     /// A class property on an object that can be used to construct more
     /// objects.
     Class {
         slot_id: u32,
-        class: GcCell<'gc, Class<'gc>>,
+        class: GcCell<'gc, Class<'gc, B>>,
     },
 
     /// A free function (not an instance method) that can be called.
-    Function { slot_id: u32, function: Method<'gc> },
+    Function {
+        slot_id: u32,
+        function: Method<'gc, B>,
+    },
 
     /// A data field on an object that is always a particular value, and cannot
     /// be overridden.
     Const {
         slot_id: u32,
         type_name: Multiname<'gc>,
-        default_value: Value<'gc>,
-        unit: Option<TranslationUnit<'gc>>,
+        default_value: Value<'gc, B>,
+        unit: Option<TranslationUnit<'gc, B>>,
     },
 }
 
-impl<'gc> Trait<'gc> {
-    pub fn from_class(class: GcCell<'gc, Class<'gc>>) -> Self {
+impl<'gc, B: Backend> Trait<'gc, B> {
+    pub fn from_class(class: GcCell<'gc, Class<'gc, B>>) -> Self {
         let name = class.read().name();
 
         Trait {
@@ -113,7 +126,7 @@ impl<'gc> Trait<'gc> {
         }
     }
 
-    pub fn from_method(name: QName<'gc>, method: Method<'gc>) -> Self {
+    pub fn from_method(name: QName<'gc>, method: Method<'gc, B>) -> Self {
         Trait {
             name,
             attributes: TraitAttributes::empty(),
@@ -121,7 +134,7 @@ impl<'gc> Trait<'gc> {
         }
     }
 
-    pub fn from_getter(name: QName<'gc>, method: Method<'gc>) -> Self {
+    pub fn from_getter(name: QName<'gc>, method: Method<'gc, B>) -> Self {
         Trait {
             name,
             attributes: TraitAttributes::empty(),
@@ -129,7 +142,7 @@ impl<'gc> Trait<'gc> {
         }
     }
 
-    pub fn from_setter(name: QName<'gc>, method: Method<'gc>) -> Self {
+    pub fn from_setter(name: QName<'gc>, method: Method<'gc, B>) -> Self {
         Trait {
             name,
             attributes: TraitAttributes::empty(),
@@ -137,7 +150,7 @@ impl<'gc> Trait<'gc> {
         }
     }
 
-    pub fn from_function(name: QName<'gc>, function: Method<'gc>) -> Self {
+    pub fn from_function(name: QName<'gc>, function: Method<'gc, B>) -> Self {
         Trait {
             name,
             attributes: TraitAttributes::empty(),
@@ -151,7 +164,7 @@ impl<'gc> Trait<'gc> {
     pub fn from_slot(
         name: QName<'gc>,
         type_name: Multiname<'gc>,
-        default_value: Option<Value<'gc>>,
+        default_value: Option<Value<'gc, B>>,
     ) -> Self {
         Trait {
             name,
@@ -168,7 +181,7 @@ impl<'gc> Trait<'gc> {
     pub fn from_const(
         name: QName<'gc>,
         type_name: Multiname<'gc>,
-        default_value: Option<Value<'gc>>,
+        default_value: Option<Value<'gc, B>>,
     ) -> Self {
         Trait {
             name,
@@ -184,9 +197,9 @@ impl<'gc> Trait<'gc> {
 
     /// Convert an ABC trait into a loaded trait.
     pub fn from_abc_trait(
-        unit: TranslationUnit<'gc>,
+        unit: TranslationUnit<'gc, B>,
         abc_trait: &AbcTrait,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<Self, Error> {
         let mc = activation.context.gc_context;
         let name = QName::from_abc_multiname(unit, abc_trait.name, mc)?;
@@ -283,7 +296,7 @@ impl<'gc> Trait<'gc> {
         self.name
     }
 
-    pub fn kind(&self) -> &TraitKind<'gc> {
+    pub fn kind(&self) -> &TraitKind<'gc, B> {
         &self.kind
     }
 
@@ -359,7 +372,7 @@ impl<'gc> Trait<'gc> {
     }
 
     /// Get the method contained within this trait, if it has one.
-    pub fn as_method(&self) -> Option<Method<'gc>> {
+    pub fn as_method(&self) -> Option<Method<'gc, B>> {
         match &self.kind {
             TraitKind::Method { method, .. } => Some(method.clone()),
             TraitKind::Getter { method, .. } => Some(method.clone()),
@@ -373,12 +386,12 @@ impl<'gc> Trait<'gc> {
 /// Returns the default value for a slot/const trait.
 ///
 /// If no default value is supplied, the "null" value for the type's trait is returned.
-fn slot_default_value<'gc>(
-    translation_unit: TranslationUnit<'gc>,
+fn slot_default_value<'gc, B: Backend>(
+    translation_unit: TranslationUnit<'gc, B>,
     value: &Option<AbcDefaultValue>,
     type_name: &Multiname<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Value<'gc>, Error> {
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Value<'gc, B>, Error> {
     if let Some(value) = value {
         // TODO: This should verify that the default value is compatible with the type.
         abc_default_value(translation_unit, value, activation)
@@ -389,7 +402,7 @@ fn slot_default_value<'gc>(
 
 /// Returns the default "null" value for the given type.
 /// (`0` for ints, `null` for objects, etc.)
-fn default_value_for_type<'gc>(type_name: &Multiname<'gc>) -> Value<'gc> {
+fn default_value_for_type<'gc, B: Backend>(type_name: &Multiname<'gc>) -> Value<'gc, B> {
     // TODO: It's technically possible to have a multiname in here, so this should go through something
     // like `Activation::resolve_type` to get an actual `Class` object, and then check something like `Class::built_in_type`.
     // The Multiname is guaranteed to be static by `Multiname::from_abc_multiname_static` earlier.

@@ -9,21 +9,22 @@ use crate::avm2::traits::{Trait, TraitKind};
 use crate::avm2::value::Value;
 use crate::avm2::Error;
 use gc_arena::{Collect, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use std::cell::Ref;
 use std::ops::DerefMut;
 
 #[derive(Collect, Debug, Clone, Copy)]
 #[collect(no_drop)]
-pub struct VTable<'gc>(GcCell<'gc, VTableData<'gc>>);
+pub struct VTable<'gc, B: Backend>(GcCell<'gc, VTableData<'gc, B>>);
 
 #[derive(Collect, Debug, Clone)]
 #[collect(no_drop)]
-pub struct VTableData<'gc> {
+pub struct VTableData<'gc, B: Backend> {
     /// should always be Some post-initialization
-    defining_class: Option<ClassObject<'gc>>,
+    defining_class: Option<ClassObject<'gc, B>>,
 
     /// should always be Some post-initialization
-    scope: Option<ScopeChain<'gc>>,
+    scope: Option<ScopeChain<'gc, B>>,
 
     protected_namespace: Option<Namespace<'gc>>,
 
@@ -31,11 +32,11 @@ pub struct VTableData<'gc> {
 
     /// Stores the `PropertyClass` for each slot,
     /// indexed by `slot_id`
-    slot_classes: Vec<PropertyClass<'gc>>,
+    slot_classes: Vec<PropertyClass<'gc, B>>,
 
-    method_table: Vec<ClassBoundMethod<'gc>>,
+    method_table: Vec<ClassBoundMethod<'gc, B>>,
 
-    default_slots: Vec<Option<Value<'gc>>>,
+    default_slots: Vec<Option<Value<'gc, B>>>,
 }
 
 // TODO: it might make more sense to just bind the Method to the VTable (and this its class and scope) directly
@@ -43,13 +44,13 @@ pub struct VTableData<'gc> {
 // to be more intuitive and cheaper
 #[derive(Collect, Debug, Clone)]
 #[collect(no_drop)]
-pub struct ClassBoundMethod<'gc> {
-    pub class: ClassObject<'gc>,
-    pub scope: ScopeChain<'gc>,
-    pub method: Method<'gc>,
+pub struct ClassBoundMethod<'gc, B: Backend> {
+    pub class: ClassObject<'gc, B>,
+    pub scope: ScopeChain<'gc, B>,
+    pub method: Method<'gc, B>,
 }
 
-impl<'gc> VTable<'gc> {
+impl<'gc, B: Backend> VTable<'gc, B> {
     pub fn empty(mc: MutationContext<'gc, '_>) -> Self {
         VTable(GcCell::allocate(
             mc,
@@ -107,9 +108,9 @@ impl<'gc> VTable<'gc> {
     pub fn coerce_trait_value(
         &self,
         slot_id: u32,
-        value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        value: Value<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         // Drop the `write()` guard, as 'slot_class.coerce' may need to access this vtable.
         let mut slot_class = { self.0.read().slot_classes[slot_id as usize].clone() };
 
@@ -131,7 +132,7 @@ impl<'gc> VTable<'gc> {
             .is_some()
     }
 
-    pub fn get_method(self, disp_id: u32) -> Option<Method<'gc>> {
+    pub fn get_method(self, disp_id: u32) -> Option<Method<'gc, B>> {
         self.0
             .read()
             .method_table
@@ -140,11 +141,11 @@ impl<'gc> VTable<'gc> {
             .map(|x| x.method)
     }
 
-    pub fn get_full_method(self, disp_id: u32) -> Option<ClassBoundMethod<'gc>> {
+    pub fn get_full_method(self, disp_id: u32) -> Option<ClassBoundMethod<'gc, B>> {
         self.0.read().method_table.get(disp_id as usize).cloned()
     }
 
-    pub fn default_slots(&self) -> Ref<Vec<Option<Value<'gc>>>> {
+    pub fn default_slots(&self) -> Ref<Vec<Option<Value<'gc, B>>>> {
         Ref::map(self.0.read(), |v| &v.default_slots)
     }
 
@@ -156,11 +157,11 @@ impl<'gc> VTable<'gc> {
     #[allow(clippy::if_same_then_else)]
     pub fn init_vtable(
         self,
-        defining_class: ClassObject<'gc>,
-        traits: &[Trait<'gc>],
-        scope: ScopeChain<'gc>,
+        defining_class: ClassObject<'gc, B>,
+        traits: &[Trait<'gc, B>],
+        scope: ScopeChain<'gc, B>,
         superclass_vtable: Option<Self>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         // Let's talk about slot_ids and disp_ids.
         // Specification is one thing, but reality is another.
@@ -403,10 +404,10 @@ impl<'gc> VTable<'gc> {
     /// fail.
     pub fn make_bound_method(
         self,
-        activation: &mut Activation<'_, 'gc, '_>,
-        receiver: Object<'gc>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        receiver: Object<'gc, B>,
         disp_id: u32,
-    ) -> Option<FunctionObject<'gc>> {
+    ) -> Option<FunctionObject<'gc, B>> {
         if let Some(ClassBoundMethod {
             class,
             scope,
@@ -432,8 +433,8 @@ impl<'gc> VTable<'gc> {
         self,
         mc: MutationContext<'gc, '_>,
         name: QName<'gc>,
-        value: Value<'gc>,
-        class: ClassObject<'gc>,
+        value: Value<'gc, B>,
+        class: ClassObject<'gc, B>,
     ) -> u32 {
         let mut write = self.0.write(mc);
 
@@ -465,11 +466,11 @@ impl<'gc> VTable<'gc> {
     }
 }
 
-fn trait_to_default_value<'gc>(
-    scope: ScopeChain<'gc>,
-    trait_data: &Trait<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Value<'gc> {
+fn trait_to_default_value<'gc, B: Backend>(
+    scope: ScopeChain<'gc, B>,
+    trait_data: &Trait<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Value<'gc, B> {
     match trait_data.kind() {
         TraitKind::Slot { default_value, .. } => *default_value,
         TraitKind::Const { default_value, .. } => *default_value,

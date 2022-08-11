@@ -4,6 +4,7 @@ use crate::library::Library;
 use crate::prelude::*;
 use gc_arena::{Collect, Gc, GcCell, MutationContext};
 use ruffle_types::backend::render::{RenderBackend, ShapeHandle};
+use ruffle_types::backend::Backend;
 use ruffle_types::tag_utils::SwfMovie;
 use std::cell::{Ref, RefCell, RefMut};
 use std::sync::Arc;
@@ -11,17 +12,17 @@ use swf::{Fixed16, Fixed8, Twips};
 
 #[derive(Clone, Debug, Collect, Copy)]
 #[collect(no_drop)]
-pub struct MorphShape<'gc>(GcCell<'gc, MorphShapeData<'gc>>);
+pub struct MorphShape<'gc, B: Backend>(GcCell<'gc, MorphShapeData<'gc, B>>);
 
 #[derive(Clone, Debug, Collect)]
 #[collect(no_drop)]
-pub struct MorphShapeData<'gc> {
-    base: DisplayObjectBase<'gc>,
-    static_data: Gc<'gc, MorphShapeStatic>,
+pub struct MorphShapeData<'gc, B: Backend> {
+    base: DisplayObjectBase<'gc, B>,
+    static_data: Gc<'gc, MorphShapeStatic<B>>,
     ratio: u16,
 }
 
-impl<'gc> MorphShape<'gc> {
+impl<'gc, B: Backend> MorphShape<'gc, B> {
     pub fn from_swf_tag(
         gc_context: MutationContext<'gc, '_>,
         tag: swf::DefineMorphShape,
@@ -47,16 +48,21 @@ impl<'gc> MorphShape<'gc> {
     }
 }
 
-impl<'gc> TDisplayObject<'gc> for MorphShape<'gc> {
-    fn base(&self) -> Ref<DisplayObjectBase<'gc>> {
+impl<'gc, B: Backend> TDisplayObject<'gc> for MorphShape<'gc, B> {
+    type B = B;
+
+    fn base(&self) -> Ref<DisplayObjectBase<'gc, B>> {
         Ref::map(self.0.read(), |r| &r.base)
     }
 
-    fn base_mut<'a>(&'a self, mc: MutationContext<'gc, '_>) -> RefMut<'a, DisplayObjectBase<'gc>> {
+    fn base_mut<'a>(
+        &'a self,
+        mc: MutationContext<'gc, '_>,
+    ) -> RefMut<'a, DisplayObjectBase<'gc, B>> {
         RefMut::map(self.0.write(mc), |w| &mut w.base)
     }
 
-    fn instantiate(&self, gc_context: MutationContext<'gc, '_>) -> DisplayObject<'gc> {
+    fn instantiate(&self, gc_context: MutationContext<'gc, '_>) -> DisplayObject<'gc, B> {
         Self(GcCell::allocate(gc_context, self.0.read().clone())).into()
     }
 
@@ -72,7 +78,7 @@ impl<'gc> TDisplayObject<'gc> for MorphShape<'gc> {
         Some(*self)
     }
 
-    fn replace_with(&self, context: &mut UpdateContext<'_, 'gc, '_>, id: CharacterId) {
+    fn replace_with(&self, context: &mut UpdateContext<'_, 'gc, '_, B>, id: CharacterId) {
         if let Some(new_morph_shape) = context
             .library
             .library_for_movie_mut(self.movie().unwrap())
@@ -84,11 +90,11 @@ impl<'gc> TDisplayObject<'gc> for MorphShape<'gc> {
         }
     }
 
-    fn run_frame(&self, _context: &mut UpdateContext) {
+    fn run_frame(&self, _context: &mut UpdateContext<B>) {
         // Noop
     }
 
-    fn render_self(&self, context: &mut RenderContext) {
+    fn render_self(&self, context: &mut RenderContext<B>) {
         let this = self.0.read();
         let ratio = this.ratio;
         let static_data = this.static_data;
@@ -108,7 +114,7 @@ impl<'gc> TDisplayObject<'gc> for MorphShape<'gc> {
 
     fn hit_test_shape(
         &self,
-        _context: &mut UpdateContext<'_, 'gc, '_>,
+        _context: &mut UpdateContext<'_, 'gc, '_, B>,
         point: (Twips, Twips),
         _options: HitTestOptions,
     ) -> bool {
@@ -141,7 +147,7 @@ struct Frame {
 #[allow(dead_code)]
 #[derive(Collect)]
 #[collect(require_static)]
-pub struct MorphShapeStatic {
+pub struct MorphShapeStatic<B: Backend> {
     id: CharacterId,
     start: swf::MorphShape,
     end: swf::MorphShape,
@@ -149,7 +155,7 @@ pub struct MorphShapeStatic {
     movie: Arc<SwfMovie>,
 }
 
-impl MorphShapeStatic {
+impl<B: Backend> MorphShapeStatic<B> {
     pub fn from_swf_tag(swf_tag: &swf::DefineMorphShape, movie: Arc<SwfMovie>) -> Self {
         Self {
             id: swf_tag.id,
@@ -176,7 +182,7 @@ impl MorphShapeStatic {
     fn get_shape(
         &self,
         renderer: &'_ mut dyn RenderBackend,
-        library: &Library<'_>,
+        library: &Library<'_, B>,
         ratio: u16,
     ) -> ShapeHandle {
         let mut frame = self.get_frame(ratio);

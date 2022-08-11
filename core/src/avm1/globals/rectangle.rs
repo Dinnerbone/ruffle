@@ -7,38 +7,14 @@ use crate::avm1::globals::point::{construct_new_point, point_to_object, value_to
 use crate::avm1::property_decl::{define_properties_on, Declaration};
 use crate::avm1::{Object, ScriptObject, TObject, Value};
 use gc_arena::MutationContext;
+use ruffle_types::backend::Backend;
 use ruffle_types::string::AvmString;
 
-const PROTO_DECLS: &[Declaration] = declare_properties! {
-    "toString" => method(to_string);
-    "isEmpty" => method(is_empty);
-    "setEmpty" => method(set_empty);
-    "clone" => method(clone);
-    "contains" => method(contains);
-    "containsPoint" => method(contains_point);
-    "containsRectangle" => method(contains_rectangle);
-    "intersects" => method(intersects);
-    "union" => method(union);
-    "inflate" => method(inflate);
-    "inflatePoint" => method(inflate_point);
-    "offset" => method(offset);
-    "offsetPoint" => method(offset_point);
-    "intersection" => method(intersection);
-    "equals" => method(equals);
-    "left" => property(get_left, set_left);
-    "top" => property(get_top, set_top);
-    "right" => property(get_right, set_right);
-    "bottom" => property(get_bottom, set_bottom);
-    "size" => property(get_size, set_size);
-    "topLeft" => property(get_top_left, set_top_left);
-    "bottomRight" => property(get_bottom_right, set_bottom_right);
-};
-
-fn constructor<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn constructor<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if args.is_empty() {
         this.set("x", 0.into(), activation)?;
         this.set("y", 0.into(), activation)?;
@@ -70,11 +46,11 @@ fn constructor<'gc>(
     Ok(this.into())
 }
 
-fn to_string<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn to_string<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let x = this.get("x", activation)?;
     let y = this.get("y", activation)?;
     let width = this.get("width", activation)?;
@@ -93,11 +69,11 @@ fn to_string<'gc>(
     .into())
 }
 
-pub fn create_rectangle_object<'gc>(
+pub fn create_rectangle_object<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    rectangle_proto: Object<'gc>,
-    fn_proto: Option<Object<'gc>>,
-) -> Object<'gc> {
+    rectangle_proto: Object<'gc, B>,
+    fn_proto: Option<Object<'gc, B>>,
+) -> Object<'gc, B> {
     FunctionObject::constructor(
         gc_context,
         Executable::Native(constructor),
@@ -107,21 +83,21 @@ pub fn create_rectangle_object<'gc>(
     )
 }
 
-fn is_empty<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn is_empty<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let width = this.get("width", activation)?.coerce_to_f64(activation)?;
     let height = this.get("height", activation)?.coerce_to_f64(activation)?;
     Ok((width <= 0.0 || height <= 0.0 || width.is_nan() || height.is_nan()).into())
 }
 
-fn set_empty<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_empty<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     this.set("x", 0.into(), activation)?;
     this.set("y", 0.into(), activation)?;
     this.set("width", 0.into(), activation)?;
@@ -129,11 +105,11 @@ fn set_empty<'gc>(
     Ok(Value::Undefined)
 }
 
-fn clone<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn clone<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let args = [
         this.get("x", activation)?,
         this.get("y", activation)?,
@@ -145,11 +121,11 @@ fn clone<'gc>(
     Ok(cloned)
 }
 
-fn contains<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn contains<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     // TODO: This arbitrarily should return `false` or `undefined` for different invalid-values.
     // I can't find any rhyme or reason for it.
     let x = args
@@ -174,11 +150,11 @@ fn contains<'gc>(
     Ok((x >= left && x < right && y >= top && y < bottom).into())
 }
 
-fn contains_point<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn contains_point<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let (x, y) = value_to_point(
         args.get(0).unwrap_or(&Value::Undefined).to_owned(),
         activation,
@@ -195,11 +171,11 @@ fn contains_point<'gc>(
     Ok((x >= left && x < right && y >= top && y < bottom).into())
 }
 
-fn contains_rectangle<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn contains_rectangle<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let other = if let Some(Value::Object(other)) = args.get(0) {
         other
     } else {
@@ -227,11 +203,11 @@ fn contains_rectangle<'gc>(
         .into())
 }
 
-fn intersects<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn intersects<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let other = if let Some(Value::Object(other)) = args.get(0) {
         other
     } else {
@@ -255,11 +231,11 @@ fn intersects<'gc>(
         .into())
 }
 
-fn union<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn union<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let this_left = this.get("x", activation)?.coerce_to_f64(activation)?;
     let this_top = this.get("y", activation)?.coerce_to_f64(activation)?;
     let this_right = this_left + this.get("width", activation)?.coerce_to_f64(activation)?;
@@ -316,11 +292,11 @@ fn union<'gc>(
     Ok(result)
 }
 
-fn inflate<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn inflate<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let x = this.get("x", activation)?.coerce_to_f64(activation)?;
     let y = this.get("y", activation)?.coerce_to_f64(activation)?;
     let width = this.get("width", activation)?.coerce_to_f64(activation)?;
@@ -344,11 +320,11 @@ fn inflate<'gc>(
     Ok(Value::Undefined)
 }
 
-fn inflate_point<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn inflate_point<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let x = this.get("x", activation)?.coerce_to_f64(activation)?;
     let y = this.get("y", activation)?.coerce_to_f64(activation)?;
     let width = this.get("width", activation)?.coerce_to_f64(activation)?;
@@ -366,11 +342,11 @@ fn inflate_point<'gc>(
     Ok(Value::Undefined)
 }
 
-fn offset<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn offset<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let x = this.get("x", activation)?.coerce_to_f64(activation)?;
     let y = this.get("y", activation)?.coerce_to_f64(activation)?;
     let horizontal = args
@@ -390,11 +366,11 @@ fn offset<'gc>(
     Ok(Value::Undefined)
 }
 
-fn offset_point<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn offset_point<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let x = this.get("x", activation)?.coerce_to_f64(activation)?;
     let y = this.get("y", activation)?.coerce_to_f64(activation)?;
     let (horizontal, vertical) = value_to_point(
@@ -408,11 +384,11 @@ fn offset_point<'gc>(
     Ok(Value::Undefined)
 }
 
-fn intersection<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn intersection<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let this_left = this.get("x", activation)?.coerce_to_f64(activation)?;
     let this_top = this.get("y", activation)?.coerce_to_f64(activation)?;
     let this_right = this_left + this.get("width", activation)?.coerce_to_f64(activation)?;
@@ -471,11 +447,11 @@ fn intersection<'gc>(
     Ok(result)
 }
 
-fn equals<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn equals<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     if let Some(Value::Object(other)) = args.get(0) {
         let this_x = this.get("x", activation)?;
         let this_y = this.get("y", activation)?;
@@ -498,19 +474,19 @@ fn equals<'gc>(
     Ok(false.into())
 }
 
-fn get_left<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_left<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     this.get("x", activation)
 }
 
-fn set_left<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_left<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let new_left = args.get(0).unwrap_or(&Value::Undefined).to_owned();
     let old_left = this.get("x", activation)?.coerce_to_f64(activation)?;
     let width = this.get("width", activation)?.coerce_to_f64(activation)?;
@@ -523,19 +499,19 @@ fn set_left<'gc>(
     Ok(Value::Undefined)
 }
 
-fn get_top<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_top<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     this.get("y", activation)
 }
 
-fn set_top<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_top<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let new_top = args.get(0).unwrap_or(&Value::Undefined).to_owned();
     let old_top = this.get("y", activation)?.coerce_to_f64(activation)?;
     let height = this.get("height", activation)?.coerce_to_f64(activation)?;
@@ -548,21 +524,21 @@ fn set_top<'gc>(
     Ok(Value::Undefined)
 }
 
-fn get_right<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_right<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let x = this.get("x", activation)?.coerce_to_f64(activation)?;
     let width = this.get("width", activation)?.coerce_to_f64(activation)?;
     Ok((x + width).into())
 }
 
-fn set_right<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_right<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let right = if let Some(arg) = args.get(0) {
         arg.coerce_to_f64(activation)?
     } else {
@@ -575,21 +551,21 @@ fn set_right<'gc>(
     Ok(Value::Undefined)
 }
 
-fn get_bottom<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_bottom<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let y = this.get("y", activation)?.coerce_to_f64(activation)?;
     let height = this.get("height", activation)?.coerce_to_f64(activation)?;
     Ok((y + height).into())
 }
 
-fn set_bottom<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_bottom<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let bottom = if let Some(arg) = args.get(0) {
         arg.coerce_to_f64(activation)?
     } else {
@@ -602,22 +578,22 @@ fn set_bottom<'gc>(
     Ok(Value::Undefined)
 }
 
-fn get_size<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_size<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let width = this.get("width", activation)?;
     let height = this.get("height", activation)?;
     let point = construct_new_point(&[width, height], activation)?;
     Ok(point)
 }
 
-fn set_size<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_size<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let (width, height) = if let Some(Value::Object(object)) = args.get(0) {
         (object.get("x", activation)?, object.get("y", activation)?)
     } else {
@@ -630,22 +606,22 @@ fn set_size<'gc>(
     Ok(Value::Undefined)
 }
 
-fn get_top_left<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_top_left<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let x = this.get("x", activation)?;
     let y = this.get("y", activation)?;
     let point = construct_new_point(&[x, y], activation)?;
     Ok(point)
 }
 
-fn set_top_left<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_top_left<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let (new_left, new_top) = if let Some(Value::Object(object)) = args.get(0) {
         (object.get("x", activation)?, object.get("y", activation)?)
     } else {
@@ -672,11 +648,11 @@ fn set_top_left<'gc>(
     Ok(Value::Undefined)
 }
 
-fn get_bottom_right<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn get_bottom_right<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let x = this.get("x", activation)?.coerce_to_f64(activation)?;
     let y = this.get("y", activation)?.coerce_to_f64(activation)?;
     let width = this.get("width", activation)?.coerce_to_f64(activation)?;
@@ -685,11 +661,11 @@ fn get_bottom_right<'gc>(
     Ok(point)
 }
 
-fn set_bottom_right<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    this: Object<'gc>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error<'gc>> {
+fn set_bottom_right<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    this: Object<'gc, B>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error<'gc, B>> {
     let (bottom, right) = value_to_point(
         args.get(0).unwrap_or(&Value::Undefined).to_owned(),
         activation,
@@ -703,12 +679,38 @@ fn set_bottom_right<'gc>(
     Ok(Value::Undefined)
 }
 
-pub fn create_proto<'gc>(
+pub fn create_proto<'gc, B: Backend>(
     gc_context: MutationContext<'gc, '_>,
-    proto: Object<'gc>,
-    fn_proto: Object<'gc>,
-) -> Object<'gc> {
+    proto: Object<'gc, B>,
+    fn_proto: Object<'gc, B>,
+) -> Object<'gc, B> {
     let object = ScriptObject::object(gc_context, Some(proto));
+
+    let PROTO_DECLS: &[Declaration<B>] = declare_properties! {
+        "toString" => method(to_string);
+        "isEmpty" => method(is_empty);
+        "setEmpty" => method(set_empty);
+        "clone" => method(clone);
+        "contains" => method(contains);
+        "containsPoint" => method(contains_point);
+        "containsRectangle" => method(contains_rectangle);
+        "intersects" => method(intersects);
+        "union" => method(union);
+        "inflate" => method(inflate);
+        "inflatePoint" => method(inflate_point);
+        "offset" => method(offset);
+        "offsetPoint" => method(offset_point);
+        "intersection" => method(intersection);
+        "equals" => method(equals);
+        "left" => property(get_left, set_left);
+        "top" => property(get_top, set_top);
+        "right" => property(get_right, set_right);
+        "bottom" => property(get_bottom, set_bottom);
+        "size" => property(get_size, set_size);
+        "topLeft" => property(get_top_left, set_top_left);
+        "bottomRight" => property(get_bottom_right, set_bottom_right);
+    };
     define_properties_on(PROTO_DECLS, gc_context, object, fn_proto);
+
     object.into()
 }

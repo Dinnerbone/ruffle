@@ -7,6 +7,7 @@ use crate::impl_custom_object;
 use crate::xml::{XmlNode, ELEMENT_NODE, TEXT_NODE};
 use gc_arena::{Collect, GcCell, MutationContext};
 use quick_xml::{events::Event, Reader};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::{AvmString, WStr, WString};
 use std::fmt;
 
@@ -51,15 +52,15 @@ pub enum XmlStatus {
 /// A ScriptObject that is inherently tied to an XML document.
 #[derive(Clone, Copy, Collect)]
 #[collect(no_drop)]
-pub struct XmlObject<'gc>(GcCell<'gc, XmlObjectData<'gc>>);
+pub struct XmlObject<'gc, B: Backend>(GcCell<'gc, XmlObjectData<'gc, B>>);
 
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct XmlObjectData<'gc> {
-    base: ScriptObject<'gc>,
+pub struct XmlObjectData<'gc, B: Backend> {
+    base: ScriptObject<'gc, B>,
 
     /// The root node of the XML document.
-    root: XmlNode<'gc>,
+    root: XmlNode<'gc, B>,
 
     /// The XML declaration, if set.
     xml_decl: Option<AvmString<'gc>>,
@@ -72,15 +73,15 @@ pub struct XmlObjectData<'gc> {
     /// When nodes are parsed into the document by way of `parseXML` or the
     /// document constructor, they get put into this object, which is accessible
     /// through the document's `idMap`.
-    id_map: ScriptObject<'gc>,
+    id_map: ScriptObject<'gc, B>,
 
     /// The last parse error encountered, if any.
     status: XmlStatus,
 }
 
-impl<'gc> XmlObject<'gc> {
+impl<'gc, B: Backend> XmlObject<'gc, B> {
     /// Construct a new XML document and object pair.
-    pub fn empty(gc_context: MutationContext<'gc, '_>, proto: Option<Object<'gc>>) -> Self {
+    pub fn empty(gc_context: MutationContext<'gc, '_>, proto: Option<Object<'gc, B>>) -> Self {
         let mut root = XmlNode::new(gc_context, ELEMENT_NODE, None);
         let object = Self(GcCell::allocate(
             gc_context,
@@ -98,7 +99,7 @@ impl<'gc> XmlObject<'gc> {
     }
 
     /// Yield the document in node form.
-    pub fn as_node(self) -> XmlNode<'gc> {
+    pub fn as_node(self) -> XmlNode<'gc, B> {
         self.0.read().root
     }
 
@@ -117,7 +118,7 @@ impl<'gc> XmlObject<'gc> {
     /// This method does not yet actually remove existing node contents.
     pub fn replace_with_str(
         &mut self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         data: &WStr,
         ignore_white: bool,
     ) -> Result<(), quick_xml::Error> {
@@ -208,7 +209,7 @@ impl<'gc> XmlObject<'gc> {
     }
 
     /// Obtain the script object for the document's `idMap` property.
-    pub fn id_map(self) -> ScriptObject<'gc> {
+    pub fn id_map(self) -> ScriptObject<'gc, B> {
         self.0.read().id_map
     }
 
@@ -217,7 +218,7 @@ impl<'gc> XmlObject<'gc> {
     }
 }
 
-impl fmt::Debug for XmlObject<'_> {
+impl<B: Backend> fmt::Debug for XmlObject<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let this = self.0.read();
         f.debug_struct("XmlObject")
@@ -227,22 +228,24 @@ impl fmt::Debug for XmlObject<'_> {
     }
 }
 
-impl<'gc> TObject<'gc> for XmlObject<'gc> {
-    impl_custom_object!(base);
+impl<'gc, B: Backend> TObject<'gc> for XmlObject<'gc, B> {
+    type B = B;
+
+    impl_custom_object!(B, base);
 
     fn create_bare_object(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
-        this: Object<'gc>,
-    ) -> Result<Object<'gc>, Error<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        this: Object<'gc, B>,
+    ) -> Result<Object<'gc, B>, Error<'gc, B>> {
         Ok(Self::empty(activation.context.gc_context, Some(this)).into())
     }
 
-    fn as_xml(&self) -> Option<XmlObject<'gc>> {
+    fn as_xml(&self) -> Option<XmlObject<'gc, B>> {
         Some(*self)
     }
 
-    fn as_xml_node(&self) -> Option<XmlNode<'gc>> {
+    fn as_xml_node(&self) -> Option<XmlNode<'gc, B>> {
         Some(self.as_node())
     }
 }

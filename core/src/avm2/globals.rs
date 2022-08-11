@@ -43,58 +43,59 @@ pub(crate) const NS_RUFFLE_INTERNAL: &str = "https://ruffle.rs/AS3/impl/";
 pub(crate) const NS_VECTOR: &str = "__AS3__.vec";
 
 pub use flash::utils::NS_FLASH_PROXY;
+use ruffle_types::backend::Backend;
 
 /// This structure represents all system builtin classes.
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct SystemClasses<'gc> {
-    pub object: ClassObject<'gc>,
-    pub function: ClassObject<'gc>,
-    pub class: ClassObject<'gc>,
-    pub global: ClassObject<'gc>,
-    pub string: ClassObject<'gc>,
-    pub boolean: ClassObject<'gc>,
-    pub number: ClassObject<'gc>,
-    pub int: ClassObject<'gc>,
-    pub uint: ClassObject<'gc>,
-    pub namespace: ClassObject<'gc>,
-    pub array: ClassObject<'gc>,
-    pub movieclip: ClassObject<'gc>,
-    pub framelabel: ClassObject<'gc>,
-    pub scene: ClassObject<'gc>,
-    pub application_domain: ClassObject<'gc>,
-    pub event: ClassObject<'gc>,
-    pub fullscreenevent: ClassObject<'gc>,
-    pub video: ClassObject<'gc>,
-    pub xml: ClassObject<'gc>,
-    pub xml_list: ClassObject<'gc>,
-    pub display_object: ClassObject<'gc>,
-    pub shape: ClassObject<'gc>,
-    pub textfield: ClassObject<'gc>,
-    pub textformat: ClassObject<'gc>,
-    pub graphics: ClassObject<'gc>,
-    pub loaderinfo: ClassObject<'gc>,
-    pub bytearray: ClassObject<'gc>,
-    pub stage: ClassObject<'gc>,
-    pub sprite: ClassObject<'gc>,
-    pub simplebutton: ClassObject<'gc>,
-    pub regexp: ClassObject<'gc>,
-    pub vector: ClassObject<'gc>,
-    pub soundtransform: ClassObject<'gc>,
-    pub soundchannel: ClassObject<'gc>,
-    pub bitmap: ClassObject<'gc>,
-    pub bitmapdata: ClassObject<'gc>,
-    pub date: ClassObject<'gc>,
-    pub qname: ClassObject<'gc>,
-    pub sharedobject: ClassObject<'gc>,
-    pub mouseevent: ClassObject<'gc>,
-    pub textevent: ClassObject<'gc>,
-    pub errorevent: ClassObject<'gc>,
-    pub ioerrorevent: ClassObject<'gc>,
-    pub securityerrorevent: ClassObject<'gc>,
+pub struct SystemClasses<'gc, B: Backend> {
+    pub object: ClassObject<'gc, B>,
+    pub function: ClassObject<'gc, B>,
+    pub class: ClassObject<'gc, B>,
+    pub global: ClassObject<'gc, B>,
+    pub string: ClassObject<'gc, B>,
+    pub boolean: ClassObject<'gc, B>,
+    pub number: ClassObject<'gc, B>,
+    pub int: ClassObject<'gc, B>,
+    pub uint: ClassObject<'gc, B>,
+    pub namespace: ClassObject<'gc, B>,
+    pub array: ClassObject<'gc, B>,
+    pub movieclip: ClassObject<'gc, B>,
+    pub framelabel: ClassObject<'gc, B>,
+    pub scene: ClassObject<'gc, B>,
+    pub application_domain: ClassObject<'gc, B>,
+    pub event: ClassObject<'gc, B>,
+    pub fullscreenevent: ClassObject<'gc, B>,
+    pub video: ClassObject<'gc, B>,
+    pub xml: ClassObject<'gc, B>,
+    pub xml_list: ClassObject<'gc, B>,
+    pub display_object: ClassObject<'gc, B>,
+    pub shape: ClassObject<'gc, B>,
+    pub textfield: ClassObject<'gc, B>,
+    pub textformat: ClassObject<'gc, B>,
+    pub graphics: ClassObject<'gc, B>,
+    pub loaderinfo: ClassObject<'gc, B>,
+    pub bytearray: ClassObject<'gc, B>,
+    pub stage: ClassObject<'gc, B>,
+    pub sprite: ClassObject<'gc, B>,
+    pub simplebutton: ClassObject<'gc, B>,
+    pub regexp: ClassObject<'gc, B>,
+    pub vector: ClassObject<'gc, B>,
+    pub soundtransform: ClassObject<'gc, B>,
+    pub soundchannel: ClassObject<'gc, B>,
+    pub bitmap: ClassObject<'gc, B>,
+    pub bitmapdata: ClassObject<'gc, B>,
+    pub date: ClassObject<'gc, B>,
+    pub qname: ClassObject<'gc, B>,
+    pub sharedobject: ClassObject<'gc, B>,
+    pub mouseevent: ClassObject<'gc, B>,
+    pub textevent: ClassObject<'gc, B>,
+    pub errorevent: ClassObject<'gc, B>,
+    pub ioerrorevent: ClassObject<'gc, B>,
+    pub securityerrorevent: ClassObject<'gc, B>,
 }
 
-impl<'gc> SystemClasses<'gc> {
+impl<'gc, B: Backend> SystemClasses<'gc, B> {
     /// Construct a minimal set of system classes necessary for bootstrapping
     /// player globals.
     ///
@@ -103,10 +104,10 @@ impl<'gc> SystemClasses<'gc> {
     /// responsibility to instantiate each class and replace the empty object
     /// with that.
     fn new(
-        object: ClassObject<'gc>,
-        function: ClassObject<'gc>,
-        class: ClassObject<'gc>,
-        global: ClassObject<'gc>,
+        object: ClassObject<'gc, B>,
+        function: ClassObject<'gc, B>,
+        class: ClassObject<'gc, B>,
+        global: ClassObject<'gc, B>,
     ) -> Self {
         SystemClasses {
             object,
@@ -159,12 +160,12 @@ impl<'gc> SystemClasses<'gc> {
 }
 
 /// Add a free-function builtin to the global scope.
-fn function<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn function<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     package: impl Into<AvmString<'gc>>,
     name: &'static str,
-    nf: NativeMethodImpl,
-    script: Script<'gc>,
+    nf: NativeMethodImpl<B>,
+    script: Script<'gc, B>,
 ) -> Result<(), Error> {
     let (_, mut global, mut domain) = script.init();
     let mc = activation.context.gc_context;
@@ -182,12 +183,12 @@ fn function<'gc>(
 ///
 /// This allows the caller to pre-populate the class's prototype with dynamic
 /// properties, if necessary.
-fn dynamic_class<'gc>(
+fn dynamic_class<'gc, B: Backend>(
     mc: MutationContext<'gc, '_>,
-    class_object: ClassObject<'gc>,
-    script: Script<'gc>,
+    class_object: ClassObject<'gc, B>,
+    script: Script<'gc, B>,
     // The `ClassObject` of the `Class` class
-    class_class: ClassObject<'gc>,
+    class_class: ClassObject<'gc, B>,
 ) -> Result<(), Error> {
     let (_, mut global, mut domain) = script.init();
     let class = class_object.inner_class_definition();
@@ -201,16 +202,16 @@ fn dynamic_class<'gc>(
 ///
 /// This function returns the class object and class prototype as a class, which
 /// may be stored in `SystemClasses`
-fn class<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    class_def: GcCell<'gc, Class<'gc>>,
-    script: Script<'gc>,
-) -> Result<ClassObject<'gc>, Error> {
+fn class<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    class_def: GcCell<'gc, Class<'gc, B>>,
+    script: Script<'gc, B>,
+) -> Result<ClassObject<'gc, B>, Error> {
     let (_, mut global, mut domain) = script.init();
 
     let class_read = class_def.read();
     let super_class = if let Some(sc_name) = class_read.super_class_name() {
-        let super_class: Result<Object<'gc>, Error> = activation
+        let super_class: Result<Object<'gc, B>, Error> = activation
             .resolve_definition(sc_name)
             .ok()
             .and_then(|v| v)
@@ -250,13 +251,13 @@ fn class<'gc>(
 }
 
 /// Add a builtin constant to the global scope.
-fn constant<'gc>(
+fn constant<'gc, B: Backend>(
     mc: MutationContext<'gc, '_>,
     package: impl Into<AvmString<'gc>>,
     name: impl Into<AvmString<'gc>>,
-    value: Value<'gc>,
-    script: Script<'gc>,
-    class: ClassObject<'gc>,
+    value: Value<'gc, B>,
+    script: Script<'gc, B>,
+    class: ClassObject<'gc, B>,
 ) -> Result<(), Error> {
     let (_, mut global, mut domain) = script.init();
     let name = QName::new(Namespace::package(package), name);
@@ -266,12 +267,12 @@ fn constant<'gc>(
     Ok(())
 }
 
-fn namespace<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
+fn namespace<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
     package: impl Into<AvmString<'gc>>,
     name: impl Into<AvmString<'gc>>,
     uri: impl Into<AvmString<'gc>>,
-    script: Script<'gc>,
+    script: Script<'gc, B>,
 ) -> Result<(), Error> {
     let namespace = NamespaceObject::from_namespace(activation, Namespace::Namespace(uri.into()))?;
     constant(
@@ -299,9 +300,9 @@ macro_rules! avm2_system_class {
 /// player. It will return a list of prototypes it has created, which should be
 /// stored on the AVM. All relevant declarations will also be attached to the
 /// given domain.
-pub fn load_player_globals<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    domain: Domain<'gc>,
+pub fn load_player_globals<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    domain: Domain<'gc, B>,
 ) -> Result<(), Error> {
     let mc = activation.context.gc_context;
 
@@ -699,12 +700,12 @@ mod native {
 
 /// Loads classes from our custom 'playerglobal' (which are written in ActionScript)
 /// into the environment. See 'core/src/avm2/globals/README.md' for more information
-fn load_playerglobal<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    domain: Domain<'gc>,
+fn load_playerglobal<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    domain: Domain<'gc, B>,
 ) -> Result<(), Error> {
-    activation.avm2().native_method_table = native::NATIVE_METHOD_TABLE;
-    activation.avm2().native_instance_allocator_table = native::NATIVE_INSTANCE_ALLOCATOR_TABLE;
+    activation.avm2().native_method_table = native::native_method_table();
+    activation.avm2().native_instance_allocator_table = native::native_instance_allocator_table();
 
     let movie = Arc::new(SwfMovie::from_data(PLAYERGLOBAL, None, None)?);
 

@@ -5,6 +5,7 @@ use crate::avm1::object::value_object::ValueObject;
 use crate::avm1::{Object, TObject};
 use crate::display_object::TDisplayObject;
 use gc_arena::Collect;
+use ruffle_types::backend::Backend;
 use ruffle_types::ecma_conversions::{
     f64_to_wrapping_i16, f64_to_wrapping_i32, f64_to_wrapping_u16, f64_to_wrapping_u32,
     f64_to_wrapping_u8,
@@ -15,97 +16,97 @@ use std::{borrow::Cow, io::Write, num::Wrapping};
 #[derive(Debug, Clone, Copy, Collect)]
 #[collect(no_drop)]
 #[allow(dead_code)]
-pub enum Value<'gc> {
+pub enum Value<'gc, B: Backend> {
     Undefined,
     Null,
     Bool(bool),
     Number(f64),
     String(AvmString<'gc>),
-    Object(Object<'gc>),
+    Object(Object<'gc, B>),
 }
 
-impl<'gc> From<AvmString<'gc>> for Value<'gc> {
+impl<'gc, B: Backend> From<AvmString<'gc>> for Value<'gc, B> {
     fn from(string: AvmString<'gc>) -> Self {
         Value::String(string)
     }
 }
 
-impl<'gc> From<&'static str> for Value<'gc> {
+impl<'gc, B: Backend> From<&'static str> for Value<'gc, B> {
     fn from(string: &'static str) -> Self {
         Value::String(string.into())
     }
 }
 
-impl<'gc> From<bool> for Value<'gc> {
+impl<'gc, B: Backend> From<bool> for Value<'gc, B> {
     fn from(value: bool) -> Self {
         Value::Bool(value)
     }
 }
 
-impl<'gc, T> From<T> for Value<'gc>
+impl<'gc, T, B: Backend> From<T> for Value<'gc, B>
 where
-    Object<'gc>: From<T>,
+    Object<'gc, B>: From<T>,
 {
     fn from(value: T) -> Self {
         Value::Object(Object::from(value))
     }
 }
 
-impl<'gc> From<f64> for Value<'gc> {
+impl<'gc, B: Backend> From<f64> for Value<'gc, B> {
     fn from(value: f64) -> Self {
         Value::Number(value)
     }
 }
 
-impl<'gc> From<f32> for Value<'gc> {
+impl<'gc, B: Backend> From<f32> for Value<'gc, B> {
     fn from(value: f32) -> Self {
         Value::Number(f64::from(value))
     }
 }
 
-impl<'gc> From<i8> for Value<'gc> {
+impl<'gc, B: Backend> From<i8> for Value<'gc, B> {
     fn from(value: i8) -> Self {
         Value::Number(f64::from(value))
     }
 }
 
-impl<'gc> From<u8> for Value<'gc> {
+impl<'gc, B: Backend> From<u8> for Value<'gc, B> {
     fn from(value: u8) -> Self {
         Value::Number(f64::from(value))
     }
 }
 
-impl<'gc> From<i16> for Value<'gc> {
+impl<'gc, B: Backend> From<i16> for Value<'gc, B> {
     fn from(value: i16) -> Self {
         Value::Number(f64::from(value))
     }
 }
 
-impl<'gc> From<u16> for Value<'gc> {
+impl<'gc, B: Backend> From<u16> for Value<'gc, B> {
     fn from(value: u16) -> Self {
         Value::Number(f64::from(value))
     }
 }
 
-impl<'gc> From<i32> for Value<'gc> {
+impl<'gc, B: Backend> From<i32> for Value<'gc, B> {
     fn from(value: i32) -> Self {
         Value::Number(f64::from(value))
     }
 }
 
-impl<'gc> From<u32> for Value<'gc> {
+impl<'gc, B: Backend> From<u32> for Value<'gc, B> {
     fn from(value: u32) -> Self {
         Value::Number(f64::from(value))
     }
 }
 
-impl<'gc> From<usize> for Value<'gc> {
+impl<'gc, B: Backend> From<usize> for Value<'gc, B> {
     fn from(value: usize) -> Self {
         Value::Number(value as f64)
     }
 }
 
-impl PartialEq for Value<'_> {
+impl<B: Backend> PartialEq for Value<'_, B> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Value::Undefined, Value::Undefined) => true,
@@ -119,7 +120,7 @@ impl PartialEq for Value<'_> {
     }
 }
 
-impl<'gc> Value<'gc> {
+impl<'gc, B: Backend> Value<'gc, B> {
     /// Yields `true` if the given value is a primitive value.
     ///
     /// Note: Boxed primitive values are not considered primitive - it is
@@ -139,7 +140,7 @@ impl<'gc> Value<'gc> {
     /// * In SWF5 and lower, hexadecimal is unsupported.
     /// * In SWF4 and lower, `0.0` is returned rather than `NaN` if a string cannot
     /// be converted to a number.
-    fn primitive_as_number(&self, activation: &mut Activation<'_, 'gc, '_>) -> f64 {
+    fn primitive_as_number(&self, activation: &mut Activation<'_, 'gc, '_, B>) -> f64 {
         match self {
             Value::Undefined if activation.swf_version() < 7 => 0.0,
             Value::Null if activation.swf_version() < 7 => 0.0,
@@ -157,8 +158,8 @@ impl<'gc> Value<'gc> {
     /// ECMA-262 2nd edition s. 9.3 ToNumber
     pub fn coerce_to_f64(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<f64, Error<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<f64, Error<'gc, B>> {
         Ok(match self {
             Value::Object(_) => self
                 .to_primitive_num(activation)?
@@ -180,8 +181,8 @@ impl<'gc> Value<'gc> {
     ///   return `undefined` rather than yielding a runtime error.
     pub fn to_primitive_num(
         self,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error<'gc, B>> {
         Ok(match self {
             Value::Object(object) if object.as_display_object().is_none() => {
                 object.call_method("valueOf".into(), &[], activation, ExecutionReason::Special)?
@@ -203,8 +204,8 @@ impl<'gc> Value<'gc> {
     /// * Date objects coerce to Number in SWFv5.
     pub fn to_primitive(
         self,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error<'gc, B>> {
         let result = match self {
             Value::Object(object) => {
                 let val = if activation.swf_version() > 5 && object.as_date_object().is_some() {
@@ -240,9 +241,9 @@ impl<'gc> Value<'gc> {
     /// ECMA-262 2nd edition s. 11.8.5 Abstract relational comparison algorithm
     pub fn abstract_lt(
         &self,
-        other: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error<'gc>> {
+        other: Value<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error<'gc, B>> {
         // If either parameter's `valueOf` results in a non-movieclip object, immediately return false.
         // This is the common case for objects because `Object.prototype.valueOf` returns the same object.
         // For example, `{} < {}` is false.
@@ -276,9 +277,9 @@ impl<'gc> Value<'gc> {
     /// ECMA-262 2nd edition s. 11.9.3 Abstract equality comparison algorithm
     pub fn abstract_eq(
         self,
-        other: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<bool, Error<'gc>> {
+        other: Value<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<bool, Error<'gc, B>> {
         let (a, b) = if activation.swf_version() > 5 {
             (other, self)
         } else {
@@ -324,7 +325,10 @@ impl<'gc> Value<'gc> {
         Ok(result)
     }
 
-    pub fn coerce_to_u8(&self, activation: &mut Activation<'_, 'gc, '_>) -> Result<u8, Error<'gc>> {
+    pub fn coerce_to_u8(
+        &self,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<u8, Error<'gc, B>> {
         self.coerce_to_f64(activation).map(f64_to_wrapping_u8)
     }
 
@@ -334,8 +338,8 @@ impl<'gc> Value<'gc> {
     #[allow(dead_code)]
     pub fn coerce_to_u16(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<u16, Error<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<u16, Error<'gc, B>> {
         self.coerce_to_f64(activation).map(f64_to_wrapping_u16)
     }
 
@@ -345,8 +349,8 @@ impl<'gc> Value<'gc> {
     #[allow(dead_code)]
     pub fn coerce_to_i16(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<i16, Error<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<i16, Error<'gc, B>> {
         self.coerce_to_f64(activation).map(f64_to_wrapping_i16)
     }
 
@@ -357,8 +361,8 @@ impl<'gc> Value<'gc> {
     #[allow(dead_code)]
     pub fn coerce_to_i32(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<i32, Error<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<i32, Error<'gc, B>> {
         self.coerce_to_f64(activation).map(f64_to_wrapping_i32)
     }
 
@@ -368,16 +372,16 @@ impl<'gc> Value<'gc> {
     #[allow(dead_code)]
     pub fn coerce_to_u32(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<u32, Error<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<u32, Error<'gc, B>> {
         self.coerce_to_f64(activation).map(f64_to_wrapping_u32)
     }
 
     /// Coerce a value to a string.
     pub fn coerce_to_string(
         &self,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<AvmString<'gc>, Error<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<AvmString<'gc>, Error<'gc, B>> {
         Ok(match self {
             Value::Undefined if activation.swf_version() < 7 => "".into(),
             Value::Bool(true) if activation.swf_version() < 5 => "1".into(),
@@ -454,7 +458,7 @@ impl<'gc> Value<'gc> {
         }
     }
 
-    pub fn coerce_to_object(&self, activation: &mut Activation<'_, 'gc, '_>) -> Object<'gc> {
+    pub fn coerce_to_object(&self, activation: &mut Activation<'_, 'gc, '_, B>) -> Object<'gc, B> {
         ValueObject::boxed(activation, self.to_owned())
     }
 }
@@ -875,10 +879,10 @@ mod test {
             assert_eq!(vglobal.to_primitive_num(activation).unwrap(), undefined);
 
             fn value_of_impl<'gc>(
-                _activation: &mut Activation<'_, 'gc, '_>,
-                _: Object<'gc>,
-                _: &[Value<'gc>],
-            ) -> Result<Value<'gc>, Error<'gc>> {
+                _activation: &mut Activation<'_, 'gc, '_, B>,
+                _: Object<'gc, B>,
+                _: &[Value<'gc, B>],
+            ) -> Result<Value<'gc, B>, Error<'gc, B>> {
                 Ok(5.into())
             }
 

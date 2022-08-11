@@ -8,13 +8,14 @@ use crate::avm2::object::{ClassObject, Object, ObjectPtr, QNameObject, TObject};
 use crate::avm2::value::Value;
 use crate::avm2::{AvmString, Error};
 use gc_arena::{Collect, GcCell, MutationContext};
+use ruffle_types::backend::Backend;
 use std::cell::{Ref, RefMut};
 
 /// A class instance allocator that allocates Proxy objects.
-pub fn proxy_allocator<'gc>(
-    class: ClassObject<'gc>,
-    activation: &mut Activation<'_, 'gc, '_>,
-) -> Result<Object<'gc>, Error> {
+pub fn proxy_allocator<'gc, B: Backend>(
+    class: ClassObject<'gc, B>,
+    activation: &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Object<'gc, B>, Error> {
     let base = ScriptObjectData::new(class);
 
     Ok(ProxyObject(GcCell::allocate(
@@ -26,21 +27,23 @@ pub fn proxy_allocator<'gc>(
 
 #[derive(Clone, Collect, Debug, Copy)]
 #[collect(no_drop)]
-pub struct ProxyObject<'gc>(GcCell<'gc, ProxyObjectData<'gc>>);
+pub struct ProxyObject<'gc, B: Backend>(GcCell<'gc, ProxyObjectData<'gc, B>>);
 
 #[derive(Clone, Collect, Debug)]
 #[collect(no_drop)]
-pub struct ProxyObjectData<'gc> {
+pub struct ProxyObjectData<'gc, B: Backend> {
     /// Base script object
-    base: ScriptObjectData<'gc>,
+    base: ScriptObjectData<'gc, B>,
 }
 
-impl<'gc> TObject<'gc> for ProxyObject<'gc> {
-    fn base(&self) -> Ref<ScriptObjectData<'gc>> {
+impl<'gc, B: Backend> TObject<'gc> for ProxyObject<'gc, B> {
+    type B = B;
+
+    fn base(&self) -> Ref<ScriptObjectData<'gc, B>> {
         Ref::map(self.0.read(), |read| &read.base)
     }
 
-    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc>> {
+    fn base_mut(&self, mc: MutationContext<'gc, '_>) -> RefMut<ScriptObjectData<'gc, B>> {
         RefMut::map(self.0.write(mc), |write| &mut write.base)
     }
 
@@ -48,15 +51,15 @@ impl<'gc> TObject<'gc> for ProxyObject<'gc> {
         self.0.as_ptr() as *const ObjectPtr
     }
 
-    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc>, Error> {
+    fn value_of(&self, _mc: MutationContext<'gc, '_>) -> Result<Value<'gc, B>, Error> {
         Ok(Object::from(*self).into())
     }
 
     fn get_property_local(
         self,
         multiname: &Multiname<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         // NOTE: This is incorrect behavior.
         // `QName` should instead store the whole multiname's namespace set,
         // so that it can be used to index other objects using the same
@@ -91,8 +94,8 @@ impl<'gc> TObject<'gc> for ProxyObject<'gc> {
     fn set_property_local(
         self,
         multiname: &Multiname<'gc>,
-        value: Value<'gc>,
-        activation: &mut Activation<'_, 'gc, '_>,
+        value: Value<'gc, B>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         // NOTE: This is incorrect behavior.
         // `QName` should instead store the whole multiname's namespace set,
@@ -134,9 +137,9 @@ impl<'gc> TObject<'gc> for ProxyObject<'gc> {
     fn call_property_local(
         self,
         multiname: &Multiname<'gc>,
-        arguments: &[Value<'gc>],
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        arguments: &[Value<'gc, B>],
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         // NOTE: This is incorrect behavior.
         // `QName` should instead store the whole multiname's namespace set,
         // so that it can be used to index other objects using the same
@@ -169,7 +172,7 @@ impl<'gc> TObject<'gc> for ProxyObject<'gc> {
 
     fn delete_property_local(
         self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         multiname: &Multiname<'gc>,
     ) -> Result<bool, Error> {
         // NOTE: This is incorrect behavior.
@@ -206,7 +209,7 @@ impl<'gc> TObject<'gc> for ProxyObject<'gc> {
 
     fn has_property_via_in(
         self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         name: &Multiname<'gc>,
     ) -> Result<bool, Error> {
         Ok(self
@@ -222,7 +225,7 @@ impl<'gc> TObject<'gc> for ProxyObject<'gc> {
     fn get_next_enumerant(
         self,
         last_index: u32,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<Option<u32>, Error> {
         Ok(Some(
             self.call_property(
@@ -237,8 +240,8 @@ impl<'gc> TObject<'gc> for ProxyObject<'gc> {
     fn get_enumerant_name(
         self,
         index: u32,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         self.call_property(
             &QName::new(Namespace::Namespace(NS_FLASH_PROXY.into()), "nextName").into(),
             &[index.into()],
@@ -249,8 +252,8 @@ impl<'gc> TObject<'gc> for ProxyObject<'gc> {
     fn get_enumerant_value(
         self,
         index: u32,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<Value<'gc>, Error> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<Value<'gc, B>, Error> {
         self.call_property(
             &QName::new(Namespace::Namespace(NS_FLASH_PROXY.into()), "nextValue").into(),
             &[index.into()],

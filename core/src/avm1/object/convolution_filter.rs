@@ -3,18 +3,19 @@ use crate::avm1::{Object, ScriptObject, TObject};
 use crate::impl_custom_object;
 use gc_arena::{Collect, GcCell, MutationContext};
 
+use ruffle_types::backend::Backend;
 use std::fmt;
 
 /// A ConvolutionFilter
 #[derive(Clone, Copy, Collect)]
 #[collect(no_drop)]
-pub struct ConvolutionFilterObject<'gc>(GcCell<'gc, ConvolutionFilterData<'gc>>);
+pub struct ConvolutionFilterObject<'gc, B: Backend>(GcCell<'gc, ConvolutionFilterData<'gc, B>>);
 
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct ConvolutionFilterData<'gc> {
+pub struct ConvolutionFilterData<'gc, B: Backend> {
     /// The underlying script object.
-    base: ScriptObject<'gc>,
+    base: ScriptObject<'gc, B>,
 
     alpha: f64,
     bias: f64,
@@ -27,7 +28,7 @@ pub struct ConvolutionFilterData<'gc> {
     preserve_alpha: bool,
 }
 
-impl fmt::Debug for ConvolutionFilterObject<'_> {
+impl<B: Backend> fmt::Debug for ConvolutionFilterObject<'_, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let this = self.0.read();
         f.debug_struct("ConvolutionFilter")
@@ -44,7 +45,7 @@ impl fmt::Debug for ConvolutionFilterObject<'_> {
     }
 }
 
-impl<'gc> ConvolutionFilterObject<'gc> {
+impl<'gc, B: Backend> ConvolutionFilterObject<'gc, B> {
     add_field_accessors!(
         [alpha, f64, set => set_alpha, get => alpha],
         [bias, f64, set => set_bias, get => bias],
@@ -79,7 +80,10 @@ impl<'gc> ConvolutionFilterObject<'gc> {
         self.update_matrix_length(gc_context);
     }
 
-    pub fn empty_object(gc_context: MutationContext<'gc, '_>, proto: Option<Object<'gc>>) -> Self {
+    pub fn empty_object(
+        gc_context: MutationContext<'gc, '_>,
+        proto: Option<Object<'gc, B>>,
+    ) -> Self {
         ConvolutionFilterObject(GcCell::allocate(
             gc_context,
             ConvolutionFilterData {
@@ -98,8 +102,10 @@ impl<'gc> ConvolutionFilterObject<'gc> {
     }
 }
 
-impl<'gc> TObject<'gc> for ConvolutionFilterObject<'gc> {
-    impl_custom_object!(base {
+impl<'gc, B: Backend> TObject<'gc> for ConvolutionFilterObject<'gc, B> {
+    type B = B;
+
+    impl_custom_object!(B, base {
         bare_object(as_convolution_filter_object -> ConvolutionFilterObject::empty_object);
     });
 }

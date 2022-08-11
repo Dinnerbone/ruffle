@@ -4,6 +4,7 @@ use crate::avm2::object::TObject;
 use crate::avm2::QName;
 use crate::avm2::{Activation, Error, Object, Value};
 use instant::Instant;
+use ruffle_types::backend::Backend;
 
 pub mod bytearray;
 pub mod dictionary;
@@ -14,11 +15,11 @@ pub mod timer;
 pub const NS_FLASH_PROXY: &str = "http://www.adobe.com/2006/actionscript/flash/proxy";
 
 /// Implements `flash.utils.getTimer`
-pub fn get_timer<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    _args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn get_timer<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    _args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     Ok((Instant::now()
         .duration_since(activation.context.start_time)
         .as_millis() as u32)
@@ -26,11 +27,11 @@ pub fn get_timer<'gc>(
 }
 
 /// Implements `flash.utils.getQualifiedClassName`
-pub fn get_qualified_class_name<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn get_qualified_class_name<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let obj = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -53,11 +54,11 @@ pub fn get_qualified_class_name<'gc>(
 }
 
 /// Implements `flash.utils.getQualifiedSuperclassName`
-pub fn get_qualified_super_class_name<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn get_qualified_super_class_name<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let obj = args
         .get(0)
         .unwrap_or(&Value::Undefined)
@@ -84,11 +85,11 @@ pub fn get_qualified_super_class_name<'gc>(
 }
 
 /// Implements native method `flash.utils.getDefinitionByName`
-pub fn get_definition_by_name<'gc>(
-    activation: &mut Activation<'_, 'gc, '_>,
-    _this: Option<Object<'gc>>,
-    args: &[Value<'gc>],
-) -> Result<Value<'gc>, Error> {
+pub fn get_definition_by_name<'gc, B: Backend>(
+    activation: &mut Activation<'_, 'gc, '_, B>,
+    _this: Option<Object<'gc, B>>,
+    args: &[Value<'gc, B>],
+) -> Result<Value<'gc, B>, Error> {
     let appdomain = activation.caller_domain();
     let name = args
         .get(0)

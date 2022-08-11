@@ -8,6 +8,7 @@ use crate::xml;
 use gc_arena::{Collect, GcCell, MutationContext};
 use quick_xml::escape::escape;
 use quick_xml::events::BytesStart;
+use ruffle_types::backend::Backend;
 use ruffle_types::string::{AvmString, WStr, WString};
 use std::fmt;
 
@@ -17,22 +18,22 @@ pub const TEXT_NODE: u8 = 3;
 /// Represents a node in the XML tree.
 #[derive(Copy, Clone, Collect)]
 #[collect(no_drop)]
-pub struct XmlNode<'gc>(GcCell<'gc, XmlNodeData<'gc>>);
+pub struct XmlNode<'gc, B: Backend>(GcCell<'gc, XmlNodeData<'gc, B>>);
 
 #[derive(Clone, Collect)]
 #[collect(no_drop)]
-pub struct XmlNodeData<'gc> {
+pub struct XmlNodeData<'gc, B: Backend> {
     /// The script object associated with this XML node, if any.
-    script_object: Option<Object<'gc>>,
+    script_object: Option<Object<'gc, B>>,
 
     /// The parent node of this one.
-    parent: Option<XmlNode<'gc>>,
+    parent: Option<XmlNode<'gc, B>>,
 
     /// The previous sibling node to this one.
-    prev_sibling: Option<XmlNode<'gc>>,
+    prev_sibling: Option<XmlNode<'gc, B>>,
 
     /// The next sibling node to this one.
-    next_sibling: Option<XmlNode<'gc>>,
+    next_sibling: Option<XmlNode<'gc, B>>,
 
     /// The type of this XML node. Should either `ELEMENT_NODE` or `TEXT_NODE`,
     /// but any other value is accepted as well.
@@ -43,13 +44,13 @@ pub struct XmlNodeData<'gc> {
     node_value: Option<AvmString<'gc>>,
 
     /// Attributes of the element.
-    attributes: ScriptObject<'gc>,
+    attributes: ScriptObject<'gc, B>,
 
     /// Child nodes of this element.
-    children: Vec<XmlNode<'gc>>,
+    children: Vec<XmlNode<'gc, B>>,
 }
 
-impl<'gc> XmlNode<'gc> {
+impl<'gc, B: Backend> XmlNode<'gc, B> {
     /// Construct a new XML node.
     pub fn new(
         mc: MutationContext<'gc, '_>,
@@ -76,9 +77,9 @@ impl<'gc> XmlNode<'gc> {
     /// The returned node will always be an `Element`, and it must only contain
     /// valid encoded UTF-8 data. (Other encoding support is planned later.)
     pub fn from_start_event(
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         bs: BytesStart<'_>,
-        id_map: ScriptObject<'gc>,
+        id_map: ScriptObject<'gc, B>,
     ) -> Result<Self, quick_xml::Error> {
         let name = AvmString::new_utf8_bytes(activation.context.gc_context, bs.name());
         let mut node = Self::new(activation.context.gc_context, ELEMENT_NODE, Some(name));
@@ -114,27 +115,35 @@ impl<'gc> XmlNode<'gc> {
     }
 
     /// Get the parent, if this node has one.
-    pub fn parent(self) -> Option<XmlNode<'gc>> {
+    pub fn parent(self) -> Option<XmlNode<'gc, B>> {
         self.0.read().parent
     }
 
     /// Get the previous sibling, if this node has one.
-    pub fn prev_sibling(self) -> Option<XmlNode<'gc>> {
+    pub fn prev_sibling(self) -> Option<XmlNode<'gc, B>> {
         self.0.read().prev_sibling
     }
 
     /// Set this node's previous sibling.
-    fn set_prev_sibling(&mut self, mc: MutationContext<'gc, '_>, new_prev: Option<XmlNode<'gc>>) {
+    fn set_prev_sibling(
+        &mut self,
+        mc: MutationContext<'gc, '_>,
+        new_prev: Option<XmlNode<'gc, B>>,
+    ) {
         self.0.write(mc).prev_sibling = new_prev;
     }
 
     /// Get the next sibling, if this node has one.
-    pub fn next_sibling(self) -> Option<XmlNode<'gc>> {
+    pub fn next_sibling(self) -> Option<XmlNode<'gc, B>> {
         self.0.read().next_sibling
     }
 
     /// Set this node's next sibling.
-    fn set_next_sibling(&mut self, mc: MutationContext<'gc, '_>, new_next: Option<XmlNode<'gc>>) {
+    fn set_next_sibling(
+        &mut self,
+        mc: MutationContext<'gc, '_>,
+        new_next: Option<XmlNode<'gc, B>>,
+    ) {
         self.0.write(mc).next_sibling = new_next;
     }
 
@@ -176,8 +185,8 @@ impl<'gc> XmlNode<'gc> {
     fn adopt_siblings(
         &mut self,
         mc: MutationContext<'gc, '_>,
-        new_prev: Option<XmlNode<'gc>>,
-        new_next: Option<XmlNode<'gc>>,
+        new_prev: Option<XmlNode<'gc, B>>,
+        new_next: Option<XmlNode<'gc, B>>,
     ) {
         if let Some(mut prev) = new_prev {
             prev.set_next_sibling(mc, Some(*self));
@@ -194,7 +203,7 @@ impl<'gc> XmlNode<'gc> {
     /// Remove node from this node's child list.
     ///
     /// This function yields Err if this node cannot accept child nodes.
-    fn orphan_child(&mut self, mc: MutationContext<'gc, '_>, child: XmlNode<'gc>) {
+    fn orphan_child(&mut self, mc: MutationContext<'gc, '_>, child: XmlNode<'gc, B>) {
         if let Some(position) = self.child_position(child) {
             self.0.write(mc).children.remove(position);
         }
@@ -214,7 +223,7 @@ impl<'gc> XmlNode<'gc> {
         &mut self,
         mc: MutationContext<'gc, '_>,
         position: usize,
-        mut child: XmlNode<'gc>,
+        mut child: XmlNode<'gc, B>,
     ) {
         let is_cyclic = self
             .ancestors()
@@ -244,7 +253,7 @@ impl<'gc> XmlNode<'gc> {
     }
 
     /// Append a child element into the end of the child list of an element node.
-    pub fn append_child(&mut self, mc: MutationContext<'gc, '_>, child: XmlNode<'gc>) {
+    pub fn append_child(&mut self, mc: MutationContext<'gc, '_>, child: XmlNode<'gc, B>) {
         self.insert_child(mc, self.children_len(), child);
     }
 
@@ -310,13 +319,13 @@ impl<'gc> XmlNode<'gc> {
     ///
     /// This function yields None if the node cannot accept children or if the
     /// child node is not a child of this node.
-    pub fn child_position(self, child: XmlNode<'gc>) -> Option<usize> {
+    pub fn child_position(self, child: XmlNode<'gc, B>) -> Option<usize> {
         self.children()
             .position(|other| GcCell::ptr_eq(child.0, other.0))
     }
 
     /// Checks if `child` is a direct descendant of `self`.
-    pub fn has_child(self, child: XmlNode<'gc>) -> bool {
+    pub fn has_child(self, child: XmlNode<'gc, B>) -> bool {
         child
             .parent()
             .filter(|p| GcCell::ptr_eq(self.0, p.0))
@@ -324,22 +333,22 @@ impl<'gc> XmlNode<'gc> {
     }
 
     /// Retrieve a given child by index.
-    pub fn get_child_by_index(self, index: usize) -> Option<XmlNode<'gc>> {
+    pub fn get_child_by_index(self, index: usize) -> Option<XmlNode<'gc, B>> {
         self.0.read().children.get(index).cloned()
     }
 
     /// Returns an iterator that yields child nodes.
-    pub fn children(self) -> impl DoubleEndedIterator<Item = XmlNode<'gc>> {
+    pub fn children(self) -> impl DoubleEndedIterator<Item = XmlNode<'gc, B>> {
         xml::iterators::ChildIter::for_node(self)
     }
 
     /// Returns an iterator that yields ancestor nodes (including itself).
-    pub fn ancestors(self) -> impl Iterator<Item = XmlNode<'gc>> {
+    pub fn ancestors(self) -> impl Iterator<Item = XmlNode<'gc, B>> {
         xml::iterators::AnscIter::for_node(self)
     }
 
     /// Get the already-instantiated script object from the current node.
-    fn get_script_object(self) -> Option<Object<'gc>> {
+    fn get_script_object(self) -> Option<Object<'gc, B>> {
         self.0.read().script_object
     }
 
@@ -351,7 +360,7 @@ impl<'gc> XmlNode<'gc> {
     pub fn introduce_script_object(
         &mut self,
         gc_context: MutationContext<'gc, '_>,
-        new_object: Object<'gc>,
+        new_object: Object<'gc, B>,
     ) {
         assert!(self.get_script_object().is_none(), "An attempt was made to change the already-established link between script object and XML node. This has been denied and is likely a bug.");
         self.0.write(gc_context).script_object = Some(new_object);
@@ -359,7 +368,7 @@ impl<'gc> XmlNode<'gc> {
 
     /// Obtain the script object for a given XML tree node, constructing a new
     /// script object if one does not exist.
-    pub fn script_object(&mut self, activation: &mut Activation<'_, 'gc, '_>) -> Object<'gc> {
+    pub fn script_object(&mut self, activation: &mut Activation<'_, 'gc, '_, B>) -> Object<'gc, B> {
         match self.get_script_object() {
             Some(object) => object,
             None => {
@@ -371,7 +380,7 @@ impl<'gc> XmlNode<'gc> {
     }
 
     /// Obtain the script object for a given XML tree node's attributes.
-    pub fn attributes(&self) -> ScriptObject<'gc> {
+    pub fn attributes(&self) -> ScriptObject<'gc, B> {
         self.0.read().attributes
     }
 
@@ -411,7 +420,7 @@ impl<'gc> XmlNode<'gc> {
     ///
     /// XML namespaces are determined by `xmlns:` namespace attributes on the
     /// current node, or its parent.
-    pub fn lookup_namespace_uri(self, prefix: &WStr) -> Option<Value<'gc>> {
+    pub fn lookup_namespace_uri(self, prefix: &WStr) -> Option<Value<'gc, B>> {
         for node in self.ancestors() {
             // Iterate attributes by their definition order, so the first matching one
             // is returned.
@@ -432,8 +441,8 @@ impl<'gc> XmlNode<'gc> {
     /// Convert the given node to a string of UTF-8 encoded XML.
     pub fn into_string(
         self,
-        activation: &mut Activation<'_, 'gc, '_>,
-    ) -> Result<WString, Error<'gc>> {
+        activation: &mut Activation<'_, 'gc, '_, B>,
+    ) -> Result<WString, Error<'gc, B>> {
         let mut result = WString::new();
         self.write_node_to_string(activation, &mut result)?;
         Ok(result)
@@ -442,9 +451,9 @@ impl<'gc> XmlNode<'gc> {
     /// Write the contents of this node, including its children, to the given string.
     fn write_node_to_string(
         self,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
         result: &mut WString,
-    ) -> Result<(), Error<'gc>> {
+    ) -> Result<(), Error<'gc, B>> {
         // TODO: we convert some strings to utf8, replacing unpaired surrogates by the replacement char.
         // It is correct?
         if self.0.read().node_type == ELEMENT_NODE {
@@ -492,7 +501,7 @@ impl<'gc> XmlNode<'gc> {
     }
 }
 
-impl<'gc> fmt::Debug for XmlNode<'gc> {
+impl<'gc, B: Backend> fmt::Debug for XmlNode<'gc, B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("XmlNodeData")
             .field("0", &self.0.as_ptr())

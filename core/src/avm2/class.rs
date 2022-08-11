@@ -70,11 +70,11 @@ macro_rules! define_indirect_properties {
                 // pass it to `Method::from_builtin`. Therefore, we substitute
                 // $name directly into the function body, rather than writing
                 // a closure and accessing `name` as an upvar.
-                fn getter<'gc>(
-                    activation: &mut Activation<'_, 'gc, '_>,
-                    this: Option<Object<'gc>>,
-                    _args: &[Value<'gc>]
-                ) -> Result<Value<'gc>, Error> {
+                fn getter<'gc, B: Backend>(
+                    activation: &mut Activation<'_, 'gc, '_, B>,
+                    this: Option<Object<'gc, B>>,
+                    _args: &[Value<'gc, B>]
+                ) -> Result<Value<'gc, B>, Error> {
                     use crate::avm2::names::QName;
                     use crate::avm2::globals::NS_RUFFLE_INTERNAL;
 
@@ -103,6 +103,7 @@ macro_rules! define_indirect_properties {
     }
 }
 pub(crate) use define_indirect_properties;
+use ruffle_types::backend::Backend;
 
 /// A function that can be used to allocate instances of a class.
 ///
@@ -117,14 +118,16 @@ pub(crate) use define_indirect_properties;
 ///  current class (using a superclass will cause the wrong class to be
 ///  read for traits).
 ///  * `activation` - The current AVM2 activation.
-pub type AllocatorFn =
-    for<'gc> fn(ClassObject<'gc>, &mut Activation<'_, 'gc, '_>) -> Result<Object<'gc>, Error>;
+pub type AllocatorFn<B: Backend> = for<'gc> fn(
+    ClassObject<'gc, B>,
+    &mut Activation<'_, 'gc, '_, B>,
+) -> Result<Object<'gc, B>, Error>;
 
 #[derive(Clone, Collect)]
 #[collect(require_static)]
-pub struct Allocator(pub AllocatorFn);
+pub struct Allocator<B: Backend>(pub AllocatorFn<B>);
 
-impl fmt::Debug for Allocator {
+impl<B: Backend> fmt::Debug for Allocator<B> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("Allocator")
             .field(&"<native code>".to_string())
@@ -135,12 +138,12 @@ impl fmt::Debug for Allocator {
 /// A loaded ABC Class which can be used to construct objects with.
 #[derive(Clone, Debug, Collect)]
 #[collect(no_drop)]
-pub struct Class<'gc> {
+pub struct Class<'gc, B: Backend> {
     /// The name of the class.
     name: QName<'gc>,
 
     /// The type parameters for this class.
-    params: Vec<GcCell<'gc, Class<'gc>>>,
+    params: Vec<GcCell<'gc, Class<'gc, B>>>,
 
     /// The name of this class's superclass.
     super_class: Option<Multiname<'gc>>,
@@ -160,12 +163,12 @@ pub struct Class<'gc> {
     /// If `None`, then instances of this object will be allocated the same way
     /// as the superclass specifies; or if there is no superclass, it will be
     /// allocated as a `ScriptObject`.
-    instance_allocator: Option<Allocator>,
+    instance_allocator: Option<Allocator<B>>,
 
     /// The instance initializer for this class.
     ///
     /// Must be called each time a new class instance is constructed.
-    instance_init: Method<'gc>,
+    instance_init: Method<'gc, B>,
 
     /// The native instance initializer for this class.
     ///
@@ -179,37 +182,37 @@ pub struct Class<'gc> {
     /// same method as the regular one. You must specify a separate native
     /// initializer to change initialization behavior based on what code is
     /// constructing the class.
-    native_instance_init: Method<'gc>,
+    native_instance_init: Method<'gc, B>,
 
     /// Instance traits for a given class.
     ///
     /// These are accessed as normal instance properties; they should not be
     /// present on prototypes, but instead should shadow any prototype
     /// properties that would match.
-    instance_traits: Vec<Trait<'gc>>,
+    instance_traits: Vec<Trait<'gc, B>>,
 
     /// The class initializer for this class.
     ///
     /// Must be called once and only once prior to any use of this class.
-    class_init: Method<'gc>,
+    class_init: Method<'gc, B>,
 
     /// Whether or not the class initializer has already been called.
     class_initializer_called: bool,
 
     /// The customization point for `Class(args...)` without `new`
     /// If None, a simple coercion is done.
-    call_handler: Option<Method<'gc>>,
+    call_handler: Option<Method<'gc, B>>,
 
     /// The class initializer for specializations of this class.
     ///
     /// Only applies for generic classes. Must be called once and only once
     /// per specialization, prior to any use of the specialized class.
-    specialized_class_init: Method<'gc>,
+    specialized_class_init: Method<'gc, B>,
 
     /// Static traits for a given class.
     ///
     /// These are accessed as class object properties.
-    class_traits: Vec<Trait<'gc>>,
+    class_traits: Vec<Trait<'gc, B>>,
 
     /// Whether or not this `Class` has loaded its traits or not.
     traits_loaded: bool,
@@ -221,7 +224,7 @@ pub struct Class<'gc> {
     is_system: bool,
 }
 
-impl<'gc> Class<'gc> {
+impl<'gc, B: Backend> Class<'gc, B> {
     /// Create a new class.
     ///
     /// This function is primarily intended for use by native code to define
@@ -233,8 +236,8 @@ impl<'gc> Class<'gc> {
     pub fn new(
         name: QName<'gc>,
         super_class: Option<Multiname<'gc>>,
-        instance_init: Method<'gc>,
-        class_init: Method<'gc>,
+        instance_init: Method<'gc, B>,
+        class_init: Method<'gc, B>,
         mc: MutationContext<'gc, '_>,
     ) -> GcCell<'gc, Self> {
         let native_instance_init = instance_init.clone();
@@ -273,9 +276,9 @@ impl<'gc> Class<'gc> {
     /// longer be generic.
     pub fn with_type_params(
         &self,
-        params: &[GcCell<'gc, Class<'gc>>],
+        params: &[GcCell<'gc, Class<'gc, B>>],
         mc: MutationContext<'gc, '_>,
-    ) -> GcCell<'gc, Class<'gc>> {
+    ) -> GcCell<'gc, Class<'gc, B>> {
         let mut new_class = self.clone();
 
         new_class.params = params.to_vec();
@@ -297,9 +300,9 @@ impl<'gc> Class<'gc> {
     /// caller is responsible for storing the class in the `TranslationUnit`
     /// and calling `load_traits` to complete the trait-loading process.
     pub fn from_abc_index(
-        unit: TranslationUnit<'gc>,
+        unit: TranslationUnit<'gc, B>,
         class_index: u32,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<GcCell<'gc, Self>, Error> {
         let abc = unit.abc();
         let abc_class: Result<&AbcClass, Error> = abc
@@ -400,9 +403,9 @@ impl<'gc> Class<'gc> {
     /// instantiated into an `Object`.
     pub fn load_traits(
         &mut self,
-        unit: TranslationUnit<'gc>,
+        unit: TranslationUnit<'gc, B>,
         class_index: u32,
-        activation: &mut Activation<'_, 'gc, '_>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
     ) -> Result<(), Error> {
         if self.traits_loaded {
             return Ok(());
@@ -441,7 +444,7 @@ impl<'gc> Class<'gc> {
     /// This should be called at class creation time once the superclass name
     /// has been resolved. It will return Ok for a valid class, and a
     /// VerifyError for any invalid class.
-    pub fn validate_class(&self, superclass: Option<ClassObject<'gc>>) -> Result<(), Error> {
+    pub fn validate_class(&self, superclass: Option<ClassObject<'gc, B>>) -> Result<(), Error> {
         // System classes do not throw verify errors.
         if self.is_system {
             return Ok(());
@@ -506,8 +509,8 @@ impl<'gc> Class<'gc> {
     }
 
     pub fn for_activation(
-        activation: &mut Activation<'_, 'gc, '_>,
-        translation_unit: TranslationUnit<'gc>,
+        activation: &mut Activation<'_, 'gc, '_, B>,
+        translation_unit: TranslationUnit<'gc, B>,
         method: &AbcMethod,
         body: &AbcMethodBody,
     ) -> Result<GcCell<'gc, Self>, Error> {
@@ -628,8 +631,8 @@ impl<'gc> Class<'gc> {
         mc: MutationContext<'gc, '_>,
         items: &[(
             &'static str,
-            Option<NativeMethodImpl>,
-            Option<NativeMethodImpl>,
+            Option<NativeMethodImpl<B>>,
+            Option<NativeMethodImpl<B>>,
         )],
     ) {
         for &(name, getter, setter) in items {
@@ -651,7 +654,7 @@ impl<'gc> Class<'gc> {
     pub fn define_public_builtin_instance_methods(
         &mut self,
         mc: MutationContext<'gc, '_>,
-        items: &[(&'static str, NativeMethodImpl)],
+        items: &[(&'static str, NativeMethodImpl<B>)],
     ) {
         for &(name, value) in items {
             self.define_instance_trait(Trait::from_method(
@@ -664,7 +667,7 @@ impl<'gc> Class<'gc> {
     pub fn define_as3_builtin_class_methods(
         &mut self,
         mc: MutationContext<'gc, '_>,
-        items: &[(&'static str, NativeMethodImpl)],
+        items: &[(&'static str, NativeMethodImpl<B>)],
     ) {
         for &(name, value) in items {
             self.define_class_trait(Trait::from_method(
@@ -677,7 +680,7 @@ impl<'gc> Class<'gc> {
     pub fn define_as3_builtin_instance_methods(
         &mut self,
         mc: MutationContext<'gc, '_>,
-        items: &[(&'static str, NativeMethodImpl)],
+        items: &[(&'static str, NativeMethodImpl<B>)],
     ) {
         for &(name, value) in items {
             self.define_instance_trait(Trait::from_method(
@@ -691,7 +694,7 @@ impl<'gc> Class<'gc> {
         &mut self,
         mc: MutationContext<'gc, '_>,
         ns: &'static str,
-        items: &[(&'static str, NativeMethodImpl)],
+        items: &[(&'static str, NativeMethodImpl<B>)],
     ) {
         for &(name, value) in items {
             self.define_instance_trait(Trait::from_method(
@@ -704,7 +707,7 @@ impl<'gc> Class<'gc> {
     pub fn define_public_builtin_class_methods(
         &mut self,
         mc: MutationContext<'gc, '_>,
-        items: &[(&'static str, NativeMethodImpl)],
+        items: &[(&'static str, NativeMethodImpl<B>)],
     ) {
         for &(name, value) in items {
             self.define_class_trait(Trait::from_method(
@@ -719,8 +722,8 @@ impl<'gc> Class<'gc> {
         mc: MutationContext<'gc, '_>,
         items: &[(
             &'static str,
-            Option<NativeMethodImpl>,
-            Option<NativeMethodImpl>,
+            Option<NativeMethodImpl<B>>,
+            Option<NativeMethodImpl<B>>,
         )],
     ) {
         for &(name, getter, setter) in items {
@@ -797,12 +800,12 @@ impl<'gc> Class<'gc> {
     /// Define a trait on the class.
     ///
     /// Class traits will be accessible as properties on the class object.
-    pub fn define_class_trait(&mut self, my_trait: Trait<'gc>) {
+    pub fn define_class_trait(&mut self, my_trait: Trait<'gc, B>) {
         self.class_traits.push(my_trait);
     }
 
     /// Return class traits provided by this class.
-    pub fn class_traits(&self) -> &[Trait<'gc>] {
+    pub fn class_traits(&self) -> &[Trait<'gc, B>] {
         &self.class_traits[..]
     }
 
@@ -811,12 +814,12 @@ impl<'gc> Class<'gc> {
     /// Instance traits will be accessible as properties on instances of the
     /// class. They will not be accessible on the class prototype, and any
     /// properties defined on the prototype will be shadowed by these traits.
-    pub fn define_instance_trait(&mut self, my_trait: Trait<'gc>) {
+    pub fn define_instance_trait(&mut self, my_trait: Trait<'gc, B>) {
         self.instance_traits.push(my_trait);
     }
 
     /// Return instance traits provided by this class.
-    pub fn instance_traits(&self) -> &[Trait<'gc>] {
+    pub fn instance_traits(&self) -> &[Trait<'gc, B>] {
         &self.instance_traits[..]
     }
 
@@ -824,42 +827,42 @@ impl<'gc> Class<'gc> {
     ///
     /// If `None`, then you should use the instance allocator of the superclass
     /// or allocate as a `ScriptObject` if no such class exists.
-    pub fn instance_allocator(&self) -> Option<AllocatorFn> {
+    pub fn instance_allocator(&self) -> Option<AllocatorFn<B>> {
         self.instance_allocator.as_ref().map(|a| a.0)
     }
 
     /// Set this class's instance allocator.
-    pub fn set_instance_allocator(&mut self, alloc: AllocatorFn) {
+    pub fn set_instance_allocator(&mut self, alloc: AllocatorFn<B>) {
         self.instance_allocator = Some(Allocator(alloc));
     }
 
     /// Get this class's instance initializer.
-    pub fn instance_init(&self) -> Method<'gc> {
+    pub fn instance_init(&self) -> Method<'gc, B> {
         self.instance_init.clone()
     }
 
     /// Get this class's native-code instance initializer.
-    pub fn native_instance_init(&self) -> Method<'gc> {
+    pub fn native_instance_init(&self) -> Method<'gc, B> {
         self.native_instance_init.clone()
     }
 
     /// Set a native-code instance initializer for this class.
-    pub fn set_native_instance_init(&mut self, new_native_init: Method<'gc>) {
+    pub fn set_native_instance_init(&mut self, new_native_init: Method<'gc, B>) {
         self.native_instance_init = new_native_init;
     }
 
     /// Get this class's class initializer.
-    pub fn class_init(&self) -> Method<'gc> {
+    pub fn class_init(&self) -> Method<'gc, B> {
         self.class_init.clone()
     }
 
     /// Set a call handler for this class.
-    pub fn set_call_handler(&mut self, new_call_handler: Method<'gc>) {
+    pub fn set_call_handler(&mut self, new_call_handler: Method<'gc, B>) {
         self.call_handler = Some(new_call_handler);
     }
 
     /// Get this class's call handler.
-    pub fn call_handler(&self) -> Option<Method<'gc>> {
+    pub fn call_handler(&self) -> Option<Method<'gc, B>> {
         self.call_handler.clone()
     }
 
@@ -874,7 +877,7 @@ impl<'gc> Class<'gc> {
     }
 
     /// Set the class initializer for specializations of this class.
-    pub fn set_specialized_init(&mut self, specialized_init: Method<'gc>) {
+    pub fn set_specialized_init(&mut self, specialized_init: Method<'gc, B>) {
         self.specialized_class_init = specialized_init;
     }
 
@@ -906,7 +909,7 @@ impl<'gc> Class<'gc> {
         self.attributes.contains(ClassAttributes::GENERIC)
     }
 
-    pub fn params(&self) -> &[GcCell<'gc, Class<'gc>>] {
+    pub fn params(&self) -> &[GcCell<'gc, Class<'gc, B>>] {
         &self.params[..]
     }
 }

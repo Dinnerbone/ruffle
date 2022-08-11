@@ -4,6 +4,7 @@ use crate::context::UpdateContext;
 use crate::html::iterators::TextSpanIter;
 use gc_arena::Collect;
 use quick_xml::{escape::escape, events::Event, Reader};
+use ruffle_types::backend::Backend;
 use ruffle_types::string::{Integer, Units, WStr, WString};
 use ruffle_types::tag_utils::SwfMovie;
 use std::borrow::Cow;
@@ -135,10 +136,10 @@ impl TextFormat {
     ///
     /// This requires an `UpdateContext` as we will need to retrieve some font
     /// information from the actually-referenced font.
-    pub fn from_swf_tag<'gc>(
+    pub fn from_swf_tag<'gc, B: Backend>(
         et: swf::EditText<'_>,
         swf_movie: Arc<SwfMovie>,
-        context: &mut UpdateContext<'_, 'gc, '_>,
+        context: &mut UpdateContext<'_, 'gc, '_, B>,
     ) -> Self {
         let encoding = swf_movie.encoding();
         let movie_library = context.library.library_for_movie_mut(swf_movie);
