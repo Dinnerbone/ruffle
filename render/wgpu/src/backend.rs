@@ -180,7 +180,66 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
                 }
             })?;
 
-        let (device, queue) = request_device(&adapter, trace_path).await?;
+        let (limits, features) = required_limits(&adapter);
+        let (device, queue) = adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label: None,
+                    features,
+                    limits,
+                },
+                trace_path,
+            )
+            .await?;
+
+        Ok(Descriptors::new(adapter, device, queue))
+    }
+
+    /// # Safety
+    ///
+    /// - `raw_device` must be created using `family_index`, `enabled_extensions` and `physical_device_features()`
+    /// - `enabled_extensions` must be a superset of `Adapter::required_device_extensions()`
+    #[cfg(all(feature = "with_hal", feature = "vulkan"))]
+    #[allow(clippy::too_many_arguments)]
+    pub async unsafe fn build_descriptors_for_vulkan(
+        phd: ash::vk::PhysicalDevice,
+        raw_device: ash::Device,
+        handle_is_owned: bool,
+        enabled_extensions: &[&'static std::ffi::CStr],
+        features: wgpu::Features,
+        uab_types: wgpu_hal::UpdateAfterBindTypes,
+        family_index: u32,
+        queue_index: u32,
+        trace_path: Option<&Path>,
+    ) -> Result<Descriptors, Error> {
+        use wgpu_hal::api::Vulkan;
+        let instance = wgpu::Instance::new(wgpu::Backends::VULKAN);
+        let instance_hal = instance
+            .as_hal::<Vulkan>()
+            .expect("Backend made for Vulkan should exist for Vulkan");
+        let adapter_hal = instance_hal
+            .expose_adapter(phd)
+            .expect("expose_adapter should be infallible");
+        let open_device = adapter_hal.adapter.device_from_raw(
+            raw_device,
+            handle_is_owned,
+            enabled_extensions,
+            features,
+            uab_types,
+            family_index,
+            queue_index,
+        )?;
+        let adapter = instance.create_adapter_from_hal(adapter_hal);
+        let (limits, features) = required_limits(&adapter);
+        let (device, queue) = adapter.create_device_from_hal(
+            open_device,
+            &wgpu::DeviceDescriptor {
+                label: None,
+                features,
+                limits,
+            },
+            trace_path,
+        )?;
 
         Ok(Descriptors::new(adapter, device, queue))
     }
@@ -563,10 +622,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
 }
 
 // We try to request the highest limits we can get away with
-async fn request_device(
-    adapter: &wgpu::Adapter,
-    trace_path: Option<&Path>,
-) -> Result<(wgpu::Device, wgpu::Queue), wgpu::RequestDeviceError> {
+fn required_limits(adapter: &wgpu::Adapter) -> (wgpu::Limits, wgpu::Features) {
     // We start off with the lowest limits we actually need - basically GL-ES 3.0
     let mut limits = wgpu::Limits::downlevel_webgl2_defaults();
     // Then we increase parts of it to the maximum supported by the adapter, to take advantage of
@@ -578,15 +634,7 @@ async fn request_device(
         adapter.limits().max_storage_buffers_per_shader_stage;
     limits.max_storage_buffer_binding_size = adapter.limits().max_storage_buffer_binding_size;
 
-    adapter
-        .request_device(
-            &wgpu::DeviceDescriptor {
-                label: None,
-                features: wgpu::Features::DEPTH24PLUS_STENCIL8
-                    | wgpu::Features::VERTEX_WRITABLE_STORAGE,
-                limits,
-            },
-            trace_path,
-        )
-        .await
+    let features = wgpu::Features::DEPTH24PLUS_STENCIL8;
+
+    (limits, features)
 }

@@ -9,6 +9,8 @@ version.workspace = true
 
 [dependencies]
 wgpu = { version = "0.14.2", features = ["naga"] }
+wgpu-core = { version = "0.14.2", optional = true }
+wgpu-hal = { version = "0.14.1", optional = true, features = ["gles"] }
 log = "0.4"
 ruffle_render = { path = "..", features = ["tessellator"] }
 bytemuck = { version = "1.12.3", features = ["derive"] }
@@ -24,6 +26,7 @@ once_cell = "1.16.0"
 gc-arena = { git = "https://github.com/ruffle-rs/gc-arena" }
 naga-agal = { path = "../naga-agal" }
 downcast-rs = "1.2.0"
+ash = {version = "0.37", optional = true}
 
 # desktop
 [target.'cfg(not(target_family = "wasm"))'.dependencies.futures]
@@ -35,6 +38,9 @@ version = "0.3.60"
 features = ["HtmlCanvasElement"]
 
 [features]
+default = ["wgpu-hal"]
 render_debug_labels = []
 render_trace = ["wgpu/trace"]
 webgl = ["wgpu/webgl"]
+with_hal = ["wgpu-core", "wgpu-hal"]
+vulkan = ["ash"]

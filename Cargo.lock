@@ -3499,6 +3499,7 @@ dependencies = [
 name = "ruffle_render_wgpu"
 version = "0.1.0"
 dependencies = [
+ "ash",
  "bytemuck",
  "clap",
  "downcast-rs",
@@ -3517,6 +3518,8 @@ dependencies = [
  "typed-arena",
  "web-sys",
  "wgpu",
+ "wgpu-core",
+ "wgpu-hal",
 ]
 
 [[package]]
