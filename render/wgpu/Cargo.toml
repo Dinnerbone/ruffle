@@ -10,7 +10,7 @@ version.workspace = true
 [dependencies]
 wgpu = { version = "0.14.2", features = ["naga"] }
 wgpu-core = { version = "0.14.2", optional = true }
-wgpu-hal = { version = "0.14.1", optional = true, features = ["gles"] }
+wgpu-hal = { version = "0.14.1", optional = true, features = [] }
 log = "0.4"
 ruffle_render = { path = "..", features = ["tessellator"] }
 bytemuck = { version = "1.12.3", features = ["derive"] }

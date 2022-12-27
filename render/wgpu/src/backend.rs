@@ -256,13 +256,10 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
         trace_path: Option<&Path>,
     ) -> Result<Descriptors, Error> {
         use wgpu_hal::api::Gles;
+        use wgpu_hal::Api;
         let instance = wgpu::Instance::new(wgpu::Backends::GL);
-        let instance_hal = instance
-            .as_hal::<Gles>()
-            .expect("Backend made for GL should exist for GL");
-        let adapter_hal = instance_hal
-            .new_external(fun)
-            .expect("expose_adapter should be infallible");
+        let adapter_hal =
+            <Gles as Api>::Adapter::new_external(fun).expect("expose_adapter should be infallible");
         let adapter = instance.create_adapter_from_hal(adapter_hal);
         let (limits, features) = required_limits(&adapter);
         let (device, queue) = adapter
