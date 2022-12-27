@@ -261,20 +261,20 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
             .as_hal::<Gles>()
             .expect("Backend made for GL should exist for GL");
         let adapter_hal = instance_hal
-            .expose_adapter(phd)
+            .new_external(fun)
             .expect("expose_adapter should be infallible");
-        let open_device = adapter_hal.adapter.new_external(fun)?;
         let adapter = instance.create_adapter_from_hal(adapter_hal);
         let (limits, features) = required_limits(&adapter);
-        let (device, queue) = adapter.create_device_from_hal(
-            open_device,
-            &wgpu::DeviceDescriptor {
-                label: None,
-                features,
-                limits,
-            },
-            trace_path,
-        )?;
+        let (device, queue) = adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    label: None,
+                    features,
+                    limits,
+                },
+                trace_path,
+            )
+            .await?;
 
         Ok(Descriptors::new(adapter, device, queue))
     }
