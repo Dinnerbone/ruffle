@@ -11,7 +11,7 @@ version.workspace = true
 clap = { version = "4.0.32", features = ["derive"] }
 cpal = "0.14.2"
 ruffle_core = { path = "../core", features = ["audio", "mp3", "nellymoser"] }
-ruffle_render_wgpu = { path = "../render/wgpu", features = ["clap", "with_hal", "vulkan"] }
+ruffle_render_wgpu = { path = "../render/wgpu", features = ["clap"] }
 ruffle_video_software = { path = "../video/software", optional = true }
 env_logger = { version = "0.10", default-features = false, features = ["humantime"] }
 generational-arena = "0.2.8"

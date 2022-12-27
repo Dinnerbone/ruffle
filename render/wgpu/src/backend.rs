@@ -244,6 +244,41 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
         Ok(Descriptors::new(adapter, device, queue))
     }
 
+    /// # Safety
+    ///
+    /// - The underlying OpenGL ES context must be current.
+    /// - The underlying OpenGL ES context must be current when interfacing with any objects returned by
+    ///   wgpu-hal.
+    #[cfg(all(feature = "with_hal", feature = "gl"))]
+    #[allow(clippy::too_many_arguments)]
+    pub async unsafe fn build_descriptors_for_gl(
+        fun: impl FnMut(&str) -> *const core::ffi::c_void,
+        trace_path: Option<&Path>,
+    ) -> Result<Descriptors, Error> {
+        use wgpu_hal::api::Gles;
+        let instance = wgpu::Instance::new(wgpu::Backends::GL);
+        let instance_hal = instance
+            .as_hal::<Gles>()
+            .expect("Backend made for GL should exist for GL");
+        let adapter_hal = instance_hal
+            .expose_adapter(phd)
+            .expect("expose_adapter should be infallible");
+        let open_device = adapter_hal.adapter.new_external(fun)?;
+        let adapter = instance.create_adapter_from_hal(adapter_hal);
+        let (limits, features) = required_limits(&adapter);
+        let (device, queue) = adapter.create_device_from_hal(
+            open_device,
+            &wgpu::DeviceDescriptor {
+                label: None,
+                features,
+                limits,
+            },
+            trace_path,
+        )?;
+
+        Ok(Descriptors::new(adapter, device, queue))
+    }
+
     fn register_shape_internal(
         &mut self,
         shape: DistilledShape,

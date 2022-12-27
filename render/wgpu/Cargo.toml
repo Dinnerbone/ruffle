@@ -38,9 +38,9 @@ version = "0.3.60"
 features = ["HtmlCanvasElement"]
 
 [features]
-default = ["wgpu-hal"]
 render_debug_labels = []
 render_trace = ["wgpu/trace"]
 webgl = ["wgpu/webgl"]
 with_hal = ["wgpu-core", "wgpu-hal"]
 vulkan = ["ash"]
+gl = []
