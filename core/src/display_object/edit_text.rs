@@ -1652,7 +1652,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
             Twips::ZERO,
         );
         context.commands.draw_rect(
-            Color::BLACK,
+            Color::WHITE,
             context.transform_stack.transform().matrix * mask,
         );
         context.commands.activate_mask();
@@ -1710,7 +1710,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
 
         context.commands.deactivate_mask();
         context.commands.draw_rect(
-            Color::BLACK,
+            Color::WHITE,
             context.transform_stack.transform().matrix * mask,
         );
         context.commands.pop_mask();
