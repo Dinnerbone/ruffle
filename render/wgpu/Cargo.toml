@@ -25,6 +25,7 @@ gc-arena = { git = "https://github.com/ruffle-rs/gc-arena" }
 naga-agal = { path = "../naga-agal" }
 downcast-rs = "1.2.0"
 profiling = { version = "1.0", default-features = false, optional = true }
+naga_oil = "0.4.2"
 
 # desktop
 [target.'cfg(not(target_family = "wasm"))'.dependencies.futures]
