@@ -1054,7 +1054,7 @@ impl<'gc> BitmapData<'gc> {
                     bitmap_data.update_dirty_texture(&mut render_context);
                     let bitmap_handle = bitmap_data.bitmap_handle(render_context.renderer).unwrap();
                     render_context.commands.render_bitmap(
-                        &bitmap_handle,
+                        bitmap_handle,
                         render_context.transform_stack.transform(),
                         smoothing,
                     );
@@ -1073,7 +1073,7 @@ impl<'gc> BitmapData<'gc> {
             render_context.commands
         } else {
             let mut commands = CommandList::new();
-            commands.blend(&render_context.commands, blend_mode);
+            commands.blend(render_context.commands, blend_mode);
             commands
         };
 

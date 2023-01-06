@@ -892,7 +892,7 @@ impl<'gc> EditText<'gc> {
                                     x + Twips::from_pixels(-1.0),
                                     Twips::from_pixels(2.0),
                                 );
-                            context.commands.draw_rect(Color::BLACK, &selection_box);
+                            context.commands.draw_rect(Color::BLACK, selection_box);
 
                             // Set text color to white
                             context.transform_stack.push(&Transform {
@@ -922,7 +922,7 @@ impl<'gc> EditText<'gc> {
                                     x + Twips::from_pixels(-1.0),
                                     Twips::from_pixels(2.0),
                                 );
-                            context.commands.draw_rect(color.clone(), &caret);
+                            context.commands.draw_rect(color.clone(), caret);
                         } else if pos == length - 1 && caret_pos == length {
                             let caret = context.transform_stack.transform().matrix
                                 * Matrix::create_box(
@@ -932,7 +932,7 @@ impl<'gc> EditText<'gc> {
                                     x + advance,
                                     Twips::from_pixels(2.0),
                                 );
-                            context.commands.draw_rect(color.clone(), &caret);
+                            context.commands.draw_rect(color.clone(), caret);
                         }
                     }
                 },
@@ -1653,7 +1653,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
         );
         context.commands.draw_rect(
             Color::BLACK,
-            &(context.transform_stack.transform().matrix * mask),
+            context.transform_stack.transform().matrix * mask,
         );
         context.commands.activate_mask();
 
@@ -1697,7 +1697,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
                             Twips::from_pixels(-1.0),
                             Twips::from_pixels(2.0),
                         );
-                    context.commands.draw_rect(Color::BLACK, &caret);
+                    context.commands.draw_rect(Color::BLACK, caret);
                 }
             }
         } else {
@@ -1711,7 +1711,7 @@ impl<'gc> TDisplayObject<'gc> for EditText<'gc> {
         context.commands.deactivate_mask();
         context.commands.draw_rect(
             Color::BLACK,
-            &(context.transform_stack.transform().matrix * mask),
+            context.transform_stack.transform().matrix * mask,
         );
         context.commands.pop_mask();
 
