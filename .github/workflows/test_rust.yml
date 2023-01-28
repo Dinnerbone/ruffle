@@ -80,13 +80,13 @@ jobs:
 
       - name: Run tests with image tests
         if: runner.os == 'Linux' || runner.os == 'Windows'
-        run: cargo test --locked --features imgtests
+        run: cargo test --locked --features imgtests --release
         env:
           XDG_RUNTIME_DIR: '' # dummy value, just to silence warnings about it missing
 
       - name: Run tests without image tests
         if: ${{ !(runner.os == 'Linux' || runner.os == 'Windows') }}
-        run: cargo test --locked
+        run: cargo test --locked --release
 
       - name: Upload images
         if: failure()
