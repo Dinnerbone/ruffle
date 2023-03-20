@@ -23,6 +23,9 @@ impl fmt::Debug for GamepadObject<'_> {
     }
 }
 
+// Note that many objects can exist for the same handle
+// Nothing more useful than the handle should really be stored here
+
 #[derive(Collect, Clone)]
 #[collect(no_drop)]
 pub struct GamepadObjectData<'gc> {

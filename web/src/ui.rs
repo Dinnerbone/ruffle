@@ -1,5 +1,5 @@
 use super::JavascriptPlayer;
-use ruffle_core::backend::ui::{FullscreenError, MouseCursor, UiBackend};
+use ruffle_core::backend::ui::{FullscreenError, GamepadHandle, MouseCursor, UiBackend};
 use ruffle_web_common::JsResult;
 use std::borrow::Cow;
 use web_sys::HtmlCanvasElement;
@@ -93,5 +93,9 @@ impl UiBackend for WebUiBackend {
             return navigator.get_gamepads().is_ok();
         }
         false
+    }
+
+    fn gamepad_name(&self, _handle: GamepadHandle) -> Option<String> {
+        None
     }
 }

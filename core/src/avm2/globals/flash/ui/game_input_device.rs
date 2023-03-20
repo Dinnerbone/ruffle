@@ -1,4 +1,5 @@
 use crate::avm2::{Activation, Error, Object, TObject, Value};
+use crate::string::AvmString;
 use crate::{avm2_stub_getter, avm2_stub_method, avm2_stub_setter};
 
 // Note that Flash allows anyone to `new GameInputDevice()`.
@@ -61,10 +62,15 @@ pub fn get_id<'gc>(
 /// Implements `name`'s getter
 pub fn get_name<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Option<Object<'gc>>,
+    this: Option<Object<'gc>>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    avm2_stub_getter!(activation, "flash.ui.GameInputDevice", "name");
+    if let Some(gamepad) = this.and_then(|o| o.as_gamepad_object()) {
+        let handle = gamepad.handle();
+        if let Some(name) = activation.context.ui.gamepad_name(handle) {
+            return Ok(AvmString::new_utf8(activation.context.gc_context, name).into());
+        }
+    }
     Ok(Value::Null)
 }
 

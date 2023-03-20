@@ -38,6 +38,9 @@ pub trait UiBackend: Downcast {
 
     /// Whether or not this platform supports gamepads.
     fn supports_gamepads(&self) -> bool;
+
+    /// Gets the name of a given gamepad.
+    fn gamepad_name(&self, handle: GamepadHandle) -> Option<String>;
 }
 
 impl_downcast!(UiBackend);
@@ -165,6 +168,10 @@ impl UiBackend for NullUiBackend {
 
     fn supports_gamepads(&self) -> bool {
         false
+    }
+
+    fn gamepad_name(&self, _handle: GamepadHandle) -> Option<String> {
+        None
     }
 }
 

@@ -1,7 +1,7 @@
 use crate::custom_event::RuffleEvent;
 use anyhow::{Context, Error};
 use arboard::Clipboard;
-use gilrs::{EventType, Gilrs};
+use gilrs::{EventType, Gamepad, GamepadId, Gilrs};
 use rfd::{MessageButtons, MessageDialog, MessageLevel};
 use ruffle_core::backend::ui::{FullscreenError, GamepadHandle, MouseCursor, UiBackend};
 use std::rc::Rc;
@@ -15,6 +15,7 @@ pub struct DesktopUiBackend {
     clipboard: Clipboard,
     gilrs: Option<Gilrs>,
     event_loop: EventLoopProxy<RuffleEvent>,
+    gamepads: Vec<GamepadId>,
 }
 
 impl DesktopUiBackend {
@@ -32,12 +33,19 @@ impl DesktopUiBackend {
             clipboard: Clipboard::new().context("Couldn't get platform clipboard")?,
             gilrs,
             event_loop,
+            gamepads: vec![],
         })
     }
 
     pub fn poll_gamepad_events(&mut self) {
         if let Some(gilrs) = &mut self.gilrs {
             while let Some(event) = gilrs.next_event() {
+                // Annoying workaround for the fact that we can't make `GamepadId`s
+                let id = usize::from(event.id);
+                if id == self.gamepads.len() {
+                    self.gamepads.push(event.id);
+                }
+
                 match &event.event {
                     EventType::Connected => {
                         let _ = self.event_loop.send_event(RuffleEvent::GamepadChanged {
@@ -55,6 +63,15 @@ impl DesktopUiBackend {
                 }
             }
         }
+    }
+
+    fn get_gamepad(&self, handle: GamepadHandle) -> Option<Gamepad> {
+        if let Some(gilrs) = &self.gilrs {
+            if let Some(id) = self.gamepads.get(handle.0) {
+                return Some(gilrs.gamepad(*id));
+            }
+        }
+        None
     }
 }
 
@@ -136,5 +153,12 @@ impl UiBackend for DesktopUiBackend {
 
     fn supports_gamepads(&self) -> bool {
         self.gilrs.is_some()
+    }
+
+    fn gamepad_name(&self, handle: GamepadHandle) -> Option<String> {
+        if let Some(gamepad) = self.get_gamepad(handle) {
+            return Some(gamepad.name().to_string());
+        }
+        None
     }
 }
