@@ -1,5 +1,6 @@
 use anyhow::{Context, Error};
 use arboard::Clipboard;
+use gilrs::Gilrs;
 use rfd::{MessageButtons, MessageDialog, MessageLevel};
 use ruffle_core::backend::ui::{FullscreenError, MouseCursor, UiBackend};
 use std::rc::Rc;
@@ -10,14 +11,23 @@ pub struct DesktopUiBackend {
     window: Rc<Window>,
     cursor_visible: bool,
     clipboard: Clipboard,
+    gilrs: Option<Gilrs>,
 }
 
 impl DesktopUiBackend {
     pub fn new(window: Rc<Window>) -> Result<Self, Error> {
+        let gilrs = match Gilrs::new() {
+            Ok(gilrs) => Some(gilrs),
+            Err(e) => {
+                tracing::warn!("Gamepad support not available: {e}");
+                None
+            }
+        };
         Ok(Self {
             window,
             cursor_visible: true,
             clipboard: Clipboard::new().context("Couldn't get platform clipboard")?,
+            gilrs,
         })
     }
 }
@@ -97,4 +107,8 @@ impl UiBackend for DesktopUiBackend {
 
     // Unused on desktop
     fn open_virtual_keyboard(&self) {}
+
+    fn supports_gamepads(&self) -> bool {
+        self.gilrs.is_some()
+    }
 }

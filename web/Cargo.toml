@@ -62,5 +62,5 @@ features = [
     "AudioNode", "AudioParam", "Blob", "BlobPropertyBag", "ChannelMergerNode",
     "ChannelSplitterNode", "Element", "Event", "EventTarget", "GainNode", "HtmlCanvasElement",
     "HtmlElement", "HtmlFormElement", "KeyboardEvent", "Location", "PointerEvent", "Request", "RequestInit", "Response",
-    "Storage", "WheelEvent", "Window",
+    "Storage", "WheelEvent", "Window", "Navigator", "Gamepad"
 ]

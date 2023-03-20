@@ -86,4 +86,12 @@ impl UiBackend for WebUiBackend {
     fn open_virtual_keyboard(&self) {
         self.js_player.open_virtual_keyboard()
     }
+
+    fn supports_gamepads(&self) -> bool {
+        if let Some(window) = web_sys::window() {
+            let navigator = window.navigator();
+            return navigator.get_gamepads().is_ok();
+        }
+        false
+    }
 }

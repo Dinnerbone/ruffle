@@ -31,6 +31,9 @@ pub trait UiBackend {
 
     // Only used on web.
     fn open_virtual_keyboard(&self);
+
+    /// Whether or not this platform supports gamepads.
+    fn supports_gamepads(&self) -> bool;
 }
 
 /// A mouse cursor icon displayed by the Flash Player.
@@ -153,6 +156,10 @@ impl UiBackend for NullUiBackend {
     fn message(&self, _message: &str) {}
 
     fn open_virtual_keyboard(&self) {}
+
+    fn supports_gamepads(&self) -> bool {
+        false
+    }
 }
 
 impl Default for NullUiBackend {
