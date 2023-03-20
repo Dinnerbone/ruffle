@@ -3,5 +3,9 @@ package flash.events {
         public static const DEVICE_ADDED:String = "deviceAdded";
         public static const DEVICE_REMOVED:String = "deviceRemoved";
         public static const DEVICE_UNUSABLE:String = "deviceUnusable";
+
+        public function GameInputEvent(type:String, bubbles:Boolean = false, cancelable:Boolean = false, device:* = null) {
+            super(type, bubbles, cancelable);
+        }
     }
 }

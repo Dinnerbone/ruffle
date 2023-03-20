@@ -137,6 +137,9 @@ pub struct UpdateContext<'a, 'gc> {
     /// Shared objects cache
     pub avm2_shared_objects: &'a mut HashMap<String, Avm2Object<'gc>>,
 
+    /// Any current AVM2 `GameInput` object, for receiving gamepad events
+    pub gamepad_listeners: &'a mut Vec<Avm2Object<'gc>>,
+
     /// Text fields with unbound variable bindings.
     pub unbound_text_fields: &'a mut Vec<EditText<'gc>>,
 
@@ -332,6 +335,7 @@ impl<'a, 'gc> UpdateContext<'a, 'gc> {
             instance_counter: self.instance_counter,
             avm1_shared_objects: self.avm1_shared_objects,
             avm2_shared_objects: self.avm2_shared_objects,
+            gamepad_listeners: self.gamepad_listeners,
             unbound_text_fields: self.unbound_text_fields,
             timers: self.timers,
             current_context_menu: self.current_context_menu,

@@ -1,3 +1,4 @@
+use crate::backend::ui::GamepadHandle;
 use crate::display_object::InteractiveObject;
 use swf::ClipEventFlag;
 
@@ -31,6 +32,10 @@ pub enum PlayerEvent {
     },
     TextInput {
         codepoint: char,
+    },
+    GamepadChanged {
+        added: bool,
+        handle: GamepadHandle,
     },
 }
 

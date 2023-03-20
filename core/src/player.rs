@@ -153,6 +153,9 @@ struct GcRootData<'gc> {
 
     /// Manager of active sound instances.
     audio_manager: AudioManager<'gc>,
+
+    /// Any current AVM2 `GameInput` object, for receiving gamepad events
+    gamepad_listeners: Vec<Avm2Object<'gc>>,
 }
 
 impl<'gc> GcRootData<'gc> {
@@ -171,6 +174,7 @@ impl<'gc> GcRootData<'gc> {
         &mut LoadManager<'gc>,
         &mut HashMap<String, Object<'gc>>,
         &mut HashMap<String, Avm2Object<'gc>>,
+        &mut Vec<Avm2Object<'gc>>,
         &mut Vec<EditText<'gc>>,
         &mut Timers<'gc>,
         &mut Option<ContextMenuState<'gc>>,
@@ -187,6 +191,7 @@ impl<'gc> GcRootData<'gc> {
             &mut self.load_manager,
             &mut self.avm1_shared_objects,
             &mut self.avm2_shared_objects,
+            &mut self.gamepad_listeners,
             &mut self.unbound_text_fields,
             &mut self.timers,
             &mut self.current_context_menu,
@@ -1152,6 +1157,35 @@ impl Player {
                 }
             });
         }
+
+        if let PlayerEvent::GamepadChanged { added, handle: _ } = event {
+            self.mutate_with_update_context(|context| {
+                let mut activation = Avm2Activation::from_nothing(context.reborrow());
+                let class = activation.avm2().classes().gameinputevent;
+                let event_name = if added {
+                    "deviceAdded"
+                } else {
+                    "deviceRemoved"
+                };
+                let event = class
+                    .construct(
+                        &mut activation,
+                        &[
+                            event_name.into(), /* type */
+                            true.into(),       /* bubbles */
+                            false.into(),      /* cancelable */
+                            Avm2Value::Null,   /* device */
+                        ],
+                    )
+                    .expect("Failed to construct GameInputEvent");
+
+                for listener in context.gamepad_listeners.clone() {
+                    if let Err(e) = Avm2::dispatch_event(context, event, listener) {
+                        tracing::error!("Error dispatching gamepad event: {e}");
+                    }
+                }
+            });
+        }
     }
 
     /// Update dragged object, if any.
@@ -1726,6 +1760,7 @@ impl Player {
                 load_manager,
                 avm1_shared_objects,
                 avm2_shared_objects,
+                gamepad_listeners,
                 unbound_text_fields,
                 timers,
                 current_context_menu,
@@ -1759,6 +1794,7 @@ impl Player {
                 video: self.video.deref_mut(),
                 avm1_shared_objects,
                 avm2_shared_objects,
+                gamepad_listeners,
                 unbound_text_fields,
                 timers,
                 current_context_menu,
@@ -2273,6 +2309,7 @@ impl PlayerBuilder {
                                 ),
                                 timers: Timers::new(),
                                 unbound_text_fields: Vec::new(),
+                                gamepad_listeners: Vec::new(),
                             },
                         ),
                     },

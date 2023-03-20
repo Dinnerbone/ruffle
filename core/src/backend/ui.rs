@@ -1,10 +1,14 @@
 use crate::events::{KeyCode, PlayerEvent};
+use downcast_rs::Downcast;
 use std::borrow::Cow;
 use std::collections::HashSet;
 
 pub type FullscreenError = Cow<'static, str>;
 
-pub trait UiBackend {
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct GamepadHandle(pub usize);
+
+pub trait UiBackend: Downcast {
     fn mouse_visible(&self) -> bool;
 
     fn set_mouse_visible(&mut self, visible: bool);
@@ -35,6 +39,8 @@ pub trait UiBackend {
     /// Whether or not this platform supports gamepads.
     fn supports_gamepads(&self) -> bool;
 }
+
+impl_downcast!(UiBackend);
 
 /// A mouse cursor icon displayed by the Flash Player.
 /// Communicated from the core to the UI backend via `UiBackend::set_mouse_cursor`.
