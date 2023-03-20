@@ -1,10 +1,12 @@
+use crate::custom_event::RuffleEvent;
 use anyhow::{Context, Error};
 use arboard::Clipboard;
-use gilrs::Gilrs;
+use gilrs::{EventType, Gilrs};
 use rfd::{MessageButtons, MessageDialog, MessageLevel};
-use ruffle_core::backend::ui::{FullscreenError, MouseCursor, UiBackend};
+use ruffle_core::backend::ui::{FullscreenError, GamepadHandle, MouseCursor, UiBackend};
 use std::rc::Rc;
 use tracing::error;
+use winit::event_loop::EventLoopProxy;
 use winit::window::{Fullscreen, Window};
 
 pub struct DesktopUiBackend {
@@ -12,10 +14,11 @@ pub struct DesktopUiBackend {
     cursor_visible: bool,
     clipboard: Clipboard,
     gilrs: Option<Gilrs>,
+    event_loop: EventLoopProxy<RuffleEvent>,
 }
 
 impl DesktopUiBackend {
-    pub fn new(window: Rc<Window>) -> Result<Self, Error> {
+    pub fn new(window: Rc<Window>, event_loop: EventLoopProxy<RuffleEvent>) -> Result<Self, Error> {
         let gilrs = match Gilrs::new() {
             Ok(gilrs) => Some(gilrs),
             Err(e) => {
@@ -28,7 +31,30 @@ impl DesktopUiBackend {
             cursor_visible: true,
             clipboard: Clipboard::new().context("Couldn't get platform clipboard")?,
             gilrs,
+            event_loop,
         })
+    }
+
+    pub fn poll_gamepad_events(&mut self) {
+        if let Some(gilrs) = &mut self.gilrs {
+            while let Some(event) = gilrs.next_event() {
+                match &event.event {
+                    EventType::Connected => {
+                        let _ = self.event_loop.send_event(RuffleEvent::GamepadChanged {
+                            added: true,
+                            handle: GamepadHandle(event.id.into()),
+                        });
+                    }
+                    EventType::Disconnected => {
+                        let _ = self.event_loop.send_event(RuffleEvent::GamepadChanged {
+                            added: false,
+                            handle: GamepadHandle(event.id.into()),
+                        });
+                    }
+                    _ => {}
+                }
+            }
+        }
     }
 }
 

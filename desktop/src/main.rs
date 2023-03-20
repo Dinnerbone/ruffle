@@ -16,6 +16,7 @@ mod ui;
 
 use crate::custom_event::RuffleEvent;
 use crate::executor::GlutinAsyncExecutor;
+use crate::ui::DesktopUiBackend;
 use anyhow::{anyhow, Context, Error};
 use clap::Parser;
 use isahc::{config::RedirectPolicy, prelude::*, HttpClient};
@@ -337,7 +338,10 @@ impl App {
             .with_navigator(navigator)
             .with_renderer(renderer)
             .with_storage(storage::DiskStorageBackend::new()?)
-            .with_ui(ui::DesktopUiBackend::new(window.clone())?)
+            .with_ui(ui::DesktopUiBackend::new(
+                window.clone(),
+                event_loop.create_proxy(),
+            )?)
             .with_autoplay(true)
             .with_letterbox(opt.letterbox)
             .with_quality(opt.quality)
@@ -418,6 +422,11 @@ impl App {
                             next_frame_time = new_time + player_lock.time_til_next_frame();
                             if player_lock.needs_render() {
                                 self.window.request_redraw();
+                            }
+                            if let Some(ui) =
+                                player_lock.ui_mut().downcast_mut::<DesktopUiBackend>()
+                            {
+                                ui.poll_gamepad_events();
                             }
                         }
                     }
@@ -578,6 +587,13 @@ impl App {
                         .lock()
                         .expect("active executor reference")
                         .poll_all(),
+                    winit::event::Event::UserEvent(RuffleEvent::GamepadChanged {
+                        added,
+                        handle,
+                    }) => {
+                        let mut player_lock = self.player.lock().expect("Cannot reenter");
+                        player_lock.handle_event(PlayerEvent::GamepadChanged { added, handle });
+                    }
                     winit::event::Event::UserEvent(RuffleEvent::OnMetadata(swf_header)) => {
                         let movie_width = swf_header.stage_size().width().to_pixels();
                         let movie_height = swf_header.stage_size().height().to_pixels();
