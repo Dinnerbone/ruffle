@@ -6,6 +6,7 @@ use crate::avm1::SystemProperties;
 use crate::avm1::VariableDumper;
 use crate::avm1::{Activation, ActivationIdentifier};
 use crate::avm1::{ScriptObject, TObject, Value};
+use crate::avm2::object::GamepadObject;
 use crate::avm2::{
     object::LoaderInfoObject, object::TObject as _, Activation as Avm2Activation, Avm2, CallStack,
     Domain as Avm2Domain, EventObject as Avm2EventObject, Object as Avm2Object,
@@ -1158,7 +1159,7 @@ impl Player {
             });
         }
 
-        if let PlayerEvent::GamepadChanged { added, handle: _ } = event {
+        if let PlayerEvent::GamepadChanged { added, handle } = event {
             self.mutate_with_update_context(|context| {
                 let mut activation = Avm2Activation::from_nothing(context.reborrow());
                 let class = activation.avm2().classes().gameinputevent;
@@ -1167,6 +1168,7 @@ impl Player {
                 } else {
                     "deviceRemoved"
                 };
+                let device = GamepadObject::from_handle(&mut activation, handle);
                 let event = class
                     .construct(
                         &mut activation,
@@ -1174,7 +1176,7 @@ impl Player {
                             event_name.into(), /* type */
                             true.into(),       /* bubbles */
                             false.into(),      /* cancelable */
-                            Avm2Value::Null,   /* device */
+                            device.into(),     /* device */
                         ],
                     )
                     .expect("Failed to construct GameInputEvent");

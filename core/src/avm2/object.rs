@@ -40,6 +40,7 @@ mod domain_object;
 mod error_object;
 mod event_object;
 mod function_object;
+mod gamepad_object;
 mod index_buffer_3d_object;
 mod loaderinfo_object;
 mod namespace_object;
@@ -72,6 +73,7 @@ pub use crate::avm2::object::domain_object::{appdomain_allocator, DomainObject};
 pub use crate::avm2::object::error_object::{error_allocator, ErrorObject};
 pub use crate::avm2::object::event_object::{event_allocator, EventObject};
 pub use crate::avm2::object::function_object::{function_allocator, FunctionObject};
+pub use crate::avm2::object::gamepad_object::GamepadObject;
 pub use crate::avm2::object::index_buffer_3d_object::IndexBuffer3DObject;
 pub use crate::avm2::object::loaderinfo_object::{
     loader_info_allocator, LoaderInfoObject, LoaderStream,
@@ -122,6 +124,7 @@ pub use crate::avm2::object::xml_object::{xml_allocator, XmlObject};
         BitmapDataObject(BitmapDataObject<'gc>),
         DateObject(DateObject<'gc>),
         DictionaryObject(DictionaryObject<'gc>),
+        GamepadObject(GamepadObject<'gc>),
         QNameObject(QNameObject<'gc>),
         TextFormatObject(TextFormatObject<'gc>),
         ProxyObject(ProxyObject<'gc>),
@@ -1084,6 +1087,11 @@ pub trait TObject<'gc>: 'gc + Collect + Debug + Into<Object<'gc>> + Clone + Copy
     }
 
     fn as_namespace_object(&self) -> Option<NamespaceObject<'gc>> {
+        None
+    }
+
+    /// Get this as a `GamepadObject`, if it is one.
+    fn as_gamepad_object(&self) -> Option<GamepadObject<'gc>> {
         None
     }
 
