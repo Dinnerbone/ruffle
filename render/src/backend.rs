@@ -68,6 +68,8 @@ pub trait RenderBackend: Downcast {
 
     fn debug_info(&self) -> Cow<'static, str>;
 
+    fn supports_offscreen_rendering(&self) -> bool;
+
     fn set_quality(&mut self, quality: StageQuality);
 }
 impl_downcast!(RenderBackend);

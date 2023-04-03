@@ -379,6 +379,10 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
         Cow::Owned(result.join("\n"))
     }
 
+    fn supports_offscreen_rendering(&self) -> bool {
+        true
+    }
+
     fn set_quality(&mut self, quality: StageQuality) {
         self.surface = Surface::new(
             &self.descriptors,

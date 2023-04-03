@@ -93,5 +93,9 @@ impl RenderBackend for NullRenderer {
         Cow::Borrowed("Renderer: Null")
     }
 
+    fn supports_offscreen_rendering(&self) -> bool {
+        false
+    }
+
     fn set_quality(&mut self, _quality: StageQuality) {}
 }
