@@ -35,6 +35,15 @@ pub trait RenderBackend: Downcast {
         bounds: PixelRegion,
     ) -> Option<Box<dyn SyncHandle>>;
 
+    fn copy_texture_to_texture(
+        &mut self,
+        source: BitmapHandle,
+        target: BitmapHandle,
+        source_bounds: PixelRegion,
+        target_bounds: PixelRegion,
+        readback_bounds: PixelRegion,
+    ) -> Option<Box<dyn SyncHandle>>;
+
     /// Applies the given filter with a `BitmapHandle` source onto a destination `BitmapHandle`.
     /// The `destination_rect` must be calculated by the caller and is assumed to be correct.
     /// Both `source_rect` and `destination_rect` must be valid (`BoundingBox::valid`).

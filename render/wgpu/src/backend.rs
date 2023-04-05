@@ -556,6 +556,111 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
     }
 
     #[instrument(level = "debug", skip_all)]
+    fn copy_texture_to_texture(
+        &mut self,
+        source_handle: BitmapHandle,
+        destination_handle: BitmapHandle,
+        source_bounds: PixelRegion,
+        destination_bounds: PixelRegion,
+        readback_bounds: PixelRegion,
+    ) -> Option<Box<dyn SyncHandle>> {
+        let source = as_texture(&source_handle);
+        let destination = as_texture(&destination_handle);
+
+        let buffer_info = if destination.copy_count.get() > TEXTURE_READS_BEFORE_PROMOTION {
+            let copy_dimensions = BufferDimensions::new(
+                readback_bounds.width() as usize,
+                readback_bounds.height() as usize,
+            );
+            let buffer = self
+                .offscreen_buffer_pool
+                .take(&self.descriptors, copy_dimensions.clone());
+            Some(TextureBufferInfo {
+                buffer: MaybeOwnedBuffer::Borrowed(buffer, copy_dimensions),
+                copy_area: readback_bounds,
+            })
+        } else {
+            None
+        };
+
+        let mut target = TextureTarget {
+            size: wgpu::Extent3d {
+                width: destination.texture.width(),
+                height: destination.texture.height(),
+                depth_or_array_layers: 1,
+            },
+            texture: destination.texture.clone(),
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            buffer: buffer_info,
+        };
+
+        let frame_output = target
+            .get_next_texture()
+            .expect("TextureTargetFrame.get_next_texture is infallible");
+
+        let mut encoder = self
+            .descriptors
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        encoder.copy_texture_to_texture(
+            wgpu::ImageCopyTexture {
+                texture: &source.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: source_bounds.x_min,
+                    y: source_bounds.y_min,
+                    z: 0,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::ImageCopyTexture {
+                texture: &target.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: destination_bounds.x_min,
+                    y: destination_bounds.y_min,
+                    z: 0,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::Extent3d {
+                width: destination_bounds.width(),
+                height: destination_bounds.height(),
+                depth_or_array_layers: 1,
+            },
+        );
+
+        let index = target.submit(
+            &self.descriptors.device,
+            &self.descriptors.queue,
+            Some(encoder.finish()),
+            frame_output,
+        );
+
+        match target.take_buffer() {
+            None => Some(Box::new(QueueSyncHandle::NotCopied {
+                handle: destination_handle,
+                copy_area: readback_bounds,
+                descriptors: self.descriptors.clone(),
+                pool: self.offscreen_buffer_pool.clone(),
+            })),
+            Some(TextureBufferInfo {
+                buffer: MaybeOwnedBuffer::Borrowed(buffer, copy_dimensions),
+                ..
+            }) => Some(Box::new(QueueSyncHandle::AlreadyCopied {
+                index,
+                buffer,
+                copy_dimensions,
+                descriptors: self.descriptors.clone(),
+            })),
+            Some(TextureBufferInfo {
+                buffer: MaybeOwnedBuffer::Owned(..),
+                ..
+            }) => unreachable!("Buffer must be Borrowed as it was set to be Borrowed earlier"),
+        }
+    }
+
+    #[instrument(level = "debug", skip_all)]
     fn render_offscreen(
         &mut self,
         handle: BitmapHandle,

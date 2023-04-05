@@ -237,6 +237,7 @@ mod wrapper {
     use ruffle_render::backend::RenderBackend;
     use ruffle_render::bitmap::{BitmapHandle, PixelRegion};
     use ruffle_render::commands::CommandHandler;
+    use std::backtrace::Backtrace;
     use std::cell::Ref;
 
     use super::{copy_pixels_to_bitmapdata, BitmapData, DirtyState};
@@ -309,6 +310,8 @@ mod wrapper {
             let mut write = unsafe { self.0.borrow_mut() };
             match std::mem::replace(&mut write.dirty_state, DirtyState::Clean) {
                 DirtyState::GpuModified(sync_handle, bounds) => {
+                    let bt = Backtrace::capture();
+                    tracing::info!("Synced at {bt}");
                     sync_handle
                         .retrieve_offscreen_texture(Box::new(|buffer, buffer_width| {
                             copy_pixels_to_bitmapdata(&mut write, buffer, buffer_width, bounds)

@@ -1063,6 +1063,17 @@ impl RenderBackend for WebGlRenderBackend {
         Ok(())
     }
 
+    fn copy_texture_to_texture(
+        &mut self,
+        _source: BitmapHandle,
+        _target: BitmapHandle,
+        _source_bounds: PixelRegion,
+        _target_bounds: PixelRegion,
+        _readback_bounds: PixelRegion,
+    ) -> Option<Box<dyn SyncHandle>> {
+        None
+    }
+
     fn create_context3d(&mut self) -> Result<Box<dyn Context3D>, BitmapError> {
         Err(BitmapError::Unimplemented("createContext3D".into()))
     }

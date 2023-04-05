@@ -454,6 +454,17 @@ impl RenderBackend for WebCanvasRenderBackend {
         None
     }
 
+    fn copy_texture_to_texture(
+        &mut self,
+        _source: BitmapHandle,
+        _target: BitmapHandle,
+        _source_bounds: PixelRegion,
+        _target_bounds: PixelRegion,
+        _readback_bounds: PixelRegion,
+    ) -> Option<Box<dyn SyncHandle>> {
+        None
+    }
+
     fn submit_frame(&mut self, clear: Color, commands: CommandList) {
         self.begin_frame(clear);
         commands.execute(self);

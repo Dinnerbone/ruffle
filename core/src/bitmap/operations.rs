@@ -1201,8 +1201,129 @@ fn copy_efficiently<'gc>(
         return;
     }
 
-    // TODO: Add copy_on_gpu here for when the BMDs are on gpu
-    copy_on_cpu(context, source, dest, source_region, dest_region, blend);
+    if !context.renderer.supports_offscreen_rendering() {
+        // We're on a backend that won't support offscreen calls, do everything CPU regardless
+        copy_on_cpu(context, source, dest, source_region, dest_region, blend);
+        return;
+    }
+
+    let source_is_cpu = source.can_read(source_region);
+    let dest_is_cpu = dest.can_read(PixelRegion::for_whole_size(dest.width(), dest.height()));
+    if source_is_cpu && dest_is_cpu {
+        copy_on_cpu(context, source, dest, source_region, dest_region, blend);
+    } else if blend {
+        blend_on_gpu(context, source, dest, source_region, dest_region);
+    } else {
+        copy_on_gpu(context, source, dest, source_region, dest_region);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn copy_on_gpu<'gc>(
+    context: &mut UpdateContext<'_, 'gc>,
+    source: BitmapDataWrapper<'gc>,
+    dest: BitmapDataWrapper<'gc>,
+    source_region: PixelRegion,
+    dest_region: PixelRegion,
+) {
+    let source_handle = source.bitmap_handle(context.gc_context, context.renderer);
+    let dest_handle = dest.bitmap_handle(context.gc_context, context.renderer);
+    let (dest, include_dirty_area) = dest.overwrite_cpu_pixels_from_gpu(context.gc_context);
+    let mut readback_area = dest_region;
+    if let Some(include_dirty_area) = include_dirty_area {
+        readback_area.union(include_dirty_area);
+    }
+
+    let sync_handle = context
+        .renderer
+        .copy_texture_to_texture(
+            source_handle,
+            dest_handle,
+            source_region,
+            dest_region,
+            readback_area,
+        )
+        .expect("Renderer must support copy_texture_to_texture to use this method");
+    let mut write = dest.write(context.gc_context);
+    write.set_gpu_dirty(sync_handle, readback_area);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn blend_on_gpu<'gc>(
+    context: &mut UpdateContext<'_, 'gc>,
+    source: BitmapDataWrapper<'gc>,
+    dest: BitmapDataWrapper<'gc>,
+    source_region: PixelRegion,
+    mut dest_region: PixelRegion,
+) {
+    let mut transform_stack = ruffle_render::transform::TransformStack::new();
+    transform_stack.push(&Transform {
+        matrix: Matrix::translate(
+            Twips::from_pixels_i32(dest_region.x_min as i32 - source_region.x_min as i32),
+            Twips::from_pixels_i32(dest_region.y_min as i32 - source_region.y_min as i32),
+        ),
+        color_transform: Default::default(),
+    });
+
+    let mut render_context = RenderContext {
+        renderer: context.renderer,
+        commands: CommandList::new(),
+        gc_context: context.gc_context,
+        library: context.library,
+        transform_stack: &mut transform_stack,
+        is_offscreen: true,
+        stage: context.stage,
+    };
+
+    let clip_mat = if dest_region != PixelRegion::for_whole_size(dest.width(), dest.height()) {
+        let clip_mat = Matrix {
+            a: dest_region.width() as f32,
+            b: 0.0,
+            c: 0.0,
+            d: dest_region.height() as f32,
+            tx: Twips::from_pixels_i32(dest_region.x_min as i32),
+            ty: Twips::from_pixels_i32(dest_region.y_min as i32),
+        };
+
+        render_context.commands.push_mask();
+        // The color doesn't matter, as this is a mask.
+        render_context
+            .commands
+            .draw_rect(swf::Color::BLACK, clip_mat);
+        render_context.commands.activate_mask();
+
+        Some(clip_mat)
+    } else {
+        None
+    };
+
+    source.render(false, &mut render_context);
+
+    if let Some(clip_mat) = clip_mat {
+        // Draw the rectangle again after deactivating the mask,
+        // to reset the stencil buffer.
+        render_context.commands.deactivate_mask();
+        render_context
+            .commands
+            .draw_rect(swf::Color::BLACK, clip_mat);
+        render_context.commands.pop_mask();
+    }
+
+    let handle = dest.bitmap_handle(render_context.gc_context, render_context.renderer);
+    let (dest, include_dirty_area) = dest.overwrite_cpu_pixels_from_gpu(context.gc_context);
+    let mut write = dest.write(context.gc_context);
+    // If we have another dirty area to preserve, expand this to include it
+    if let Some(old) = include_dirty_area {
+        dest_region.union(old);
+    }
+
+    let commands = render_context.commands;
+    let quality = render_context.stage.quality(); // Quality doesn't really matter, so using existing
+    let sync_handle = context
+        .renderer
+        .render_offscreen(handle, commands, quality, dest_region)
+        .expect("Renderer must support copy_texture_to_texture to use this method");
+    write.set_gpu_dirty(sync_handle, dest_region);
 }
 
 #[allow(clippy::too_many_arguments)]
