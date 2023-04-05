@@ -273,6 +273,7 @@ impl QueueSyncHandle {
 #[derive(Debug)]
 pub struct Texture {
     pub(crate) texture: Arc<wgpu::Texture>,
+    pub(crate) view: wgpu::TextureView,
     bind_linear: OnceCell<BitmapBinds>,
     bind_nearest: OnceCell<BitmapBinds>,
     width: u32,
@@ -301,7 +302,7 @@ impl Texture {
                 samplers.get_sampler(false, smoothed),
                 &quad.texture_transforms,
                 0 as wgpu::BufferAddress,
-                self.texture.create_view(&Default::default()),
+                &self.view,
                 create_debug_label!("Bitmap {:?} bind group (smoothed: {})", handle.0, smoothed),
             )
         })

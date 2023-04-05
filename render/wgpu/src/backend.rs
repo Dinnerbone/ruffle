@@ -503,8 +503,10 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             extent,
         );
 
+        let texture_view = texture.create_view(&Default::default());
         let handle = BitmapHandle(Arc::new(Texture {
             texture: Arc::new(texture),
+            view: texture_view,
             bind_linear: Default::default(),
             bind_nearest: Default::default(),
             width: bitmap.width(),

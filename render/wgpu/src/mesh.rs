@@ -330,7 +330,7 @@ impl PendingDrawType {
                         .get_sampler(is_repeating, is_smoothed),
                     uniform_buffer,
                     texture_transforms_index,
-                    texture_view,
+                    &texture_view,
                     bind_group_label,
                 );
 
@@ -360,7 +360,7 @@ impl BitmapBinds {
         sampler: &wgpu::Sampler,
         uniform_buffer: &wgpu::Buffer,
         texture_transforms: wgpu::BufferAddress,
-        texture_view: wgpu::TextureView,
+        texture_view: &wgpu::TextureView,
         label: Option<String>,
     ) -> Self {
         let bind_group =
@@ -379,7 +379,7 @@ impl BitmapBinds {
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&texture_view),
+                        resource: wgpu::BindingResource::TextureView(texture_view),
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,

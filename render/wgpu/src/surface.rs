@@ -473,7 +473,6 @@ impl Surface {
         );
         let texture_transform =
             make_texture_transform(descriptors, source_size, source_point, source_texture);
-        let source_view = source_texture.texture.create_view(&Default::default());
         let bitmap_group = descriptors
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
@@ -486,7 +485,7 @@ impl Surface {
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&source_view),
+                        resource: wgpu::BindingResource::TextureView(&source_texture.view),
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
@@ -599,14 +598,13 @@ impl Surface {
 
         let texture_transform =
             make_texture_transform(descriptors, source_size, source_point, source_texture);
-        let source_view = source_texture.texture.create_view(&Default::default());
         for i in 0..2 {
             let blur_x = (filter.blur_x.to_f32() - 1.0).max(0.0);
             let blur_y = (filter.blur_y.to_f32() - 1.0).max(0.0);
             let current = &targets[i % 2];
             let (previous_view, previous_transform, previous_width, previous_height) = if i == 0 {
                 (
-                    &source_view,
+                    &source_texture.view,
                     texture_transform.as_entire_binding(),
                     source_texture.width as f32,
                     source_texture.height as f32,

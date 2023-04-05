@@ -111,10 +111,12 @@ impl WgpuContext3D {
                 usage: wgpu::TextureUsages::COPY_SRC,
             });
 
+            let dummy_texture_view = dummy_texture.create_view(&Default::default());
             BitmapHandle(Arc::new(Texture {
                 bind_linear: Default::default(),
                 bind_nearest: Default::default(),
                 texture: Arc::new(dummy_texture),
+                view: dummy_texture_view,
                 width: 0,
                 height: 0,
                 copy_count: Cell::new(0),
@@ -597,16 +599,24 @@ impl Context3D for WgpuContext3D {
                     // We always use a non-multisampled texture as our raw texture handle,
                     // which is what the Stage rendering code expects. In multisample mode,
                     // this is our resolve texture.
+                    let back_buffer_raw_texture = back_buffer_resolve_texture.unwrap();
+                    let back_buffer_raw_texture_view =
+                        back_buffer_raw_texture.create_view(&Default::default());
                     self.back_buffer_raw_texture_handle = BitmapHandle(Arc::new(Texture {
-                        texture: Arc::new(back_buffer_resolve_texture.unwrap()),
+                        texture: Arc::new(back_buffer_raw_texture),
+                        view: back_buffer_raw_texture_view,
                         bind_linear: Default::default(),
                         bind_nearest: Default::default(),
                         width: *width,
                         height: *height,
                         copy_count: Cell::new(0),
                     }));
+                    let front_buffer_resolve_texture = front_buffer_resolve_texture.unwrap();
+                    let front_buffer_resolve_texture_view =
+                        front_buffer_resolve_texture.create_view(&Default::default());
                     self.front_buffer_raw_texture_handle = BitmapHandle(Arc::new(Texture {
-                        texture: Arc::new(front_buffer_resolve_texture.unwrap()),
+                        texture: Arc::new(front_buffer_resolve_texture),
+                        view: front_buffer_resolve_texture_view,
                         bind_linear: Default::default(),
                         bind_nearest: Default::default(),
                         width: *width,
@@ -617,16 +627,22 @@ impl Context3D for WgpuContext3D {
                     // In non-multisample mode, we don't have a separate resolve buffer,
                     // so our main texture gets used as the raw texture handle.
 
+                    let back_buffer_texture_view =
+                        back_buffer_texture.create_view(&Default::default());
                     self.back_buffer_raw_texture_handle = BitmapHandle(Arc::new(Texture {
                         texture: Arc::new(back_buffer_texture),
+                        view: back_buffer_texture_view,
                         bind_linear: Default::default(),
                         bind_nearest: Default::default(),
                         width: *width,
                         height: *height,
                         copy_count: Cell::new(0),
                     }));
+                    let front_buffer_texture_view =
+                        front_buffer_texture.create_view(&Default::default());
                     self.front_buffer_raw_texture_handle = BitmapHandle(Arc::new(Texture {
                         texture: Arc::new(front_buffer_texture),
+                        view: front_buffer_texture_view,
                         bind_linear: Default::default(),
                         bind_nearest: Default::default(),
                         width: *width,
