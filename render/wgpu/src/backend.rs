@@ -5,7 +5,7 @@ use crate::mesh::{Mesh, PendingDraw};
 use crate::surface::Surface;
 use crate::target::{MaybeOwnedBuffer, TextureTarget};
 use crate::target::{RenderTargetFrame, TextureBufferInfo};
-use crate::uniform_buffer::BufferStorage;
+use crate::uniform_buffer::StagingBuffersStorage;
 use crate::utils::BufferDimensions;
 use crate::{
     as_texture, format_list, get_backend_names, ColorAdjustments, Descriptors, Error,
@@ -35,8 +35,7 @@ const TEXTURE_READS_BEFORE_PROMOTION: u8 = 5;
 
 pub struct WgpuRenderBackend<T: RenderTarget> {
     descriptors: Arc<Descriptors>,
-    uniform_buffers_storage: BufferStorage<Transforms>,
-    color_buffers_storage: BufferStorage<ColorAdjustments>,
+    staging_buffers: StagingBuffersStorage,
     target: T,
     surface: Surface,
     meshes: Vec<Mesh>,
@@ -174,11 +173,9 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
             target.format(),
         );
 
-        let uniform_buffers_storage =
-            BufferStorage::from_alignment(descriptors.limits.min_uniform_buffer_offset_alignment);
-
-        let color_buffers_storage =
-            BufferStorage::from_alignment(descriptors.limits.min_uniform_buffer_offset_alignment);
+        let staging_buffers = StagingBuffersStorage::from_alignment(
+            descriptors.limits.min_uniform_buffer_offset_alignment,
+        );
 
         let offscreen_buffer_pool = BufferPool::new(Box::new(
             |descriptors: &Descriptors, dimensions: &BufferDimensions| {
@@ -193,8 +190,7 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
 
         Ok(Self {
             descriptors,
-            uniform_buffers_storage,
-            color_buffers_storage,
+            staging_buffers,
             target,
             surface,
             meshes: Vec::new(),
@@ -436,8 +432,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
                 a: f64::from(clear.a) / 255.0,
             }),
             &self.descriptors,
-            &mut self.uniform_buffers_storage,
-            &mut self.color_buffers_storage,
+            &mut self.staging_buffers,
             &self.meshes,
             commands,
             &mut self.texture_pool,
@@ -449,8 +444,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             command_buffers,
             frame_output,
         );
-        self.uniform_buffers_storage.recall();
-        self.color_buffers_storage.recall();
+        self.staging_buffers.recall();
         self.offscreen_texture_pool = TexturePool::new();
     }
 
@@ -714,8 +708,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             frame_output.view(),
             RenderTargetMode::ExistingTexture(target.get_texture()),
             &self.descriptors,
-            &mut self.uniform_buffers_storage,
-            &mut self.color_buffers_storage,
+            &mut self.staging_buffers,
             &self.meshes,
             commands,
             &mut self.offscreen_texture_pool,
@@ -726,8 +719,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             command_buffers,
             frame_output,
         );
-        self.uniform_buffers_storage.recall();
-        self.color_buffers_storage.recall();
+        self.staging_buffers.recall();
 
         match target.take_buffer() {
             None => Some(Box::new(QueueSyncHandle::NotCopied {

@@ -6,11 +6,11 @@ use crate::blend::ComplexBlend;
 use crate::buffer_pool::TexturePool;
 use crate::mesh::Mesh;
 use crate::surface::commands::{chunk_blends, Chunk, CommandRenderer, LayerRef};
-use crate::uniform_buffer::BufferStorage;
+use crate::uniform_buffer::{StagingBuffers, StagingBuffersStorage};
 use crate::utils::{remove_srgb, supported_sample_count};
 use crate::{
-    ColorAdjustments, Descriptors, MaskState, Pipelines, PushConstants, Texture, TextureTransforms,
-    Transforms, UniformBuffer, DEFAULT_COLOR_ADJUSTMENTS,
+    Descriptors, MaskState, Pipelines, PushConstants, Texture, TextureTransforms, Transforms,
+    DEFAULT_COLOR_ADJUSTMENTS,
 };
 use ruffle_render::commands::CommandList;
 use ruffle_render::filters::Filter;
@@ -68,15 +68,13 @@ impl Surface {
         frame_view: &wgpu::TextureView,
         render_target_mode: RenderTargetMode,
         descriptors: &Descriptors,
-        uniform_buffers_storage: &mut BufferStorage<Transforms>,
-        color_buffers_storage: &mut BufferStorage<ColorAdjustments>,
+        buffers_storage: &mut StagingBuffersStorage,
         meshes: &Vec<Mesh>,
         commands: CommandList,
         texture_pool: &mut TexturePool,
     ) -> Vec<wgpu::CommandBuffer> {
         let uniform_encoder_label = create_debug_label!("Uniform upload command encoder");
-        let mut uniform_buffer = UniformBuffer::new(uniform_buffers_storage);
-        let mut color_buffer = UniformBuffer::new(color_buffers_storage);
+        let mut staging_buffers = StagingBuffers::new(buffers_storage);
         let mut uniform_encoder =
             descriptors
                 .device
@@ -96,8 +94,7 @@ impl Surface {
             descriptors,
             meshes,
             commands,
-            &mut uniform_buffer,
-            &mut color_buffer,
+            &mut staging_buffers,
             &mut uniform_encoder,
             &mut draw_encoder,
             LayerRef::None,
@@ -132,8 +129,7 @@ impl Surface {
         buffers.push(copy_encoder.finish());
 
         buffers.insert(0, uniform_encoder.finish());
-        uniform_buffer.finish();
-        color_buffer.finish();
+        staging_buffers.finish();
 
         buffers
     }
@@ -146,8 +142,7 @@ impl Surface {
         descriptors: &'global Descriptors,
         meshes: &'global Vec<Mesh>,
         commands: CommandList,
-        uniform_buffers: &'frame mut UniformBuffer<'global, Transforms>,
-        color_buffers: &'frame mut UniformBuffer<'global, ColorAdjustments>,
+        staging_buffers: &'frame mut StagingBuffers<'global>,
         uniform_encoder: &'frame mut wgpu::CommandEncoder,
         draw_encoder: &'frame mut wgpu::CommandEncoder,
         nearest_layer: LayerRef<'frame>,
@@ -168,8 +163,7 @@ impl Surface {
         let chunks = chunk_blends(
             commands.commands,
             descriptors,
-            uniform_buffers,
-            color_buffers,
+            staging_buffers,
             uniform_encoder,
             draw_encoder,
             meshes,
@@ -208,8 +202,7 @@ impl Surface {
                     let mut renderer = CommandRenderer::new(
                         &self.pipelines,
                         descriptors,
-                        uniform_buffers,
-                        color_buffers,
+                        staging_buffers,
                         uniform_encoder,
                         render_pass,
                         num_masks,

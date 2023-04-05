@@ -6,10 +6,8 @@ use crate::globals::Globals;
 use crate::mesh::{as_mesh, DrawType, Mesh};
 use crate::surface::target::CommandTarget;
 use crate::surface::Surface;
-use crate::{
-    as_texture, ColorAdjustments, Descriptors, MaskState, Pipelines, PushConstants, Transforms,
-    UniformBuffer,
-};
+use crate::uniform_buffer::StagingBuffers;
+use crate::{as_texture, Descriptors, MaskState, Pipelines, PushConstants, Transforms};
 use ruffle_render::backend::ShapeHandle;
 use ruffle_render::bitmap::BitmapHandle;
 use ruffle_render::commands::Command;
@@ -27,8 +25,7 @@ pub struct CommandRenderer<'pass, 'frame: 'pass, 'global: 'frame> {
     num_masks: u32,
     mask_state: MaskState,
     render_pass: wgpu::RenderPass<'pass>,
-    uniform_buffers: &'frame mut UniformBuffer<'global, Transforms>,
-    color_buffers: &'frame mut UniformBuffer<'global, ColorAdjustments>,
+    staging_buffers: &'frame mut StagingBuffers<'global>,
     uniform_encoder: &'frame mut wgpu::CommandEncoder,
     needs_depth: bool,
 }
@@ -38,8 +35,7 @@ impl<'pass, 'frame: 'pass, 'global: 'frame> CommandRenderer<'pass, 'frame, 'glob
     pub fn new(
         pipelines: &'frame Pipelines,
         descriptors: &'global Descriptors,
-        uniform_buffers: &'frame mut UniformBuffer<'global, Transforms>,
-        color_buffers: &'frame mut UniformBuffer<'global, ColorAdjustments>,
+        staging_buffers: &'frame mut StagingBuffers<'global>,
         uniform_encoder: &'frame mut wgpu::CommandEncoder,
         render_pass: wgpu::RenderPass<'pass>,
         num_masks: u32,
@@ -52,8 +48,7 @@ impl<'pass, 'frame: 'pass, 'global: 'frame> CommandRenderer<'pass, 'frame, 'glob
             mask_state,
             render_pass,
             descriptors,
-            uniform_buffers,
-            color_buffers,
+            staging_buffers,
             uniform_encoder,
             needs_depth,
         }
@@ -199,7 +194,7 @@ impl<'pass, 'frame: 'pass, 'global: 'frame> CommandRenderer<'pass, 'frame, 'glob
                 }]),
             );
         } else {
-            self.uniform_buffers.write_uniforms(
+            self.staging_buffers.uniforms.write_uniforms(
                 &self.descriptors.device,
                 &self.descriptors.bind_layouts.transforms,
                 self.uniform_encoder,
@@ -215,7 +210,7 @@ impl<'pass, 'frame: 'pass, 'global: 'frame> CommandRenderer<'pass, 'frame, 'glob
                     &[0],
                 );
             } else {
-                self.color_buffers.write_uniforms(
+                self.staging_buffers.colors.write_uniforms(
                     &self.descriptors.device,
                     &self.descriptors.bind_layouts.color_transforms,
                     self.uniform_encoder,
@@ -450,8 +445,7 @@ pub enum LayerRef<'a> {
 pub fn chunk_blends<'a>(
     commands: Vec<Command>,
     descriptors: &'a Descriptors,
-    uniform_buffers: &mut UniformBuffer<'a, Transforms>,
-    color_buffers: &mut UniformBuffer<'a, ColorAdjustments>,
+    staging_buffers: &mut StagingBuffers<'a>,
     uniform_encoder: &mut wgpu::CommandEncoder,
     draw_encoder: &mut wgpu::CommandEncoder,
     meshes: &'a Vec<Mesh>,
@@ -482,8 +476,7 @@ pub fn chunk_blends<'a>(
                     descriptors,
                     meshes,
                     commands,
-                    uniform_buffers,
-                    color_buffers,
+                    staging_buffers,
                     uniform_encoder,
                     draw_encoder,
                     if blend_mode == BlendMode::Layer {

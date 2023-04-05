@@ -7,7 +7,6 @@ use crate::descriptors::Quad;
 use crate::mesh::BitmapBinds;
 use crate::pipelines::Pipelines;
 use crate::target::{RenderTarget, SwapChainTarget};
-use crate::uniform_buffer::UniformBuffer;
 use crate::utils::{
     capture_image, create_buffer_with_data, format_list, get_backend_names, BufferDimensions,
 };

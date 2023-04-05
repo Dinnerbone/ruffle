@@ -1,3 +1,4 @@
+use crate::{ColorAdjustments, Transforms};
 use bytemuck::Pod;
 use ouroboros::self_referencing;
 use std::cell::RefCell;
@@ -162,6 +163,44 @@ impl<'a, T: Pod> UniformBuffer<'a, T> {
     pub fn finish(self) {
         self.buffers
             .with_staging_belt(|belt| belt.borrow_mut().finish());
+    }
+}
+
+pub struct StagingBuffersStorage {
+    pub uniforms: BufferStorage<Transforms>,
+    pub colors: BufferStorage<ColorAdjustments>,
+}
+
+impl StagingBuffersStorage {
+    pub fn from_alignment(alignment: u32) -> Self {
+        Self {
+            uniforms: BufferStorage::from_alignment(alignment),
+            colors: BufferStorage::from_alignment(alignment),
+        }
+    }
+
+    pub fn recall(&mut self) {
+        self.uniforms.recall();
+        self.colors.recall();
+    }
+}
+
+pub struct StagingBuffers<'a> {
+    pub uniforms: UniformBuffer<'a, Transforms>,
+    pub colors: UniformBuffer<'a, ColorAdjustments>,
+}
+
+impl<'a> StagingBuffers<'a> {
+    pub fn new(storage: &'a mut StagingBuffersStorage) -> Self {
+        Self {
+            uniforms: UniformBuffer::new(&mut storage.uniforms),
+            colors: UniformBuffer::new(&mut storage.colors),
+        }
+    }
+
+    pub fn finish(self) {
+        self.uniforms.finish();
+        self.colors.finish();
     }
 }
 
