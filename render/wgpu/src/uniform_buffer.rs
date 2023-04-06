@@ -2,18 +2,10 @@ use crate::{ColorAdjustments, Transforms};
 use bytemuck::Pod;
 use ouroboros::self_referencing;
 use std::cell::RefCell;
+use std::fmt::{Debug, Formatter};
 use std::{marker::PhantomData, mem};
 use typed_arena::Arena;
 use wgpu::util::StagingBelt;
-
-/// A simple chunked bump allacator for managing dynamic uniforms that change per-draw.
-/// Each draw call may use `UniformBuffer::write_uniforms` can be used to queue
-/// the upload of uniform data to the GPU.
-pub struct UniformBuffer<'a, T: Pod> {
-    buffers: &'a BufferStorage<T>,
-    cur_block: usize,
-    cur_offset: u32,
-}
 
 #[self_referencing]
 pub struct BufferStorage<T: Pod> {
@@ -26,7 +18,10 @@ pub struct BufferStorage<T: Pod> {
 
     staging_belt: RefCell<StagingBelt>,
     aligned_uniforms_size: u32,
+    cur_block: usize,
+    cur_offset: u32,
 }
+
 struct Allocator<'a> {
     arena: &'a Arena<Block>,
     blocks: Vec<&'a Block>,
@@ -56,6 +51,8 @@ impl<T: Pod> BufferStorage<T> {
             staging_belt: RefCell::new(StagingBelt::new(u64::from(Self::BLOCK_SIZE) / 2)),
             aligned_uniforms_size,
             phantom: PhantomData,
+            cur_block: 0,
+            cur_offset: 0,
         }
         .build()
     }
@@ -93,82 +90,77 @@ impl<T: Pod> BufferStorage<T> {
 
     pub fn recall(&mut self) {
         self.with_staging_belt(|belt| belt.borrow_mut().recall());
-    }
-}
-
-impl<'a, T: Pod> UniformBuffer<'a, T> {
-    /// Creates a new `UniformBuffer` with the given uniform layout.
-    pub fn new(buffers: &'a mut BufferStorage<T>) -> Self {
-        Self {
-            buffers,
-            cur_block: 0,
-            cur_offset: 0,
-        }
-    }
-
-    /// Enqueue `data` for upload into the given command encoder, and set the bind group on `render_pass`
-    /// to use the uniform data.
-    pub fn write_uniforms<'b>(
-        &mut self,
-        device: &wgpu::Device,
-        layout: &wgpu::BindGroupLayout,
-        command_encoder: &mut wgpu::CommandEncoder,
-        render_pass: &mut wgpu::RenderPass<'b>,
-        bind_group_index: u32,
-        data: &T,
-    ) where
-        'a: 'b,
-    {
-        // Allocate a new block if we've exceeded our capacity.
-        if self.cur_block
-            >= self
-                .buffers
-                .with_allocator(|alloc| alloc.borrow().blocks.len())
-        {
-            self.buffers.allocate_block(device, layout);
-        }
-
-        let block: &'a Block = self
-            .buffers
-            .with_allocator(|alloc| alloc.borrow().blocks[self.cur_block]);
-
-        // Copy the data into the buffer via the staging belt.
-        self.buffers.with_staging_belt(|belt| {
-            belt.borrow_mut()
-                .write_buffer(
-                    command_encoder,
-                    &block.buffer,
-                    self.cur_offset.into(),
-                    BufferStorage::<T>::UNIFORMS_SIZE.try_into().unwrap(),
-                    device,
-                )
-                .copy_from_slice(bytemuck::cast_slice(std::slice::from_ref(data)));
-        });
-
-        // Set the bind group to the final uniform location.
-        render_pass.set_bind_group(bind_group_index, &block.bind_group, &[self.cur_offset]);
-
-        // Advance offset.
-        self.cur_offset += self.buffers.borrow_aligned_uniforms_size();
-        // Advance to next buffer if we are out of room in this buffer.
-        if BufferStorage::<T>::BLOCK_SIZE - self.cur_offset
-            < *self.buffers.borrow_aligned_uniforms_size()
-        {
-            self.cur_block += 1;
-            self.cur_offset = 0;
-        }
+        self.with_cur_block_mut(|v| *v = 0);
+        self.with_cur_offset_mut(|v| *v = 0);
     }
 
     /// Should be called at the end of a frame.
-    pub fn finish(self) {
-        self.buffers
-            .with_staging_belt(|belt| belt.borrow_mut().finish());
+    pub fn finish(&mut self) {
+        self.with_staging_belt(|belt| belt.borrow_mut().finish());
     }
+
+    // /// Enqueue `data` for upload into the given command encoder, and set the bind group on `render_pass`
+    // /// to use the uniform data.
+    // pub fn write_uniforms<'a, 'b>(
+    //     &'a mut self,
+    //     device: &wgpu::Device,
+    //     layout: &wgpu::BindGroupLayout,
+    //     command_encoder: &mut wgpu::CommandEncoder,
+    //     render_pass: &mut wgpu::RenderPass<'b>,
+    //     bind_group_index: u32,
+    //     data: &T,
+    // ) where
+    //     'a: 'b,
+    // {
+    //     // Allocate a new block if we've exceeded our capacity.
+    //     if *self.borrow_cur_block() >= self.with_allocator(|alloc| alloc.borrow().blocks.len()) {
+    //         self.allocate_block(device, layout);
+    //     }
+    //
+    //     let block: &Block =
+    //         self.with_allocator(|alloc| alloc.borrow().blocks[*self.borrow_cur_block()]);
+    //
+    //     // Copy the data into the buffer via the staging belt.
+    //     self.with_staging_belt(|belt| {
+    //         belt.borrow_mut()
+    //             .write_buffer(
+    //                 command_encoder,
+    //                 &block.buffer,
+    //                 (*self.borrow_cur_offset()).into(),
+    //                 BufferStorage::<T>::UNIFORMS_SIZE.try_into().unwrap(),
+    //                 device,
+    //             )
+    //             .copy_from_slice(bytemuck::cast_slice(std::slice::from_ref(data)));
+    //     });
+    //
+    //     // Set the bind group to the final uniform location.
+    //     render_pass.set_bind_group(
+    //         bind_group_index,
+    //         &block.bind_group,
+    //         &[*self.borrow_cur_offset()],
+    //     );
+    //
+    //     // Advance offset.
+    //     self.with_cur_offset_mut(|v| *v += self.borrow_aligned_uniforms_size());
+    //     // Advance to next buffer if we are out of room in this buffer.
+    //     if BufferStorage::<T>::BLOCK_SIZE - *self.borrow_cur_offset()
+    //         < *self.borrow_aligned_uniforms_size()
+    //     {
+    //         self.with_cur_block_mut(|v| *v += 1);
+    //         self.with_cur_offset_mut(|v| *v = 0);
+    //     }
+    // }
 }
 
 pub struct StagingBuffersStorage {
     pub uniforms: BufferStorage<Transforms>,
     pub colors: BufferStorage<ColorAdjustments>,
+}
+
+impl Debug for StagingBuffersStorage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StagingBuffersStorage").finish()
+    }
 }
 
 impl StagingBuffersStorage {
@@ -183,22 +175,8 @@ impl StagingBuffersStorage {
         self.uniforms.recall();
         self.colors.recall();
     }
-}
 
-pub struct StagingBuffers<'a> {
-    pub uniforms: UniformBuffer<'a, Transforms>,
-    pub colors: UniformBuffer<'a, ColorAdjustments>,
-}
-
-impl<'a> StagingBuffers<'a> {
-    pub fn new(storage: &'a mut StagingBuffersStorage) -> Self {
-        Self {
-            uniforms: UniformBuffer::new(&mut storage.uniforms),
-            colors: UniformBuffer::new(&mut storage.colors),
-        }
-    }
-
-    pub fn finish(self) {
+    pub fn finish(&mut self) {
         self.uniforms.finish();
         self.colors.finish();
     }
@@ -206,6 +184,7 @@ impl<'a> StagingBuffers<'a> {
 
 /// A block of GPU memory that will contain our uniforms.
 #[derive(Debug)]
+#[allow(dead_code)]
 struct Block {
     buffer: wgpu::Buffer,
     bind_group: wgpu::BindGroup,

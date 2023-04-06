@@ -6,7 +6,7 @@ use crate::globals::Globals;
 use crate::mesh::{as_mesh, DrawType, Mesh};
 use crate::surface::target::CommandTarget;
 use crate::surface::Surface;
-use crate::uniform_buffer::StagingBuffers;
+use crate::uniform_buffer::StagingBuffersStorage;
 use crate::{as_texture, Descriptors, MaskState, Pipelines, PushConstants, Transforms};
 use ruffle_render::backend::ShapeHandle;
 use ruffle_render::bitmap::BitmapHandle;
@@ -25,7 +25,9 @@ pub struct CommandRenderer<'pass, 'frame: 'pass, 'global: 'frame> {
     num_masks: u32,
     mask_state: MaskState,
     render_pass: wgpu::RenderPass<'pass>,
-    staging_buffers: &'frame mut StagingBuffers<'global>,
+    #[allow(dead_code)]
+    staging_buffers: &'frame mut StagingBuffersStorage,
+    #[allow(dead_code)]
     uniform_encoder: &'frame mut wgpu::CommandEncoder,
     needs_depth: bool,
 }
@@ -35,7 +37,7 @@ impl<'pass, 'frame: 'pass, 'global: 'frame> CommandRenderer<'pass, 'frame, 'glob
     pub fn new(
         pipelines: &'frame Pipelines,
         descriptors: &'global Descriptors,
-        staging_buffers: &'frame mut StagingBuffers<'global>,
+        staging_buffers: &'frame mut StagingBuffersStorage,
         uniform_encoder: &'frame mut wgpu::CommandEncoder,
         render_pass: wgpu::RenderPass<'pass>,
         num_masks: u32,
@@ -194,31 +196,32 @@ impl<'pass, 'frame: 'pass, 'global: 'frame> CommandRenderer<'pass, 'frame, 'glob
                 }]),
             );
         } else {
-            self.staging_buffers.uniforms.write_uniforms(
-                &self.descriptors.device,
-                &self.descriptors.bind_layouts.transforms,
-                self.uniform_encoder,
-                &mut self.render_pass,
-                1,
-                &Transforms { world_matrix },
-            );
-
-            if color_adjustments == &ColorTransform::IDENTITY {
-                self.render_pass.set_bind_group(
-                    2,
-                    &self.descriptors.default_color_bind_group,
-                    &[0],
-                );
-            } else {
-                self.staging_buffers.colors.write_uniforms(
-                    &self.descriptors.device,
-                    &self.descriptors.bind_layouts.color_transforms,
-                    self.uniform_encoder,
-                    &mut self.render_pass,
-                    2,
-                    &color_adjustments.into(),
-                );
-            }
+            unimplemented!("Push constants must be supported!");
+            // self.staging_buffers.uniforms.write_uniforms(
+            //     &self.descriptors.device,
+            //     &self.descriptors.bind_layouts.transforms,
+            //     self.uniform_encoder,
+            //     &mut self.render_pass,
+            //     1,
+            //     &Transforms { world_matrix },
+            // );
+            //
+            // if color_adjustments == &ColorTransform::IDENTITY {
+            //     self.render_pass.set_bind_group(
+            //         2,
+            //         &self.descriptors.default_color_bind_group,
+            //         &[0],
+            //     );
+            // } else {
+            //     self.staging_buffers.colors.write_uniforms(
+            //         &self.descriptors.device,
+            //         &self.descriptors.bind_layouts.color_transforms,
+            //         self.uniform_encoder,
+            //         &mut self.render_pass,
+            //         2,
+            //         &color_adjustments.into(),
+            //     );
+            // }
         }
     }
 
@@ -445,7 +448,7 @@ pub enum LayerRef<'a> {
 pub fn chunk_blends<'a>(
     commands: Vec<Command>,
     descriptors: &'a Descriptors,
-    staging_buffers: &mut StagingBuffers<'a>,
+    staging_buffers: &mut StagingBuffersStorage,
     uniform_encoder: &mut wgpu::CommandEncoder,
     draw_encoder: &mut wgpu::CommandEncoder,
     meshes: &'a Vec<Mesh>,

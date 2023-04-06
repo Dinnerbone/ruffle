@@ -1,10 +1,12 @@
 use crate::buffer_pool::PoolEntry;
+use crate::descriptors::Descriptors;
+use crate::uniform_buffer::StagingBuffersStorage;
 use crate::utils::BufferDimensions;
 use crate::Error;
 use ruffle_render::bitmap::PixelRegion;
 use std::fmt::Debug;
 use std::ops::Deref;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard};
 use tracing::instrument;
 
 pub trait RenderTargetFrame: Debug {
@@ -313,5 +315,78 @@ impl RenderTarget for TextureTarget {
         } else {
             queue.submit(command_buffers)
         }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct StagingEncoder(Arc<Mutex<Encoder>>);
+
+impl StagingEncoder {
+    pub fn new(descriptors: Arc<Descriptors>) -> Self {
+        Self(Arc::new(Mutex::new(Encoder::new(descriptors))))
+    }
+
+    pub fn finish(&self) -> [wgpu::CommandBuffer; 2] {
+        self.lock().finish()
+    }
+
+    pub fn recall(&self) {
+        self.lock().recall()
+    }
+
+    pub fn lock(&self) -> MutexGuard<Encoder> {
+        self.0
+            .lock()
+            .expect("Cannot recursively lock staging encoder")
+    }
+}
+
+#[derive(Debug)]
+pub struct Encoder {
+    pub descriptors: Arc<Descriptors>,
+    pub uniform_encoder: wgpu::CommandEncoder,
+    pub draw_encoder: wgpu::CommandEncoder,
+    pub buffers: StagingBuffersStorage,
+}
+
+impl Encoder {
+    pub fn new(descriptors: Arc<Descriptors>) -> Self {
+        let buffers = StagingBuffersStorage::from_alignment(
+            descriptors.limits.min_uniform_buffer_offset_alignment,
+        );
+        let uniform_encoder = descriptors
+            .device
+            .create_command_encoder(&Default::default());
+        let draw_encoder = descriptors
+            .device
+            .create_command_encoder(&Default::default());
+        Self {
+            descriptors,
+            uniform_encoder,
+            draw_encoder,
+            buffers,
+        }
+    }
+
+    pub fn recall(&mut self) {
+        self.buffers.recall();
+    }
+
+    pub fn finish(&mut self) -> [wgpu::CommandBuffer; 2] {
+        self.buffers.finish();
+
+        let uniform_encoder = std::mem::replace(
+            &mut self.uniform_encoder,
+            self.descriptors
+                .device
+                .create_command_encoder(&Default::default()),
+        );
+        let draw_encoder = std::mem::replace(
+            &mut self.draw_encoder,
+            self.descriptors
+                .device
+                .create_command_encoder(&Default::default()),
+        );
+        [uniform_encoder.finish(), draw_encoder.finish()]
     }
 }

@@ -6,7 +6,7 @@ use crate::buffer_pool::{BufferPool, PoolEntry};
 use crate::descriptors::Quad;
 use crate::mesh::BitmapBinds;
 use crate::pipelines::Pipelines;
-use crate::target::{RenderTarget, SwapChainTarget};
+use crate::target::{RenderTarget, StagingEncoder, SwapChainTarget};
 use crate::utils::{
     capture_image, create_buffer_with_data, format_list, get_backend_names, BufferDimensions,
 };
@@ -176,6 +176,7 @@ pub enum QueueSyncHandle {
         copy_area: PixelRegion,
         descriptors: Arc<Descriptors>,
         pool: Arc<BufferPool<wgpu::Buffer, BufferDimensions>>,
+        staging_encoder: StagingEncoder,
     },
 }
 
@@ -209,20 +210,15 @@ impl QueueSyncHandle {
                 copy_area,
                 descriptors,
                 pool,
+                staging_encoder,
             } => {
                 let texture = as_texture(&handle);
 
                 let buffer_dimensions =
                     BufferDimensions::new(copy_area.width() as usize, copy_area.height() as usize);
                 let buffer = pool.take(&descriptors, buffer_dimensions.clone());
-                let label = create_debug_label!("Render target transfer encoder");
-                let mut encoder =
-                    descriptors
-                        .device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: label.as_deref(),
-                        });
-                encoder.copy_texture_to_buffer(
+                let mut encoder = staging_encoder.lock();
+                encoder.draw_encoder.copy_texture_to_buffer(
                     wgpu::ImageCopyTexture {
                         texture: &texture.texture,
                         mip_level: 0,
@@ -247,7 +243,8 @@ impl QueueSyncHandle {
                         depth_or_array_layers: 1,
                     },
                 );
-                let index = descriptors.queue.submit(Some(encoder.finish()));
+                let index = descriptors.queue.submit(encoder.finish());
+                encoder.recall();
 
                 let image = capture_image(
                     &descriptors.device,

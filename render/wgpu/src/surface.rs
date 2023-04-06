@@ -6,7 +6,8 @@ use crate::blend::ComplexBlend;
 use crate::buffer_pool::TexturePool;
 use crate::mesh::Mesh;
 use crate::surface::commands::{chunk_blends, Chunk, CommandRenderer, LayerRef};
-use crate::uniform_buffer::{StagingBuffers, StagingBuffersStorage};
+use crate::target::Encoder;
+use crate::uniform_buffer::StagingBuffersStorage;
 use crate::utils::{remove_srgb, supported_sample_count};
 use crate::{
     Descriptors, MaskState, Pipelines, PushConstants, Texture, TextureTransforms, Transforms,
@@ -68,26 +69,14 @@ impl Surface {
         frame_view: &wgpu::TextureView,
         render_target_mode: RenderTargetMode,
         descriptors: &Descriptors,
-        buffers_storage: &mut StagingBuffersStorage,
+        staging_encoder: &mut Encoder,
         meshes: &Vec<Mesh>,
         commands: CommandList,
         texture_pool: &mut TexturePool,
-    ) -> Vec<wgpu::CommandBuffer> {
-        let uniform_encoder_label = create_debug_label!("Uniform upload command encoder");
-        let mut staging_buffers = StagingBuffers::new(buffers_storage);
-        let mut uniform_encoder =
-            descriptors
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: uniform_encoder_label.as_deref(),
-                });
-        let label = create_debug_label!("Draw encoder");
-        let mut draw_encoder =
-            descriptors
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: label.as_deref(),
-                });
+    ) {
+        let mut staging_buffers = &mut staging_encoder.buffers;
+        let mut uniform_encoder = &mut staging_encoder.uniform_encoder;
+        let mut draw_encoder = &mut staging_encoder.draw_encoder;
 
         let target = self.draw_commands(
             render_target_mode,
@@ -106,14 +95,6 @@ impl Surface {
         // the background clear color applied)
         target.ensure_cleared(&mut draw_encoder);
 
-        let mut buffers = vec![draw_encoder.finish()];
-
-        let mut copy_encoder =
-            descriptors
-                .device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: create_debug_label!("Frame copy command encoder").as_deref(),
-                });
         run_copy_pipeline(
             descriptors,
             self.format,
@@ -124,14 +105,8 @@ impl Surface {
             target.whole_frame_bind_group(descriptors),
             target.globals(),
             1,
-            &mut copy_encoder,
+            &mut draw_encoder,
         );
-        buffers.push(copy_encoder.finish());
-
-        buffers.insert(0, uniform_encoder.finish());
-        staging_buffers.finish();
-
-        buffers
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -142,7 +117,7 @@ impl Surface {
         descriptors: &'global Descriptors,
         meshes: &'global Vec<Mesh>,
         commands: CommandList,
-        staging_buffers: &'frame mut StagingBuffers<'global>,
+        staging_buffers: &'frame mut StagingBuffersStorage,
         uniform_encoder: &'frame mut wgpu::CommandEncoder,
         draw_encoder: &'frame mut wgpu::CommandEncoder,
         nearest_layer: LayerRef<'frame>,
