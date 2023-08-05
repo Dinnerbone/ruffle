@@ -55,6 +55,7 @@ mod qname;
 mod regexp;
 mod scope;
 mod script;
+pub mod specification;
 mod string;
 mod stubs;
 mod traits;

@@ -137,6 +137,13 @@ impl<'gc> ScriptObjectData<'gc> {
         }
     }
 
+    /// Retrieve the values stored directly on this ScriptObjectData.
+    ///
+    /// This should only be used for debugging purposes.
+    pub fn values(&self) -> &FnvHashMap<AvmString<'gc>, Value<'gc>> {
+        &self.values
+    }
+
     pub fn get_property_local(
         &self,
         multiname: &Multiname<'gc>,

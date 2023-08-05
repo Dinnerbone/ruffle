@@ -7,6 +7,7 @@ use crate::avm1::VariableDumper;
 use crate::avm1::{Activation, ActivationIdentifier};
 use crate::avm1::{ScriptObject, TObject, Value};
 use crate::avm2::api_version::ApiVersion;
+use crate::avm2::specification::capture_specification;
 use crate::avm2::{
     object::LoaderInfoObject, object::TObject as _, Activation as Avm2Activation, Avm2, CallStack,
     Object as Avm2Object,
@@ -2584,6 +2585,7 @@ impl PlayerBuilder {
             stage.set_forced_scale_mode(context, self.forced_scale_mode);
             stage.post_instantiation(context, None, Instantiator::Movie, false);
             stage.build_matrices(context);
+            capture_specification(context);
         });
         player_lock.gc_arena.borrow().mutate(|context, root| {
             let call_stack = root.data.read().avm2.call_stack();
