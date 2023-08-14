@@ -55,11 +55,22 @@ function transformManifest(content, env) {
                 id: firefoxExtensionId,
             },
         };
+
+        manifest.background = { scripts: ["dist/background.js"] };
+        manifest.permissions = [
+            "storage",
+            "webRequest",
+            "webRequestBlocking",
+        ];
     } else {
         manifest.version_name =
             versionChannel === "nightly"
                 ? `${packageVersion} nightly ${buildDate}`
                 : packageVersion;
+
+        // Chrome runs the extension in a single shared process by default,
+        // which prevents extension pages from loading in Incognito tabs
+        manifest.incognito = "split";
     }
 
     return JSON.stringify(manifest);
@@ -117,9 +128,7 @@ export default function (/** @type {Record<string, any>} */ env, _argv) {
             new CopyPlugin({
                 patterns: [
                     {
-                        from: env["firefox"]
-                            ? "manifest_firefox.json5"
-                            : "manifest_other.json5",
+                        from: "manifest.json5",
                         to: "../manifest.json",
                         transform: (content) =>
                             transformManifest(
