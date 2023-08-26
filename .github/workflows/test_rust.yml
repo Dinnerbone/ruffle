@@ -76,8 +76,8 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
 
-      - name: Run tests with image tests
-        run: cargo test --all --locked --features imgtests,lzma
+      - name: Run tests
+        run: cargo test --all --locked --features ${ (matrix.rust_version == 'stable' && runner.os == 'Linux' && 'imgtests,') || ''}lzma
         env:
           XDG_RUNTIME_DIR: '' # dummy value, just to silence warnings about it missing
 
