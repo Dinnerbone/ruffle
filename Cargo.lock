@@ -4157,7 +4157,7 @@ dependencies = [
  "symphonia",
  "thiserror",
  "tracing",
- "ttf-parser",
+ "ttf-parser 0.19.2",
  "url",
  "wasm-bindgen-futures",
  "weak-table",

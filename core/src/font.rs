@@ -134,7 +134,7 @@ pub struct DirectFont {
 
     ascender: i16,
     descender: i16,
-    height: i16,
+    leading: i16,
     scale: f32,
     might_have_kerning: bool,
 }
@@ -172,11 +172,13 @@ impl DirectFont {
 
         // [NA] In theory this shouldn't be needed, scale is supposed to take care of this...
         // But I can't get anything to show up unless I make all the values the same range as a Flash DefineFont3 tag
-        let ascender = face.ascender() * 20;
-        let descender = -face.descender() * 20;
-        let height = face.line_gap() * 20;
         let scale = face.units_per_em() as f32 * 20.0;
+        let ascender = face.ascender() * scale as i16;
+        let descender = -face.descender() * scale as i16;
+        let leading = ascender + descender - scale as i16;
         let glyphs = vec![OnceCell::new(); face.number_of_glyphs() as usize];
+
+        dbg!(scale, ascender, descender, leading);
 
         // [NA] TODO: This is technically correct for just Kerning, but in practice kerning comes in many forms.
         // We need to support GPOS to do better at this, but that's a bigger change to font rendering as a whole.
@@ -198,7 +200,7 @@ impl DirectFont {
             family_name,
             ascender,
             descender,
-            height,
+            leading,
             scale,
             might_have_kerning,
         })
@@ -234,6 +236,14 @@ impl DirectFont {
                         .outline_glyph(glyph_id, &mut GlyphToDrawing(&mut drawing))
                         .is_some()
                     {
+                        if character == 'a' {
+                            info!("device bounds");
+                            dbg!(&drawing.self_bounds());
+                            dbg!(face.glyph_y_origin(glyph_id));
+                            info!("-----");
+                            info!("-----");
+                            info!("-----");
+                        }
                         let advance = face.glyph_hor_advance(glyph_id).map_or_else(
                             || drawing.self_bounds().width(),
                             |a| Twips::from_pixels_i32(a as i32),
@@ -274,7 +284,6 @@ impl DirectFont {
                 for subtable in kern.subtables {
                     if subtable.horizontal {
                         if let Some(value) = subtable.glyphs_kerning(left_glyph, right_glyph) {
-                            dbg!(left, right, value);
                             return Twips::from_pixels_i32(value as i32);
                         }
                     }
@@ -403,9 +412,10 @@ impl<'gc> Font<'gc> {
         gc_context: &Mutation<'gc>,
         bytes: Cow<'static, [u8]>,
         font_index: u32,
-        descriptor: FontDescriptor,
     ) -> Result<Font<'gc>, ttf_parser::FaceParsingError> {
         let direct = DirectFont::new(bytes, font_index)?;
+        let descriptor =
+            FontDescriptor::from_parts(direct.full_name.as_ref().unwrap(), false, false); // todo, remove this?
 
         Ok(Font(Gc::new(
             gc_context,
@@ -413,7 +423,7 @@ impl<'gc> Font<'gc> {
                 scale: direct.scale,
                 ascent: direct.ascender,
                 descent: direct.descender,
-                leading: direct.height,
+                leading: direct.leading,
                 glyphs: GlyphSource::Direct(direct),
                 descriptor,
                 font_type: FontType::Device,
@@ -436,6 +446,8 @@ impl<'gc> Font<'gc> {
         } else {
             (0, 0, 0)
         };
+        let scale = if tag.version >= 3 { 20480.0 } else { 1024.0 };
+        dbg!(ascent, descent, leading, &descriptor.name, scale);
 
         let glyphs: Vec<Glyph> = tag
             .glyphs

@@ -2,6 +2,7 @@ use crate::avm1::{PropertyMap as Avm1PropertyMap, PropertyMap};
 use crate::avm2::{ClassObject as Avm2ClassObject, Domain as Avm2Domain};
 use crate::backend::audio::SoundHandle;
 use crate::character::Character;
+use std::borrow::Cow;
 
 use crate::display_object::{Bitmap, Graphic, MorphShape, TDisplayObject, Text};
 use crate::font::{Font, FontDescriptor, FontType};
@@ -487,7 +488,7 @@ impl<'gc> Library<'gc> {
             .insert((name.to_string(), is_bold, is_italic));
         if new_request {
             // First time asking for this font, see if our backend can provide anything relevant
-            ui.load_device_font(name, is_bold, is_italic, &|definition| {
+            ui.load_device_font(name, is_bold, is_italic, &mut |definition| {
                 self.register_device_font(gc_context, renderer, definition)
             });
         }
@@ -523,6 +524,15 @@ impl<'gc> Library<'gc> {
                 let name = font.descriptor().name().to_owned();
                 info!("Loaded new device font \"{name}\" from swf tag");
                 self.device_fonts.register(font);
+            }
+            FontDefinition::FontFile(bytes) => {
+                if let Ok(font) = Font::from_font_file(gc_context, Cow::Owned(bytes), 0) {
+                    let name = font.descriptor().name().to_owned();
+                    info!("Loaded new device font \"{name}\" from file");
+                    self.device_fonts.register(font);
+                } else {
+                    warn!("Failed to load device font from file");
+                }
             }
         }
         self.default_font_cache.clear();

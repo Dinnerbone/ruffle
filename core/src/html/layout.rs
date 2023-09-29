@@ -478,6 +478,7 @@ impl<'a, 'gc> LayoutContext<'a, 'gc> {
                 )
                 .filter(|f| f.has_glyphs())
             {
+                tracing::info!("embedded font {font_name}");
                 return Some(font);
             }
             // TODO: If set to use embedded fonts and we couldn't find any matching font, show nothing
@@ -494,6 +495,7 @@ impl<'a, 'gc> LayoutContext<'a, 'gc> {
             context.renderer,
             context.gc_context,
         ) {
+            tracing::info!("device font {font_name}");
             return Some(font);
         }
 
@@ -504,9 +506,10 @@ impl<'a, 'gc> LayoutContext<'a, 'gc> {
             "_typewriter" => DefaultFont::Typewriter,
             _ => DefaultFont::Sans,
         };
+        tracing::info!("{default_font:?}");
 
         // TODO: handle multiple fonts for a definition, each covering different sets of glyphs
-        context
+        let result = context
             .library
             .default_font(
                 default_font,
@@ -515,7 +518,9 @@ impl<'a, 'gc> LayoutContext<'a, 'gc> {
                 context.gc_context,
             )
             .first()
-            .copied()
+            .copied();
+        tracing::info!("built in font {font_name}");
+        result
     }
 
     /// Append text to the current line of the ongoing layout operation.

@@ -15,6 +15,9 @@ pub static US_ENGLISH: LanguageIdentifier = langid!("en-US");
 pub enum FontDefinition<'a> {
     /// A singular DefineFont tag extracted from a swf.
     SwfTag(swf::Font<'a>, &'static swf::Encoding),
+
+    /// A font contained in an external file, such as a ttf.
+    FontFile(Vec<u8>),
 }
 
 /// A filter specifying a category that can be selected from a file chooser dialog
@@ -96,7 +99,7 @@ pub trait UiBackend: Downcast {
         name: &str,
         is_bold: bool,
         is_italic: bool,
-        register: &dyn FnMut(FontDefinition),
+        register: &mut dyn FnMut(FontDefinition),
     );
 
     /// Displays a file selection dialog, returning None if the dialog cannot be displayed
@@ -278,7 +281,7 @@ impl UiBackend for NullUiBackend {
         _name: &str,
         _is_bold: bool,
         _is_italic: bool,
-        _register: &dyn FnMut(FontDefinition),
+        _register: &mut dyn FnMut(FontDefinition),
     ) {
     }
 

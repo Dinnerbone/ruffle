@@ -1182,6 +1182,10 @@ pub fn swf_glyph_to_shape(glyph: &swf::Glyph) -> swf::Shape {
         .clone()
         .filter(|b| b.x_min != b.x_max || b.y_min != b.y_max)
         .unwrap_or_else(|| calculate_shape_bounds(&glyph.shape_records));
+    if glyph.code == 'a' as u16 {
+        tracing::info!("SWF bounds");
+        dbg!(&bounds);
+    }
     swf::Shape {
         version: 2,
         id: 0,
