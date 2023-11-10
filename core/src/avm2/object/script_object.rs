@@ -140,7 +140,7 @@ impl<'gc> ScriptObjectData<'gc> {
     /// Retrieve the values stored directly on this ScriptObjectData.
     ///
     /// This should only be used for debugging purposes.
-    pub fn values(&self) -> &FnvHashMap<AvmString<'gc>, Value<'gc>> {
+    pub fn values(&self) -> &DynamicMap<StringOrObject<'gc>, Value<'gc>> {
         &self.values
     }
 

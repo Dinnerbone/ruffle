@@ -1,3 +1,4 @@
+use crate::avm2::dynamic_map::{DynamicMap, StringOrObject};
 use crate::avm2::function::Executable;
 use crate::avm2::method::{Method, ParamConfig};
 use crate::avm2::object::TObject;
@@ -297,10 +298,22 @@ impl Definition {
 
         let prototype = class_object.prototype();
         let prototype_base = prototype.base();
-        let prototype_values: &FnvHashMap<AvmString, Value> = prototype_base.values();
-        for (name, value) in prototype_values.iter() {
-            if name != b"constructor" {
-                Self::add_prototype_value(name, *value, &mut definition.prototype, activation);
+        let prototype_values: &DynamicMap<StringOrObject<'gc>, Value<'gc>> =
+            prototype_base.values();
+        for (key, value) in prototype_values.as_hashmap().iter() {
+            let name = match key {
+                StringOrObject::String(name) => *name,
+                StringOrObject::Object(object) => {
+                    Value::Object(*object).coerce_to_string(activation).unwrap()
+                }
+            };
+            if &name != b"constructor" {
+                Self::add_prototype_value(
+                    &name,
+                    value.value,
+                    &mut definition.prototype,
+                    activation,
+                );
             }
         }
 
