@@ -10,10 +10,7 @@ static_loader! {
 }
 
 pub fn core_text(language: &LanguageIdentifier, id: &str) -> String {
-    TEXTS.lookup(language, id).unwrap_or_else(|| {
-        tracing::error!("Unknown core text id '{id}'");
-        id.to_string()
-    })
+    TEXTS.lookup(language, id)
 }
 
 pub fn core_text_with_args<T: AsRef<str>>(
@@ -23,8 +20,4 @@ pub fn core_text_with_args<T: AsRef<str>>(
 ) -> String {
     TEXTS
         .lookup_with_args(language, id, args)
-        .unwrap_or_else(|| {
-            tracing::error!("Unknown core text id '{id}'");
-            id.to_string()
-        })
 }
