@@ -61,6 +61,7 @@ package {
         AS3 function namespace(prefix:* = null):* {
             return namespace_internal_impl(arguments.length > 0, prefix);
         }
+        AS3 native function addNamespace(ns:Object):XML;
         AS3 native function inScopeNamespaces():Array;
         AS3 native function namespaceDeclarations():Array;
         AS3 native function localName():Object;
@@ -140,6 +141,11 @@ package {
         prototype.namespaceDeclarations = function():Array {
             var self:XML = this;
             return self.AS3::namespaceDeclarations();
+        };
+
+        prototype.addNamespace = function(ns:Object):XML {
+            var self:XML = this;
+            return self.AS3::addNamespace(ns);
         };
 
         prototype.inScopeNamespaces = function():Array {

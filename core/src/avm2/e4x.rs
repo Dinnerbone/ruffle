@@ -10,7 +10,7 @@ use quick_xml::{
     Error as XmlError, NsReader,
 };
 
-use crate::{avm2::TObject, xml::custom_unescape};
+use crate::{avm2::Object, avm2::TObject, xml::custom_unescape};
 
 use super::{
     error::{make_error_1010, make_error_1118, type_error},
@@ -39,6 +39,7 @@ pub struct E4XNodeData<'gc> {
     local_name: Option<AvmString<'gc>>,
     kind: E4XNodeKind<'gc>,
     notification: Option<FunctionObject<'gc>>,
+    namespaces: Vec<NamespaceAndPrefix<'gc>>,
 }
 
 impl<'gc> Debug for E4XNodeData<'gc> {
@@ -126,6 +127,7 @@ impl<'gc> E4XNode<'gc> {
                     children: vec![],
                 },
                 notification: None,
+                namespaces: vec![],
             },
         ))
     }
@@ -139,6 +141,7 @@ impl<'gc> E4XNode<'gc> {
                 local_name: None,
                 kind: E4XNodeKind::Text(text),
                 notification: None,
+                namespaces: vec![],
             },
         ))
     }
@@ -160,6 +163,7 @@ impl<'gc> E4XNode<'gc> {
                     children: vec![],
                 },
                 notification: None,
+                namespaces: vec![],
             },
         ))
     }
@@ -178,6 +182,7 @@ impl<'gc> E4XNode<'gc> {
                 local_name: Some(name),
                 kind: E4XNodeKind::Attribute(value),
                 notification: None,
+                namespaces: vec![],
             },
         ))
     }
@@ -288,6 +293,7 @@ impl<'gc> E4XNode<'gc> {
                 local_name: this.local_name,
                 kind,
                 notification: None,
+                namespaces: this.namespaces.clone(),
             },
         ));
 
@@ -790,6 +796,7 @@ impl<'gc> E4XNode<'gc> {
                             E4XNodeKind::CData(text)
                         },
                         notification: None,
+                        namespaces: vec![],
                     },
                 ));
                 push_childless_node(node, open_tags, top_level, activation)?;
@@ -863,6 +870,7 @@ impl<'gc> E4XNode<'gc> {
                             local_name: None,
                             kind: E4XNodeKind::Comment(text),
                             notification: None,
+                            namespaces: vec![],
                         },
                     ));
 
@@ -902,6 +910,7 @@ impl<'gc> E4XNode<'gc> {
                             local_name: Some(name),
                             kind: E4XNodeKind::ProcessingInstruction(value),
                             notification: None,
+                            namespaces: vec![],
                         },
                     ));
 
@@ -926,6 +935,7 @@ impl<'gc> E4XNode<'gc> {
         decoder: quick_xml::Decoder,
     ) -> Result<Self, Error<'gc>> {
         let mut attribute_nodes = Vec::new();
+        let mut namespaces = Vec::new();
 
         let attributes: Result<Vec<_>, _> = bs.attributes().collect();
         for attribute in
@@ -936,7 +946,14 @@ impl<'gc> E4XNode<'gc> {
                 AvmString::new_utf8_bytes(activation.context.gc_context, local_name.into_inner());
             let namespace = match ns {
                 ResolveResult::Bound(ns) if ns.into_inner() == b"http://www.w3.org/2000/xmlns/" => {
-                    continue
+                    namespaces.push(NamespaceAndPrefix {
+                        uri: AvmString::new_utf8_bytes(
+                            activation.context.gc_context,
+                            &attribute.value,
+                        ),
+                        prefix: Some(name),
+                    });
+                    continue;
                 }
                 ResolveResult::Bound(ns) => Some(AvmString::new_utf8_bytes(
                     activation.context.gc_context,
@@ -967,6 +984,7 @@ impl<'gc> E4XNode<'gc> {
                 local_name: Some(name),
                 kind: E4XNodeKind::Attribute(value),
                 notification: None,
+                namespaces: vec![],
             };
             let attribute = E4XNode(GcCell::new(activation.context.gc_context, attribute_data));
             attribute_nodes.push(attribute);
@@ -1003,6 +1021,7 @@ impl<'gc> E4XNode<'gc> {
                 children: Vec::new(),
             },
             notification: None,
+            namespaces,
         };
 
         let result = E4XNode(GcCell::new(activation.context.gc_context, data));
@@ -1047,6 +1066,100 @@ impl<'gc> E4XNode<'gc> {
 
     pub fn notification(&self) -> Option<FunctionObject<'gc>> {
         self.0.read().notification
+    }
+
+    pub fn namespaces(&self) -> Ref<Vec<NamespaceAndPrefix<'gc>>> {
+        Ref::map(self.0.read(), |read| &read.namespaces)
+    }
+
+    pub fn in_scope_namespaces(&self) -> Vec<NamespaceAndPrefix<'gc>> {
+        let mut result: Vec<NamespaceAndPrefix<'gc>> = vec![];
+        let mut next_node = Some(*self);
+
+        while let Some(node) = next_node {
+            for ns1 in node.namespaces().iter() {
+                let mut found = false;
+                for ns2 in &result {
+                    if ns1.prefix.is_none() {
+                        if ns1.uri == ns2.uri {
+                            found = true;
+                            break;
+                        }
+                    } else {
+                        if ns1.prefix == ns2.prefix {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if !found {
+                    result.push(ns1.clone());
+                }
+            }
+
+            next_node = node.parent();
+        }
+
+        result
+    }
+
+    pub fn add_in_scope_namespace(&self, gc: &Mutation<'gc>, namespace: NamespaceAndPrefix<'gc>) {
+        // 1. If x.[[Class]] ∈ {"text", "comment", "processing-instruction", “attribute”}, return
+        if !self.is_element() {
+            return;
+        }
+
+        let Some(ns_prefix) = namespace.prefix else {
+            return;
+        };
+        // 2. If N.prefix != undefined
+
+        //  2a. If N.prefix == "" and x.[[Name]].uri == "", return
+        if ns_prefix.is_empty() && self.namespace().unwrap_or_default().is_empty() {
+            return;
+        }
+
+        //  2b. Let match be null
+        //  2c. For each ns in x.[[InScopeNamespaces]]
+        //     i. If N.prefix == ns.prefix, let match = ns
+        let found_index = self
+            .0
+            .read()
+            .namespaces
+            .iter()
+            .position(|ns| ns.prefix == namespace.prefix);
+
+        //  2d. If match is not null and match.uri is not equal to N.uri
+        if let Some(found_index) = found_index {
+            if self.0.read().namespaces[found_index].uri != namespace.uri {
+                //     i. Remove match from x.[[InScopeNamespaces]]
+                self.0.write(gc).namespaces.remove(found_index);
+            }
+        }
+
+        //  2e. Let x.[[InScopeNamespaces]] = x.[[InScopeNamespaces]] ∪ { N }
+        self.0.write(gc).namespaces.push(namespace);
+
+        //  2f. If x.[[Name]].[[Prefix]] == N.prefix
+        //     i. Let x.[[Name]].prefix = undefined
+        if self.namespace() == Some(ns_prefix) {
+            // TODO: store prefix vs uri
+            self.0.write(gc).namespace = None;
+        }
+
+        //  2g. For each attr in x.[[Attributes]]
+        if let E4XNodeKind::Element {
+            ref mut attributes, ..
+        } = &mut *self.kind_mut(gc)
+        {
+            for attr in attributes.iter_mut() {
+                //     i. If attr.[[Name]].[[Prefix]] == N.prefix, let attr.[[Name]].prefix = undefined
+                if attr.namespace() == Some(ns_prefix) {
+                    //  TODO: store prefix vs uri
+                    attr.0.write(gc).namespace = None;
+                }
+            }
+        }
     }
 
     // FIXME - avmplus constructs an actual QName here, and does the normal
@@ -1165,6 +1278,35 @@ impl<'gc> E4XNode<'gc> {
 
     pub fn ptr_eq(first: E4XNode<'gc>, second: E4XNode<'gc>) -> bool {
         GcCell::ptr_eq(first.0, second.0)
+    }
+}
+
+#[derive(Clone, Debug, Collect)]
+#[collect(no_drop)]
+pub struct NamespaceAndPrefix<'gc> {
+    pub uri: AvmString<'gc>,
+    pub prefix: Option<AvmString<'gc>>,
+}
+
+impl<'gc> NamespaceAndPrefix<'gc> {
+    pub fn to_object(
+        &self,
+        activation: &mut Activation<'_, 'gc>,
+    ) -> Result<Object<'gc>, Error<'gc>> {
+        activation.avm2().classes().namespace.construct(
+            activation,
+            &[
+                self.prefix
+                    .map(Value::from)
+                    .unwrap_or(Value::Undefined)
+                    .into(),
+                self.uri.into(),
+            ],
+        )
+    }
+
+    pub fn has_prefix(&self) -> bool {
+        matches!(&self.prefix, Some(v) if v.len() > 0)
     }
 }
 

@@ -1,7 +1,7 @@
 //! XML builtin and prototype
 
 use crate::avm2::api_version::ApiVersion;
-use crate::avm2::e4x::{name_to_multiname, E4XNode, E4XNodeKind};
+use crate::avm2::e4x::{name_to_multiname, E4XNode, E4XNodeKind, NamespaceAndPrefix};
 use crate::avm2::error::{make_error_1117, type_error};
 pub use crate::avm2::object::xml_allocator;
 use crate::avm2::object::{
@@ -9,7 +9,9 @@ use crate::avm2::object::{
 };
 use crate::avm2::parameters::ParametersExt;
 use crate::avm2::string::AvmString;
-use crate::avm2::{Activation, ArrayObject, Error, Multiname, Namespace, Object, Value};
+use crate::avm2::{
+    Activation, ArrayObject, ArrayStorage, Error, Multiname, Namespace, Object, Value,
+};
 use crate::avm2_stub_method;
 
 fn ill_formed_markup_err<'gc>(
@@ -232,11 +234,25 @@ pub fn namespace_internal_impl<'gc>(
 
 pub fn in_scope_namespaces<'gc>(
     activation: &mut Activation<'_, 'gc>,
-    _this: Object<'gc>,
+    this: Object<'gc>,
     _args: &[Value<'gc>],
 ) -> Result<Value<'gc>, Error<'gc>> {
-    avm2_stub_method!(activation, "XML", "inScopeNamespaces");
-    Ok(ArrayObject::empty(activation)?.into())
+    let xml = this.as_xml_object().unwrap();
+    let mut namespaces: Vec<NamespaceAndPrefix> = xml.node().in_scope_namespaces();
+
+    if namespaces.is_empty() {
+        // Flash never returns an empty list
+        namespaces.push(NamespaceAndPrefix {
+            prefix: Some("".into()),
+            uri: "".into(),
+        });
+    }
+
+    let result = namespaces
+        .into_iter()
+        .map(|ns| ns.to_object(activation))
+        .collect::<Result<Vec<Object<'gc>>, Error<'gc>>>()?;
+    Ok(ArrayObject::from_storage(activation, ArrayStorage::from_iter(result))?.into())
 }
 
 pub fn namespace_declarations<'gc>(
@@ -253,11 +269,80 @@ pub fn namespace_declarations<'gc>(
         return Ok(ArrayObject::empty(activation)?.into());
     }
 
-    // TODO: (We are missing [[InScopeNamespaces]])
-    // Step 3. Let y = x.[[Parent]
-    // ....
-    avm2_stub_method!(activation, "XML", "namespaceDeclarations");
-    Ok(ArrayObject::empty(activation)?.into())
+    // 3. Let y = x.[[Parent]]
+    // 4. Let ancestorNS = { }
+    // 5. While (y is not null)
+    //   a. For each ns in y.[[InScopeNamespaces]]
+    //     i. If (ns.prefix is undefined and there exists no n ∈ ancestorNS, such that n.uri == ns.uri) or
+    //        (ns.prefix is not undefined and there exists no n ∈ ancestorNS, such that n.prefix == ns.prefix)
+    //         1. Let ancestorNS = ancestorNS ∪ { ns }
+    //   b. Let y = y.[[Parent]]
+    // 6. NOTE: the E4X data model does not enforce the constraint: ∀ x ∈ XML : x.[[InScopeNamespaces]]
+    // ⊇ x.[[Parent]].[[InScopeNamespaces]]. However, implementations that do enforce this constraint may set
+    // ancestorNS = x.[[Parent]].[[InScopeNamespaces]] instead of using the computation above.
+    // (all taken care of by `in_scope_namespaces, as per 6)
+    let ancestor_namespaces: Vec<NamespaceAndPrefix<'gc>> = if let Some(parent) = node.parent() {
+        parent.in_scope_namespaces()
+    } else {
+        vec![]
+    };
+
+    // 7. Let declaredNS = { }
+    let mut declared_namespaces: Vec<Value<'gc>> = vec![];
+
+    // 8. For each ns in x.[[InScopeNamespaces]]
+    for n in node.in_scope_namespaces() {
+        //   a. If (ns.prefix is undefined and there exists no n ∈ ancestorNS, such that n.uri == ns.uri)
+        //      or (ns.prefix is not undefined and there exists no n ∈ ancestorNS, such that n.prefix == ns.prefix and
+        //      n.uri == ns.uri)
+        if (n.has_prefix() && !ancestor_namespaces.iter().any(|ns| n.uri == ns.uri))
+            || (!n.has_prefix()
+                && !ancestor_namespaces
+                    .iter()
+                    .any(|ns| n.prefix == ns.prefix && n.uri == ns.uri))
+        {
+            //        i. Let declaredNS = declaredNS ∪ { ns }
+            declared_namespaces.push(n.to_object(activation)?.into());
+        }
+    }
+
+    // 9. Let i = 0
+    // 10. For each ns in declaredNS
+    //   a. Call the [[Put]] method of a with arguments ToString(i) and ns
+    //   b. Let i = i + 1
+    // 11. Return a
+    // (return the darn array)
+    Ok(ArrayObject::from_storage(activation, ArrayStorage::from_iter(declared_namespaces))?.into())
+}
+
+pub fn add_namespace<'gc>(
+    activation: &mut Activation<'_, 'gc>,
+    this: Object<'gc>,
+    args: &[Value<'gc>],
+) -> Result<Value<'gc>, Error<'gc>> {
+    let xml = this.as_xml_object().unwrap();
+    let node = xml.node();
+    let mut ns = args.get_object(activation, 0, "namespace")?;
+    if ns.as_namespace_object().is_none() {
+        ns = activation
+            .avm2()
+            .classes()
+            .namespace
+            .construct(activation, &[ns.into()])?;
+    }
+    let ns = ns
+        .as_namespace_object()
+        .expect("ns was just set to NamespaceObject!");
+
+    node.add_in_scope_namespace(
+        activation.gc(),
+        NamespaceAndPrefix {
+            prefix: ns.prefix(),
+            uri: ns.namespace().as_uri(),
+        },
+    );
+
+    Ok(this.into())
 }
 
 pub fn local_name<'gc>(
