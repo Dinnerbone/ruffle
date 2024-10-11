@@ -1,3 +1,4 @@
+use super::target::PoolOrArcTexture;
 use crate::backend::RenderTargetMode;
 use crate::blend::TrivialBlend;
 use crate::blend::{BlendType, ComplexBlend};
@@ -19,8 +20,7 @@ use ruffle_render::transform::Transform;
 use std::mem;
 use swf::{BlendMode, Color, ColorTransform, Twips};
 use wgpu::Backend;
-
-use super::target::PoolOrArcTexture;
+use wgpu_profiler::Scope;
 
 pub struct CommandRenderer<'pass, 'frame: 'pass, 'global: 'frame> {
     pipelines: &'frame Pipelines,
@@ -442,13 +442,13 @@ pub enum LayerRef<'a> {
 /// Replaces every blend with a RenderBitmap, with the subcommands rendered out to a temporary texture
 /// Every complex blend will be its own item, but every other draw will be chunked together
 #[allow(clippy::too_many_arguments)]
-pub fn chunk_blends<'a>(
+pub fn chunk_blends<'a, 'global: 'a>(
     commands: CommandList,
-    descriptors: &'a Descriptors,
+    descriptors: &'global Descriptors,
     staging_belt: &'a mut wgpu::util::StagingBelt,
     dynamic_transforms: &'a DynamicTransforms,
-    draw_encoder: &mut wgpu::CommandEncoder,
-    meshes: &'a Vec<Mesh>,
+    draw_encoder: &'a mut Scope<'global, wgpu::CommandEncoder>,
+    meshes: &'global Vec<Mesh>,
     quality: StageQuality,
     width: u32,
     height: u32,
@@ -470,16 +470,16 @@ pub fn chunk_blends<'a>(
     .chunk_blends(commands)
 }
 
-struct WgpuCommandHandler<'a> {
-    descriptors: &'a Descriptors,
+struct WgpuCommandHandler<'a, 'global: 'a> {
+    descriptors: &'global Descriptors,
     quality: StageQuality,
     width: u32,
     height: u32,
     nearest_layer: LayerRef<'a>,
-    meshes: &'a Vec<Mesh>,
+    meshes: &'global Vec<Mesh>,
     staging_belt: &'a mut wgpu::util::StagingBelt,
     dynamic_transforms: &'a DynamicTransforms,
-    draw_encoder: &'a mut wgpu::CommandEncoder,
+    draw_encoder: &'a mut Scope<'global, wgpu::CommandEncoder>,
     texture_pool: &'a mut TexturePool,
     emulate_lines: bool,
 
@@ -490,14 +490,14 @@ struct WgpuCommandHandler<'a> {
     num_masks: i32,
 }
 
-impl<'a> WgpuCommandHandler<'a> {
+impl<'a, 'global: 'a> WgpuCommandHandler<'a, 'global> {
     #[allow(clippy::too_many_arguments)]
     fn new(
-        descriptors: &'a Descriptors,
+        descriptors: &'global Descriptors,
         staging_belt: &'a mut wgpu::util::StagingBelt,
         dynamic_transforms: &'a DynamicTransforms,
-        draw_encoder: &'a mut wgpu::CommandEncoder,
-        meshes: &'a Vec<Mesh>,
+        draw_encoder: &'a mut Scope<'global, wgpu::CommandEncoder>,
+        meshes: &'global Vec<Mesh>,
         quality: StageQuality,
         width: u32,
         height: u32,
@@ -608,7 +608,7 @@ impl<'a> WgpuCommandHandler<'a> {
     }
 }
 
-impl<'a> CommandHandler for WgpuCommandHandler<'a> {
+impl<'a, 'global: 'a> CommandHandler for WgpuCommandHandler<'a, 'global> {
     fn blend(&mut self, commands: CommandList, blend_mode: RenderBlendMode) {
         let mut surface = Surface::new(
             self.descriptors,

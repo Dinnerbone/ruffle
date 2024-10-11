@@ -38,6 +38,7 @@ use std::sync::Arc;
 use swf::Color;
 use tracing::instrument;
 use wgpu::SubmissionIndex;
+use wgpu_profiler::{GpuProfiler, GpuProfilerSettings};
 
 pub struct WgpuRenderBackend<T: RenderTarget> {
     pub(crate) descriptors: Arc<Descriptors>,
@@ -53,6 +54,7 @@ pub struct WgpuRenderBackend<T: RenderTarget> {
     pub(crate) offscreen_buffer_pool: Arc<BufferPool<wgpu::Buffer, BufferDimensions>>,
     dynamic_transforms: DynamicTransforms,
     active_frame: ActiveFrame,
+    profiler: GpuProfiler,
 }
 
 impl WgpuRenderBackend<SwapChainTarget> {
@@ -217,6 +219,17 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
         let transforms = DynamicTransforms::new(&descriptors);
         let active_frame = ActiveFrame::new(&descriptors);
 
+        let profile_settings = dbg!(GpuProfilerSettings::default());
+        #[cfg(feature = "profile-with-tracy")]
+        let profiler = GpuProfiler::new_with_tracy_client(
+            profile_settings,
+            descriptors.backend,
+            &descriptors.device,
+            &descriptors.queue,
+        );
+        #[cfg(not(feature = "profile-with-tracy"))]
+        let profiler = GpuProfiler::new(profile_settings);
+
         Ok(Self {
             descriptors,
             target,
@@ -229,6 +242,7 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
             offscreen_buffer_pool: Arc::new(offscreen_buffer_pool),
             dynamic_transforms: transforms,
             active_frame,
+            profiler: profiler?,
         })
     }
 
@@ -336,6 +350,14 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
 
     pub fn device(&self) -> &wgpu::Device {
         &self.descriptors.device
+    }
+
+    pub fn profiler(&self) -> &GpuProfiler {
+        &self.profiler
+    }
+
+    pub fn profiler_mut(&mut self) -> &mut GpuProfiler {
+        &mut self.profiler
     }
 
     pub fn make_queue_sync_handle(
@@ -533,7 +555,11 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
                     entry.commands,
                     &mut self.active_frame.staging_belt,
                     &self.dynamic_transforms,
-                    &mut self.active_frame.command_encoder,
+                    &mut self.profiler.scope(
+                        "Frame CAB",
+                        &mut self.active_frame.command_encoder,
+                        &self.descriptors.device,
+                    ),
                     LayerRef::None,
                     &mut self.offscreen_texture_pool,
                 );
@@ -557,7 +583,11 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
                     entry.commands,
                     &mut self.active_frame.staging_belt,
                     &self.dynamic_transforms,
-                    &mut self.active_frame.command_encoder,
+                    &mut self.profiler.scope(
+                        "Frame filters",
+                        &mut self.active_frame.command_encoder,
+                        &self.descriptors.device,
+                    ),
                     LayerRef::None,
                     &mut self.offscreen_texture_pool,
                 );
@@ -596,7 +626,11 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             &self.descriptors,
             &mut self.active_frame.staging_belt,
             &self.dynamic_transforms,
-            &mut self.active_frame.command_encoder,
+            &mut self.profiler.scope(
+                "Frame commands",
+                &mut self.active_frame.command_encoder,
+                &self.descriptors.device,
+            ),
             &self.meshes,
             commands,
             LayerRef::None,
@@ -604,8 +638,12 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
         );
         self.active_frame.staging_belt.finish();
 
-        self.active_frame
-            .submit_for_target(&self.descriptors, &self.target, frame_output);
+        self.active_frame.submit_for_target(
+            &self.descriptors,
+            &mut self.profiler,
+            &self.target,
+            frame_output,
+        );
         self.offscreen_texture_pool = TexturePool::new();
     }
 
@@ -751,7 +789,11 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
             &self.descriptors,
             &mut self.active_frame.staging_belt,
             &self.dynamic_transforms,
-            &mut self.active_frame.command_encoder,
+            &mut self.profiler.scope(
+                "Offscreen commands",
+                &mut self.active_frame.command_encoder,
+                &self.descriptors.device,
+            ),
             &self.meshes,
             commands,
             LayerRef::Current,
@@ -977,6 +1019,7 @@ impl<T: RenderTarget + 'static> RenderBackend for WgpuRenderBackend<T> {
 
         let index = Some(self.active_frame.submit_for_target(
             &self.descriptors,
+            &mut self.profiler,
             &texture_target,
             frame_output,
         ));
@@ -1132,11 +1175,10 @@ async fn request_device(
 
     let mut features = Default::default();
 
-    let try_features = [
-        wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES,
-        wgpu::Features::TEXTURE_COMPRESSION_BC,
-        wgpu::Features::FLOAT32_FILTERABLE,
-    ];
+    let try_features = wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
+        | wgpu::Features::TEXTURE_COMPRESSION_BC
+        | wgpu::Features::FLOAT32_FILTERABLE
+        | GpuProfiler::ALL_WGPU_TIMER_FEATURES;
 
     for feature in try_features {
         if adapter.features().contains(feature) {
@@ -1206,6 +1248,7 @@ impl ActiveFrame {
     pub fn submit_for_target<T: RenderTarget>(
         &mut self,
         descriptors: &Descriptors,
+        profiler: &mut GpuProfiler,
         target: &T,
         frame: T::Frame,
     ) -> SubmissionIndex {
@@ -1220,6 +1263,7 @@ impl ActiveFrame {
         let index = target.submit(
             &descriptors.device,
             &descriptors.queue,
+            profiler,
             Some(draw_encoder.finish()),
             frame,
         );

@@ -52,7 +52,7 @@ impl MainWindow {
                 } else {
                     self.gui.render(None);
                 }
-                plot_stats_in_tracy(&self.gui.descriptors().wgpu_instance);
+                plot_stats_in_tracy(&self.gui.descriptors().wgpu_instance, self.player.get());
             }
 
             // Important that we return here, or we'll get a feedback loop with egui

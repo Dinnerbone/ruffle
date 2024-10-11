@@ -4518,6 +4518,7 @@ dependencies = [
  "tracing",
  "web-sys",
  "wgpu",
+ "wgpu-profiler",
 ]
 
 [[package]]
@@ -6300,6 +6301,18 @@ dependencies = [
  "web-sys",
  "wgpu-types",
  "winapi",
+]
+
+[[package]]
+name = "wgpu-profiler"
+version = "0.18.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06b2cee91fdc885ff0d3d714c59810cc72c6d84b81b0eaa48bab8ff2ad54fb5b"
+dependencies = [
+ "parking_lot",
+ "thiserror",
+ "tracy-client",
+ "wgpu",
 ]
 
 [[package]]

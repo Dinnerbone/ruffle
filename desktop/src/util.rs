@@ -1,7 +1,9 @@
 use anyhow::{anyhow, Error};
 use gilrs::Button;
 use ruffle_core::events::{GamepadButton, KeyCode, TextControlCode};
+use ruffle_core::Player;
 use std::path::Path;
+use std::sync::MutexGuard;
 use url::Url;
 use winit::dpi::PhysicalSize;
 use winit::event::{KeyEvent, Modifiers};
@@ -243,10 +245,10 @@ pub fn parse_url(path: &Path) -> Result<Url, Error> {
 }
 
 #[cfg(not(feature = "tracy"))]
-pub fn plot_stats_in_tracy(_instance: &wgpu::Instance) {}
+pub fn plot_stats_in_tracy(_instance: &wgpu::Instance, player: Option<MutexGuard<Player>>) {}
 
 #[cfg(feature = "tracy")]
-pub fn plot_stats_in_tracy(instance: &wgpu::Instance) {
+pub fn plot_stats_in_tracy(instance: &wgpu::Instance, player: Option<MutexGuard<Player>>) {
     use tracing_tracy::client::*;
     const BIND_GROUPS: PlotName = plot_name!("Bind Groups");
     const BUFFERS: PlotName = plot_name!("Buffers");
@@ -281,6 +283,20 @@ pub fn plot_stats_in_tracy(instance: &wgpu::Instance) {
     }
 
     tracy.frame_mark();
+    if let Some(mut player) = player {
+        let renderer = player
+            .renderer_mut()
+            .downcast_mut::<ruffle_render_wgpu::backend::WgpuRenderBackend<crate::gui::MovieView>>()
+            .expect("Renderer must be correct type");
+        renderer
+            .profiler_mut()
+            .end_frame()
+            .expect("Frame should end successfully");
+        let timestamp_period = renderer.descriptors().queue.get_timestamp_period();
+        renderer
+            .profiler_mut()
+            .process_finished_frame(timestamp_period);
+    }
 }
 
 pub fn open_url(url: &Url) {

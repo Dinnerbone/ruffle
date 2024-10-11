@@ -6,6 +6,7 @@ use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::Arc;
 use tracing::instrument;
+use wgpu_profiler::GpuProfiler;
 
 pub trait RenderTargetFrame: Debug {
     fn into_view(self) -> wgpu::TextureView;
@@ -30,6 +31,7 @@ pub trait RenderTarget: Debug + 'static {
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        profiler: &mut GpuProfiler,
         command_buffers: I,
         frame: Self::Frame,
     ) -> wgpu::SubmissionIndex;
@@ -131,13 +133,16 @@ impl RenderTarget for SwapChainTarget {
     #[instrument(level = "debug", skip_all)]
     fn submit<I: IntoIterator<Item = wgpu::CommandBuffer>>(
         &self,
-        _device: &wgpu::Device,
+        device: &wgpu::Device,
         queue: &wgpu::Queue,
+        profiler: &mut GpuProfiler,
         command_buffers: I,
         frame: Self::Frame,
     ) -> wgpu::SubmissionIndex {
+        profiler.resolve_queries(&mut device.create_command_encoder(&Default::default()));
         let index = queue.submit(command_buffers);
         frame.texture.present();
+        profiler.end_frame().expect("Frame should end succesfully");
         index
     }
 }
@@ -277,6 +282,7 @@ impl RenderTarget for TextureTarget {
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        _profiler: &mut GpuProfiler,
         command_buffers: I,
         _frame: Self::Frame,
     ) -> wgpu::SubmissionIndex {

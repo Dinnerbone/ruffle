@@ -9,6 +9,7 @@ use crate::filters::FilterSource;
 use crate::mesh::Mesh;
 use crate::pixel_bender::{run_pixelbender_shader_impl, ShaderMode};
 use crate::surface::commands::{chunk_blends, Chunk, CommandRenderer};
+use crate::utils::run_copy_pipeline;
 use crate::utils::{remove_srgb, supported_sample_count};
 use crate::{Descriptors, MaskState, Pipelines};
 use ruffle_render::commands::CommandList;
@@ -17,8 +18,7 @@ use ruffle_render::quality::StageQuality;
 use std::sync::Arc;
 use target::CommandTarget;
 use tracing::instrument;
-
-use crate::utils::run_copy_pipeline;
+use wgpu_profiler::Scope;
 
 pub use crate::surface::commands::LayerRef;
 
@@ -72,9 +72,9 @@ impl Surface {
         frame_view: &wgpu::TextureView,
         render_target_mode: RenderTargetMode,
         descriptors: &'global Descriptors,
-        staging_belt: &'frame mut wgpu::util::StagingBelt,
+        staging_belt: &'global mut wgpu::util::StagingBelt,
         dynamic_transforms: &'global DynamicTransforms,
-        draw_encoder: &'frame mut wgpu::CommandEncoder,
+        draw_encoder: &'frame mut Scope<'global, wgpu::CommandEncoder>,
         meshes: &'global Vec<Mesh>,
         commands: CommandList,
         layer: LayerRef,
@@ -113,9 +113,9 @@ impl Surface {
         descriptors: &'global Descriptors,
         meshes: &'global Vec<Mesh>,
         commands: CommandList,
-        staging_belt: &'global mut wgpu::util::StagingBelt,
-        dynamic_transforms: &'global DynamicTransforms,
-        draw_encoder: &'frame mut wgpu::CommandEncoder,
+        staging_belt: &'frame mut wgpu::util::StagingBelt,
+        dynamic_transforms: &'frame DynamicTransforms,
+        draw_encoder: &'frame mut Scope<'global, wgpu::CommandEncoder>,
         nearest_layer: LayerRef<'frame>,
         texture_pool: &mut TexturePool,
     ) -> CommandTarget {

@@ -1,6 +1,7 @@
 use crate::gui::MENU_HEIGHT;
 use ruffle_render_wgpu::descriptors::Descriptors;
 use ruffle_render_wgpu::target::{RenderTarget, RenderTargetFrame};
+use ruffle_render_wgpu::wgpu_profiler::GpuProfiler;
 use std::borrow::Cow;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
@@ -242,6 +243,7 @@ impl RenderTarget for MovieView {
         &self,
         _device: &wgpu::Device,
         queue: &wgpu::Queue,
+        _profiler: &mut GpuProfiler,
         command_buffers: I,
         _frame: Self::Frame,
     ) -> wgpu::SubmissionIndex {
