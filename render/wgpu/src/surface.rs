@@ -101,7 +101,7 @@ impl Surface {
             target.whole_frame_bind_group(descriptors),
             target.globals(),
             1,
-            draw_encoder,
+            &mut draw_encoder.scope("Copy", &descriptors.device),
         );
     }
 
@@ -157,17 +157,15 @@ impl Surface {
                         draw_encoder,
                         &dynamic_transforms.buffer,
                     );
-                    let mut render_pass =
-                        draw_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                            label: create_debug_label!(
-                                "Chunked draw calls {}",
-                                if needs_stencil {
-                                    "(with stencil)"
-                                } else {
-                                    "(Stencilless)"
-                                }
-                            )
-                            .as_deref(),
+                    let label = if needs_stencil {
+                        "Chunked draw calls (with stencil)"
+                    } else {
+                        "Chunked draw calls (Stencilless)"
+                    };
+                    let mut render_pass = draw_encoder.scoped_render_pass(
+                        label,
+                        &descriptors.device,
+                        wgpu::RenderPassDescriptor {
                             color_attachments: &[target.color_attachments()],
                             depth_stencil_attachment: if needs_stencil {
                                 target.stencil_attachment(descriptors, texture_pool)
@@ -175,13 +173,14 @@ impl Surface {
                                 None
                             },
                             ..Default::default()
-                        });
+                        },
+                    );
                     render_pass.set_bind_group(0, target.globals().bind_group(), &[]);
                     let mut renderer = CommandRenderer::new(
                         &self.pipelines,
                         descriptors,
                         dynamic_transforms,
-                        render_pass,
+                        &mut render_pass,
                         num_masks,
                         mask_state,
                         needs_stencil,
@@ -193,6 +192,7 @@ impl Surface {
 
                     num_masks = renderer.num_masks();
                     mask_state = renderer.mask_state();
+                    drop(renderer);
                 }
                 Chunk::Blend(texture, ChunkBlendMode::Shader(shader), needs_stencil) => {
                     assert!(
@@ -284,18 +284,19 @@ impl Surface {
                                 ],
                             });
 
-                    let mut render_pass =
-                        draw_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                            label: create_debug_label!(
-                                "Complex blend {:?} {}",
-                                blend_mode,
-                                if needs_stencil {
-                                    "(with stencil)"
-                                } else {
-                                    "(Stencilless)"
-                                }
-                            )
-                            .as_deref(),
+                    let label = format!(
+                        "Complex blend {:?} {}",
+                        blend_mode,
+                        if needs_stencil {
+                            "(with stencil)"
+                        } else {
+                            "(Stencilless)"
+                        }
+                    );
+                    let mut render_pass = draw_encoder.scoped_render_pass(
+                        label,
+                        &descriptors.device,
+                        wgpu::RenderPassDescriptor {
                             color_attachments: &[target.color_attachments()],
                             depth_stencil_attachment: if needs_stencil {
                                 target.stencil_attachment(descriptors, texture_pool)
@@ -303,7 +304,8 @@ impl Surface {
                                 None
                             },
                             ..Default::default()
-                        });
+                        },
+                    );
                     render_pass.set_bind_group(0, target.globals().bind_group(), &[]);
 
                     if needs_stencil {

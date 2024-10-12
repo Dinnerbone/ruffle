@@ -27,7 +27,7 @@ pub struct CommandRenderer<'pass, 'frame: 'pass, 'global: 'frame> {
     descriptors: &'global Descriptors,
     num_masks: u32,
     mask_state: MaskState,
-    render_pass: wgpu::RenderPass<'pass>,
+    render_pass: &'pass mut wgpu::RenderPass<'frame>,
     needs_stencil: bool,
     dynamic_transforms: &'global DynamicTransforms,
 }
@@ -38,7 +38,7 @@ impl<'pass, 'frame: 'pass, 'global: 'frame> CommandRenderer<'pass, 'frame, 'glob
         pipelines: &'frame Pipelines,
         descriptors: &'global Descriptors,
         dynamic_transforms: &'global DynamicTransforms,
-        render_pass: wgpu::RenderPass<'pass>,
+        render_pass: &'pass mut wgpu::RenderPass<'frame>,
         num_masks: u32,
         mask_state: MaskState,
         needs_stencil: bool,
