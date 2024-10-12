@@ -166,6 +166,7 @@ impl Surface {
                         label,
                         &descriptors.device,
                         wgpu::RenderPassDescriptor {
+                            label: Some(label),
                             color_attachments: &[target.color_attachments()],
                             depth_stencil_attachment: if needs_stencil {
                                 target.stencil_attachment(descriptors, texture_pool)
@@ -294,9 +295,10 @@ impl Surface {
                         }
                     );
                     let mut render_pass = draw_encoder.scoped_render_pass(
-                        label,
+                        &label,
                         &descriptors.device,
                         wgpu::RenderPassDescriptor {
+                            label: Some(&label),
                             color_attachments: &[target.color_attachments()],
                             depth_stencil_attachment: if needs_stencil {
                                 target.stencil_attachment(descriptors, texture_pool)
