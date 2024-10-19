@@ -278,7 +278,7 @@ impl ActivePlayer {
             GameModePreference::Off => false,
         };
 
-        let renderer = WgpuRenderBackend::new(descriptors, movie_view)
+        let renderer = WgpuRenderBackend::new(descriptors, movie_view, true)
             .map_err(|e| anyhow!(e.to_string()))
             .expect("Couldn't create wgpu rendering backend");
         RENDER_INFO.with(|i| *i.borrow_mut() = Some(renderer.debug_info().to_string()));

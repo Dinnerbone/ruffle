@@ -38,6 +38,7 @@ use std::sync::Arc;
 use swf::Color;
 use tracing::instrument;
 use wgpu::SubmissionIndex;
+use wgpu_profiler::{GpuProfiler, GpuProfilerSettings};
 
 pub struct WgpuRenderBackend<T: RenderTarget> {
     pub(crate) descriptors: Arc<Descriptors>,
@@ -53,6 +54,7 @@ pub struct WgpuRenderBackend<T: RenderTarget> {
     pub(crate) offscreen_buffer_pool: Arc<BufferPool<wgpu::Buffer, BufferDimensions>>,
     dynamic_transforms: DynamicTransforms,
     active_frame: ActiveFrame,
+    profiler: GpuProfiler,
 }
 
 impl WgpuRenderBackend<SwapChainTarget> {
@@ -82,7 +84,7 @@ impl WgpuRenderBackend<SwapChainTarget> {
         let descriptors = Descriptors::new(instance, adapter, device, queue);
         let target =
             SwapChainTarget::new(surface, &descriptors.adapter, (1, 1), &descriptors.device);
-        Self::new(Arc::new(descriptors), target)
+        Self::new(Arc::new(descriptors), target, false)
     }
 
     /// # Safety
@@ -115,7 +117,7 @@ impl WgpuRenderBackend<SwapChainTarget> {
         ))?;
         let descriptors = Descriptors::new(instance, adapter, device, queue);
         let target = SwapChainTarget::new(surface, &descriptors.adapter, size, &descriptors.device);
-        Self::new(Arc::new(descriptors), target)
+        Self::new(Arc::new(descriptors), target, false)
     }
 
     /// # Safety
@@ -161,7 +163,7 @@ impl WgpuRenderBackend<crate::target::TextureTarget> {
         ))?;
         let descriptors = Descriptors::new(instance, adapter, device, queue);
         let target = crate::target::TextureTarget::new(&descriptors.device, size)?;
-        Self::new(Arc::new(descriptors), target)
+        Self::new(Arc::new(descriptors), target, false)
     }
 
     pub fn capture_frame(&self) -> Option<image::RgbaImage> {
@@ -179,10 +181,18 @@ impl WgpuRenderBackend<crate::target::TextureTarget> {
             None
         }
     }
+
+    pub fn profiler(&self) -> &GpuProfiler {
+        &self.profiler
+    }
+
+    pub fn profiler_mut(&mut self) -> &mut GpuProfiler {
+        &mut self.profiler
+    }
 }
 
 impl<T: RenderTarget> WgpuRenderBackend<T> {
-    pub fn new(descriptors: Arc<Descriptors>, target: T) -> Result<Self, Error> {
+    pub fn new(descriptors: Arc<Descriptors>, target: T, profiling: bool) -> Result<Self, Error> {
         if target.width() > descriptors.limits.max_texture_dimension_2d
             || target.height() > descriptors.limits.max_texture_dimension_2d
         {
@@ -217,6 +227,20 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
         let transforms = DynamicTransforms::new(&descriptors);
         let active_frame = ActiveFrame::new(&descriptors);
 
+        let profiler_settings = GpuProfilerSettings {
+            enable_timer_queries: profiling,
+            ..Default::default()
+        };
+        #[cfg(feature = "profile-with-tracy")]
+        let profiler = GpuProfiler::new_with_tracy_client(
+            profiler_settings,
+            descriptors.backend,
+            &descriptors.device,
+            &descriptors.queue,
+        )?;
+        #[cfg(not(feature = "profile-with-tracy"))]
+        let profiler = GpuProfiler::new(profiler_settings)?;
+
         Ok(Self {
             descriptors,
             target,
@@ -229,6 +253,7 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
             offscreen_buffer_pool: Arc::new(offscreen_buffer_pool),
             dynamic_transforms: transforms,
             active_frame,
+            profiler,
         })
     }
 
@@ -1134,7 +1159,8 @@ async fn request_device(
 
     let optional_features = wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES
         | wgpu::Features::TEXTURE_COMPRESSION_BC
-        | wgpu::Features::FLOAT32_FILTERABLE;
+        | wgpu::Features::FLOAT32_FILTERABLE
+        | GpuProfiler::ALL_WGPU_TIMER_FEATURES;
 
     features |= optional_features & adapter.features();
 

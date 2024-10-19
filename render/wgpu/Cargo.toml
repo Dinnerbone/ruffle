@@ -26,6 +26,7 @@ profiling = { version = "1.0", default-features = false, optional = true }
 lru = "0.12.5"
 naga = { workspace = true }
 indexmap = "2.6.0"
+wgpu-profiler = { git = "https://github.com/Wumpf/wgpu-profiler" }
 
 # desktop
 [target.'cfg(not(target_family = "wasm"))'.dependencies.futures]
@@ -39,7 +40,7 @@ features = ["HtmlCanvasElement"]
 [features]
 render_debug_labels = []
 webgl = ["wgpu/webgl"]
-profile-with-tracy = ["profiling", "profiling/profile-with-tracy"]
+profile-with-tracy = ["profiling", "profiling/profile-with-tracy", "wgpu-profiler/tracy"]
 
 [package.metadata.cargo-machete]
 ignored = [

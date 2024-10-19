@@ -4507,6 +4507,7 @@ dependencies = [
  "tracing",
  "web-sys",
  "wgpu",
+ "wgpu-profiler",
 ]
 
 [[package]]
@@ -6289,6 +6290,17 @@ dependencies = [
  "web-sys",
  "wgpu-types",
  "winapi",
+]
+
+[[package]]
+name = "wgpu-profiler"
+version = "0.18.2"
+source = "git+https://github.com/Wumpf/wgpu-profiler#39ac2e170f11b18e1fb700a5778f0e41cd19f369"
+dependencies = [
+ "parking_lot",
+ "thiserror",
+ "tracy-client",
+ "wgpu",
 ]
 
 [[package]]

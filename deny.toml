@@ -77,6 +77,7 @@ unknown-git = "deny"
 # github.com organizations to allow git sources for
 github = [
     "ruffle-rs",
+    "Wumpf", # remove after wgpu-profiler v0.18.3 or higher
 ]
 
 [advisories]

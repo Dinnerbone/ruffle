@@ -48,7 +48,7 @@ mod renderer {
                 );
 
                 Some( (Box::new(Self), Box::new(
-                    WgpuRenderBackend::new(descriptors.clone(), target)
+                    WgpuRenderBackend::new(descriptors.clone(), target, false)
                         .expect("WGPU Render backend creation must not fail, everything was checked ahead of time"),
                 )))
             } else {
