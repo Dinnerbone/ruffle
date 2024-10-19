@@ -1,3 +1,4 @@
+use super::target::PoolOrArcTexture;
 use crate::backend::RenderTargetMode;
 use crate::blend::TrivialBlend;
 use crate::blend::{BlendType, ComplexBlend};
@@ -19,8 +20,7 @@ use ruffle_render::transform::Transform;
 use std::mem;
 use swf::{BlendMode, Color, ColorTransform, Twips};
 use wgpu::Backend;
-
-use super::target::PoolOrArcTexture;
+use wgpu_profiler::Scope;
 
 pub struct CommandRenderer<'encoder> {
     pipelines: &'encoder Pipelines,
@@ -438,18 +438,18 @@ pub enum LayerRef<'a> {
 /// Replaces every blend with a RenderBitmap, with the subcommands rendered out to a temporary texture
 /// Every complex blend will be its own item, but every other draw will be chunked together
 #[allow(clippy::too_many_arguments)]
-pub fn chunk_blends<'a>(
+pub fn chunk_blends<'encoder, 'global: 'encoder>(
     commands: CommandList,
-    descriptors: &'a Descriptors,
-    staging_belt: &'a mut wgpu::util::StagingBelt,
-    dynamic_transforms: &'a DynamicTransforms,
-    draw_encoder: &mut wgpu::CommandEncoder,
-    meshes: &'a Vec<Mesh>,
+    descriptors: &'encoder Descriptors,
+    staging_belt: &'encoder mut wgpu::util::StagingBelt,
+    dynamic_transforms: &'encoder DynamicTransforms,
+    draw_encoder: &'encoder mut Scope<'global, wgpu::CommandEncoder>,
+    meshes: &'encoder Vec<Mesh>,
     quality: StageQuality,
     width: u32,
     height: u32,
-    nearest_layer: LayerRef,
-    texture_pool: &mut TexturePool,
+    nearest_layer: LayerRef<'encoder>,
+    texture_pool: &'encoder mut TexturePool,
 ) -> Vec<Chunk> {
     WgpuCommandHandler::new(
         descriptors,
@@ -467,16 +467,16 @@ pub fn chunk_blends<'a>(
 }
 
 struct WgpuCommandHandler<'encoder, 'global: 'encoder> {
-    descriptors: &'global Descriptors,
+    descriptors: &'encoder Descriptors,
     quality: StageQuality,
     width: u32,
     height: u32,
     nearest_layer: LayerRef<'encoder>,
-    meshes: &'global Vec<Mesh>,
-    staging_belt: &'global mut wgpu::util::StagingBelt,
-    dynamic_transforms: &'global DynamicTransforms,
-    draw_encoder: &'encoder mut wgpu::CommandEncoder,
-    texture_pool: &'global mut TexturePool,
+    meshes: &'encoder Vec<Mesh>,
+    staging_belt: &'encoder mut wgpu::util::StagingBelt,
+    dynamic_transforms: &'encoder DynamicTransforms,
+    draw_encoder: &'encoder mut Scope<'global, wgpu::CommandEncoder>,
+    texture_pool: &'encoder mut TexturePool,
     emulate_lines: bool,
 
     result: Vec<Chunk>,
@@ -489,16 +489,16 @@ struct WgpuCommandHandler<'encoder, 'global: 'encoder> {
 impl<'encoder, 'global: 'encoder> WgpuCommandHandler<'encoder, 'global> {
     #[allow(clippy::too_many_arguments)]
     fn new(
-        descriptors: &'global Descriptors,
-        staging_belt: &'global mut wgpu::util::StagingBelt,
-        dynamic_transforms: &'global DynamicTransforms,
-        draw_encoder: &'encoder mut wgpu::CommandEncoder,
-        meshes: &'global Vec<Mesh>,
+        descriptors: &'encoder Descriptors,
+        staging_belt: &'encoder mut wgpu::util::StagingBelt,
+        dynamic_transforms: &'encoder DynamicTransforms,
+        draw_encoder: &'encoder mut Scope<'global, wgpu::CommandEncoder>,
+        meshes: &'encoder Vec<Mesh>,
         quality: StageQuality,
         width: u32,
         height: u32,
         nearest_layer: LayerRef<'encoder>,
-        texture_pool: &'global mut TexturePool,
+        texture_pool: &'encoder mut TexturePool,
     ) -> Self {
         let transforms = Self::new_transforms(descriptors, dynamic_transforms);
 
@@ -529,8 +529,8 @@ impl<'encoder, 'global: 'encoder> WgpuCommandHandler<'encoder, 'global> {
     }
 
     fn new_transforms(
-        descriptors: &'global Descriptors,
-        dynamic_transforms: &'global DynamicTransforms,
+        descriptors: &'encoder Descriptors,
+        dynamic_transforms: &'encoder DynamicTransforms,
     ) -> BufferBuilder {
         let mut transforms = BufferBuilder::new_for_uniform(&descriptors.limits);
         transforms.set_buffer_limit(dynamic_transforms.buffer.size());
