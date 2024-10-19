@@ -1,5 +1,5 @@
 use crate::custom_event::RuffleEvent;
-use crate::gui::{GuiController, MENU_HEIGHT};
+use crate::gui::{GuiController, MovieView, MENU_HEIGHT};
 use crate::player::{LaunchOptions, PlayerController};
 use crate::preferences::GlobalPreferences;
 use crate::util::{
@@ -11,6 +11,7 @@ use gilrs::{Event, EventType, Gilrs};
 use ruffle_core::swf::HeaderExt;
 use ruffle_core::PlayerEvent;
 use ruffle_render::backend::ViewportDimensions;
+use ruffle_render_wgpu::backend::WgpuRenderBackend;
 use std::sync::Arc;
 use std::time::Instant;
 use url::Url;
@@ -53,6 +54,16 @@ impl MainWindow {
                     self.gui.render(None);
                 }
                 plot_stats_in_tracy(&self.gui.descriptors().wgpu_instance);
+                if let Some(mut player) = self.player.get() {
+                    let renderer = player
+                        .renderer_mut()
+                        .downcast_mut::<WgpuRenderBackend<MovieView>>()
+                        .expect("Renderer must be correct type");
+                    let timestamp_period = renderer.descriptors().queue.get_timestamp_period();
+                    renderer
+                        .profiler_mut()
+                        .process_finished_frame(timestamp_period);
+                }
             }
 
             // Important that we return here, or we'll get a feedback loop with egui

@@ -392,6 +392,13 @@ impl GuiController {
             self.egui_renderer.free_texture(id);
         }
 
+        if let Some(player) = player.as_deref_mut() {
+            let renderer = player
+                .renderer_mut()
+                .downcast_mut::<WgpuRenderBackend<MovieView>>()
+                .expect("Renderer must be correct type");
+            renderer.profiler_mut().resolve_queries(&mut encoder);
+        }
         command_buffers.push(encoder.finish());
         self.descriptors.queue.submit(command_buffers);
         surface_texture.present();
