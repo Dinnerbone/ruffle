@@ -402,6 +402,16 @@ impl GuiController {
         command_buffers.push(encoder.finish());
         self.descriptors.queue.submit(command_buffers);
         surface_texture.present();
+        if let Some(player) = player.as_deref_mut() {
+            let renderer = player
+                .renderer_mut()
+                .downcast_mut::<WgpuRenderBackend<MovieView>>()
+                .expect("Renderer must be correct type");
+            renderer
+                .profiler_mut()
+                .end_frame()
+                .expect("Frame should end successfully");
+        }
     }
 
     pub fn show_context_menu(
