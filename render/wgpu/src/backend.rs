@@ -181,14 +181,6 @@ impl WgpuRenderBackend<crate::target::TextureTarget> {
             None
         }
     }
-
-    pub fn profiler(&self) -> &GpuProfiler {
-        &self.profiler
-    }
-
-    pub fn profiler_mut(&mut self) -> &mut GpuProfiler {
-        &mut self.profiler
-    }
 }
 
 impl<T: RenderTarget> WgpuRenderBackend<T> {
@@ -255,6 +247,14 @@ impl<T: RenderTarget> WgpuRenderBackend<T> {
             active_frame,
             profiler,
         })
+    }
+
+    pub fn profiler(&self) -> &GpuProfiler {
+        &self.profiler
+    }
+
+    pub fn profiler_mut(&mut self) -> &mut GpuProfiler {
+        &mut self.profiler
     }
 
     fn register_shape_internal(
