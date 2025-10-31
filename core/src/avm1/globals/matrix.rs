@@ -109,6 +109,7 @@ pub fn gradient_object_to_matrix<'gc>(
     }
 }
 
+// [NA] TODO: Is this actually needed, or should most things `try_`?
 pub fn object_to_matrix<'gc>(
     object: Object<'gc>,
     activation: &mut Activation<'_, 'gc>,
@@ -137,6 +138,46 @@ pub fn object_to_matrix<'gc>(
     );
 
     Ok(Matrix { a, b, c, d, tx, ty })
+}
+
+pub fn try_object_to_matrix<'gc>(
+    object: Object<'gc>,
+    activation: &mut Activation<'_, 'gc>,
+) -> Result<Option<Matrix>, Error<'gc>> {
+    if object.has_property(activation, istr!("a"))
+        && object.has_property(activation, istr!("b"))
+        && object.has_property(activation, istr!("c"))
+        && object.has_property(activation, istr!("d"))
+        && object.has_property(activation, istr!("tx"))
+        && object.has_property(activation, istr!("ty"))
+    {
+        let a = object
+            .get(istr!("a"), activation)?
+            .coerce_to_f64(activation)? as f32;
+        let b = object
+            .get(istr!("b"), activation)?
+            .coerce_to_f64(activation)? as f32;
+        let c = object
+            .get(istr!("c"), activation)?
+            .coerce_to_f64(activation)? as f32;
+        let d = object
+            .get(istr!("d"), activation)?
+            .coerce_to_f64(activation)? as f32;
+        let tx = Twips::from_pixels(
+            object
+                .get(istr!("tx"), activation)?
+                .coerce_to_f64(activation)?,
+        );
+        let ty = Twips::from_pixels(
+            object
+                .get(istr!("ty"), activation)?
+                .coerce_to_f64(activation)?,
+        );
+
+        Ok(Some(Matrix { a, b, c, d, tx, ty }))
+    } else {
+        Ok(None)
+    }
 }
 
 /// Returns a `Matrix` with the properties from `object`.

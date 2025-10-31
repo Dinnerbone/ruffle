@@ -1,14 +1,84 @@
 import flash.display.BitmapData;
+import flash.filters.BlurFilter;
+import flash.geom.Point;
+import flash.geom.Rectangle;
+import flash.geom.Matrix;
+import flash.geom.ColorTransform;
+
+var disposedBmd;
+var validBmd;
+var rect = new Rectangle(0, 0, 10, 10);
+var rectAsObj = {x: 0, y: 0, width: 10, height: 10};
+var rectWithoutWidth = {x: 0, y: 0, height: 10};
+var zeroSizedRect = new Rectangle(5, 5, 0, 0);
+var point = new Point(3, 1);
+var pointOutsideBmd = new Point(100, 100);
+var matrix = new Matrix();
+var matrixAsObj = {a:1,b:1,c:1,d:1,tx:1,ty:1};
+var matrixWithoutTx = {a:1,b:1,c:1,d:1,ty:1};
+var colorTransform = new ColorTransform(0, 0, 1, 1, 0, 0, 255, 0);
+var blurFilter = new BlurFilter(30, 30, 2);
 
 function main() {
-    constructWithDifferentArgs("BitmapData", [50, NaN], [60, -1], [true], [0xAABBCCDD]);
+    constructWithDifferentArgs("BitmapData", 50, 60, true, 0xAABBCCDD);
     var createObject = function() { return new BitmapData(50, 60, true, 0xAABBCCDD); };
+    var createDisposedObject = function() { var o = createObject(); o.dispose(); return o; };
+    validBmd = createObject();
+    disposedBmd = createDisposedObject();
 
-    callWithDifferentArgs(createObject, "getPixel", [NaN, 1], [2, -1, 1.5]);
+    var functionsAndArgs = [
+        ["getPixel", 1, 2],
+        ["getPixel32", 1, 2],
+        ["setPixel", 1, 2, 0x12345678],
+        ["setPixel32", 1, 2, 0x12345678],
+        ["copyChannel", validBmd, rect, point, 3, 1],
+        ["fillRect", rect, 0x12345678],
+        ["floodFill", 1, 2, 0x12345678],
+        ["noise", 128, 0, 255, 1, true],
+        ["draw", validBmd, matrix, colorTransform, "normal", rect, true],
+        ["applyFilter", validBmd, rect, point, blurFilter],
+        ["colorTransform", rect, colorTransform],
+        ["getColorBoundsRect", 0x00FFFFFF, 0x00FF0000, true]
+        // ["generateFilterRect", rect, blurFilter]
+    ];
+
+    for (var i = 0; i < functionsAndArgs.length; i++) {
+        callWithDifferentArgs(createObject, functionsAndArgs[i][0], functionsAndArgs[i].slice(1));
+    }
+    callWithSpecificArgs(createObject, "getColorBoundsRect", [0, 0, true]);
+    callWithSpecificArgs(createObject, "getColorBoundsRect", [0, 1, true]);
+    
+    trace("");
+    trace("////// disposed from here")
+    trace("");
+
+    for (var i = 0; i < functionsAndArgs.length; i++) {
+        callWithSpecificArgs(createDisposedObject, functionsAndArgs[i][0], functionsAndArgs[i].slice(1));
+    }
+}
+
+function generateBadArguments(good) {
+    var result = [null, undefined, good, {}];
+    if (good == validBmd) {
+        result.push(disposedBmd);
+    }
+    if (good == rect) {
+        result.push(zeroSizedRect);
+        result.push(rectAsObj);
+        result.push(rectWithoutWidth);
+    }
+    if (good == matrix) {
+        result.push(matrixAsObj);
+        result.push(matrixWithoutTx);
+    }
+    if (good == point) {
+        result.push(pointOutsideBmd);
+    }
+    return result;
 }
 
 function constructWithDifferentArgs(className) {
-    var allArgsToTest = cartesianProduct(expandPossibleArgs(arguments.slice(1)));
+    var allArgsToTest = generateArgSets(arguments.slice(1));
     for (var i = 0; i < allArgsToTest.length; i++) {
         var argStr = "";
         for (var j = 0; j < allArgsToTest[i].length; j++) {
@@ -28,8 +98,8 @@ function constructWithDifferentArgs(className) {
     }
 }
 
-function callWithDifferentArgs(createObject, functionName) {
-    var allArgsToTest = cartesianProduct(expandPossibleArgs(arguments.slice(2)));
+function callWithDifferentArgs(createObject, functionName, knownGoodArguments) {
+    var allArgsToTest = generateArgSets(knownGoodArguments);
     for (var i = 0; i < allArgsToTest.length; i++) {
         var argStr = "";
         for (var j = 0; j < allArgsToTest[i].length; j++) {
@@ -44,6 +114,21 @@ function callWithDifferentArgs(createObject, functionName) {
         trace(valueToString(f));
         trace("");
     }
+}
+
+function callWithSpecificArgs(createObject, functionName, args) {
+    var argStr = "";
+    for (var j = 0; j < args.length; j++) {
+        if (j > 0) {
+            argStr += ", ";
+        }
+        argStr += valueToString(args[j]);
+    }
+    trace("// " + functionName + "(" + argStr + ")");
+    var object = createObject();
+    var f = callWithArgs(object, functionName, args);
+    trace(valueToString(f));
+    trace("");
 }
 
 function callWithArgs(object, func, args) {
@@ -92,40 +177,87 @@ function constructWithArgs(cls, args) {
     return null;
 }
 
-function expandPossibleArgs(validArguments) {
-    var result = [];
+function generateArgSets(knownGoodArguments) {
+    var results = [];
 
-    for (var i = 0; i < validArguments.length; i++) {
-        var args = validArguments[i];
-        args.push(null);
-        args.push(undefined);
-        result.push(args);
+    // Partial sets (e.g. [], [1], [1, 2], ...)
+    for (var i = 0; i <= knownGoodArguments.length; i++) {
+        results.push(knownGoodArguments.slice(0, i));
     }
 
-    return result;
+    // Replace one argument at a time with each of its specific bad variants
+    for (var i = 0; i < knownGoodArguments.length; i++) {
+        var bads = generateBadArguments(knownGoodArguments[i]);
+        for (var b = 0; b < bads.length; b++) {
+            var variant = knownGoodArguments.concat();
+            variant[i] = bads[b];
+            results.push(variant);
+        }
+    }
+
+
+    // Deduplicate
+    var unique = [];
+    for (var i = 0; i < results.length; i++) {
+        var a = results[i];
+        var found = false;
+        for (var j = 0; j < unique.length; j++) {
+            if (arraysEqual(a, unique[j])) { found = true; break; }
+        }
+        if (!found) unique.push(a);
+    }
+
+    return unique;
 }
 
-
-function cartesianProduct(arr) {
-    var result = [[]];
-
-    for (var i = 0; i < arr.length; i++) {
-        var temp = [];
-        for (var j = 0; j < result.length; j++) {
-            for (var k = 0; k < arr[i].length; k++) {
-                // Not directly concat(...) because that's overloaded for arrays, which is awkward
-                var args = result[j].concat();
-                args.push(arr[i][k]);
-                temp.push(args);
-            }
-        }
-        result = temp;
+function arraysEqual(a, b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+        if (a[i] != b[i]) return false;
     }
-
-    return result;
+    return true;
 }
 
 function valueToString(v) {
+    if (v === disposedBmd) {
+        return "disposedBmd";
+    }
+    if (v === validBmd) {
+        return "validBmd";
+    }
+    if (v === rect) {
+        return "rect";
+    }
+    if (v === point) {
+        return "point";
+    }
+    if (v === zeroSizedRect) {
+        return "zeroSizedRect";
+    }
+    if (v === pointOutsideBmd) {
+        return "pointOutsideBmd";
+    }
+    if (v === rectAsObj) {
+        return "rectAsObj";
+    }
+    if (v === rectWithoutWidth) {
+        return "rectWithoutWidth";
+    }
+    if (v === colorTransform) {
+        return "colorTransform";
+    }
+    if (v === matrix) {
+        return "matrix";
+    }
+    if (v === matrixAsObj) {
+        return "matrixAsObj";
+    }
+    if (v === matrixWithoutTx) {
+        return "matrixWithoutTx";
+    }
+    if (v === blurFilter) {
+        return "blurFilter";
+    }
     if (v instanceof Array) {
         var result = "";
         for (var i = 0; i < result.length; i++) {
@@ -151,9 +283,16 @@ function valueToString(v) {
     }
     if (typeof v == "object") {
         var props = [];
-        for (var prop in obj) {
-            if (typeof obj[prop] !== "function") {
-                props.push(prop);
+        if (v instanceof Rectangle) {
+            props.push("width");
+            props.push("height");
+            props.push("x");
+            props.push("y");
+        } else {
+            for (var prop in v) {
+                if (typeof v[prop] !== "function") {
+                    props.push(prop);
+                }
             }
         }
         props.sort();
@@ -161,9 +300,9 @@ function valueToString(v) {
         for (var i = 0; i < props.length; i++) {
             var prop = props[i];
             if (str != "") str += ", ";
-            str += prop + "=" + valueToString(obj[prop]);
+            str += prop + "=" + valueToString(v[prop]);
         }
-        trace("{ " + str + " }");
+        return "{ " + str + " }";
     }
     return "" + v;
 }

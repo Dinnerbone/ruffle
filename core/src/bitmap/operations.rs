@@ -906,6 +906,7 @@ pub fn color_bounds_rect(
     let mut max_y = 0;
 
     let target = target.sync(renderer).borrow();
+    let color = color & mask;
 
     for x in 0..target.width() {
         for y in 0..target.height() {

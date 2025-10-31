@@ -28,7 +28,6 @@ pub trait ParametersExt<'gc> {
 
     /// Tries to get the value at the given index as an Object.
     /// The value will be coerced to an Object if it exists.
-    #[expect(dead_code)]
     fn try_get_object(
         &self,
         activation: &mut Activation<'_, 'gc>,
@@ -76,7 +75,6 @@ pub trait ParametersExt<'gc> {
 
     /// Get the value at the given index as a bool.
     /// The value will be coerced to a bool, even if it's undefined/missing.
-    #[expect(dead_code)]
     fn get_bool(&self, activation: &mut Activation<'_, 'gc>, index: usize) -> bool {
         self.get_value(index).as_bool(activation.swf_version())
     }
@@ -161,14 +159,12 @@ pub trait ParametersExt<'gc> {
 
     /// Gets the value at the given index as an u8.
     /// The value will be coerced to an u8, even if it's undefined/missing.
-    #[expect(dead_code)]
     fn get_u8(&self, activation: &mut Activation<'_, 'gc>, index: usize) -> Result<u8, Error<'gc>> {
         self.get_value(index).coerce_to_u8(activation)
     }
 
     /// Gets the value at the given index as an u8.
     /// The value will be coerced to an u8 if it exists.
-    #[expect(dead_code)]
     fn try_get_u8(
         &self,
         activation: &mut Activation<'_, 'gc>,
@@ -225,7 +221,6 @@ pub trait ParametersExt<'gc> {
 
     /// Gets the value at the given index as an u32.
     /// The value will be coerced to an u32 if it exists.
-    #[expect(dead_code)]
     fn try_get_u32(
         &self,
         activation: &mut Activation<'_, 'gc>,
