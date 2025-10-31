@@ -1,0 +1,636 @@
+// new BitmapData(50, 60, true, 2864434397)
+{  }
+[object Object]
+
+// new BitmapData(50, 60, true, null)
+{  }
+[object Object]
+
+// new BitmapData(50, 60, true, undefined)
+{  }
+[object Object]
+
+// new BitmapData(50, 60, null, 2864434397)
+{  }
+[object Object]
+
+// new BitmapData(50, 60, null, null)
+{  }
+[object Object]
+
+// new BitmapData(50, 60, null, undefined)
+{  }
+[object Object]
+
+// new BitmapData(50, 60, undefined, 2864434397)
+{  }
+[object Object]
+
+// new BitmapData(50, 60, undefined, null)
+{  }
+[object Object]
+
+// new BitmapData(50, 60, undefined, undefined)
+{  }
+[object Object]
+
+// new BitmapData(50, -1, true, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, -1, true, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, -1, true, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, -1, null, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, -1, null, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, -1, null, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, -1, undefined, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, -1, undefined, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, -1, undefined, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, null, true, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, null, true, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, null, true, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, null, null, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, null, null, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, null, null, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, null, undefined, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, null, undefined, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, null, undefined, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, undefined, true, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, undefined, true, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, undefined, true, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, undefined, null, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, undefined, null, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, undefined, null, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, undefined, undefined, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, undefined, undefined, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(50, undefined, undefined, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, 60, true, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, 60, true, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, 60, true, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, 60, null, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, 60, null, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, 60, null, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, 60, undefined, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, 60, undefined, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, 60, undefined, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, -1, true, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, -1, true, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, -1, true, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, -1, null, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, -1, null, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, -1, null, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, -1, undefined, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, -1, undefined, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, -1, undefined, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, null, true, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, null, true, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, null, true, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, null, null, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, null, null, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, null, null, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, null, undefined, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, null, undefined, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, null, undefined, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, undefined, true, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, undefined, true, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, undefined, true, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, undefined, null, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, undefined, null, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, undefined, null, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, undefined, undefined, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, undefined, undefined, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(NaN, undefined, undefined, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, 60, true, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, 60, true, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, 60, true, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, 60, null, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, 60, null, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, 60, null, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, 60, undefined, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, 60, undefined, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, 60, undefined, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, -1, true, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, -1, true, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, -1, true, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, -1, null, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, -1, null, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, -1, null, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, -1, undefined, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, -1, undefined, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, -1, undefined, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, null, true, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, null, true, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, null, true, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, null, null, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, null, null, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, null, null, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, null, undefined, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, null, undefined, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, null, undefined, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, undefined, true, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, undefined, true, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, undefined, true, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, undefined, null, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, undefined, null, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, undefined, null, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, undefined, undefined, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, undefined, undefined, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(null, undefined, undefined, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, 60, true, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, 60, true, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, 60, true, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, 60, null, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, 60, null, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, 60, null, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, 60, undefined, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, 60, undefined, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, 60, undefined, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, -1, true, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, -1, true, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, -1, true, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, -1, null, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, -1, null, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, -1, null, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, -1, undefined, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, -1, undefined, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, -1, undefined, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, null, true, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, null, true, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, null, true, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, null, null, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, null, null, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, null, null, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, null, undefined, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, null, undefined, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, null, undefined, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, undefined, true, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, undefined, true, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, undefined, true, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, undefined, null, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, undefined, null, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, undefined, null, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, undefined, undefined, 2864434397)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, undefined, undefined, null)
+undefined
+NOT AN INSTANCEOF!
+
+// new BitmapData(undefined, undefined, undefined, undefined)
+undefined
+NOT AN INSTANCEOF!
+
+// getPixel(NaN, 2)
+12307676
+
+// getPixel(NaN, -1)
+0
+
+// getPixel(NaN, 1.5)
+12307676
+
+// getPixel(NaN, null)
+12307676
+
+// getPixel(NaN, undefined)
+12307676
+
+// getPixel(1, 2)
+12307676
+
+// getPixel(1, -1)
+0
+
+// getPixel(1, 1.5)
+12307676
+
+// getPixel(1, null)
+12307676
+
+// getPixel(1, undefined)
+12307676
+
+// getPixel(null, 2)
+12307676
+
+// getPixel(null, -1)
+0
+
+// getPixel(null, 1.5)
+12307676
+
+// getPixel(null, null)
+12307676
+
+// getPixel(null, undefined)
+12307676
+
+// getPixel(undefined, 2)
+12307676
+
+// getPixel(undefined, -1)
+0
+
+// getPixel(undefined, 1.5)
+12307676
+
+// getPixel(undefined, null)
+12307676
+
+// getPixel(undefined, undefined)
+12307676
+
