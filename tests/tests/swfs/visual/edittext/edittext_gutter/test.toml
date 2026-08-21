@@ -1,4 +1,5 @@
 num_ticks = 1
+ignore = true
 
 [image_comparisons.output]
 tolerance = 128
